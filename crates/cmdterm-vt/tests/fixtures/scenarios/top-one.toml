@@ -1,0 +1,19 @@
+# NOT RECORDED: top's first frame always prints "N user(s)" in its uptime line, which
+# the record tool rightly refuses because this machine's login is literally "user".
+# Kept so the scenario can be recorded on a machine whose login is another word.
+# top for PID 1 only (root's process). The uptime line is toggled off with "l" because
+# it prints the number of logged-in users. Header and rows use bold, reverse video and
+# erase-to-end-of-line.
+command = "top"
+args = ["-d", "20", "-p", "1"]
+rows = 20
+cols = 100
+
+[[step]]
+wait_quiet_ms = 400
+[[step]]
+send = "l"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "q"

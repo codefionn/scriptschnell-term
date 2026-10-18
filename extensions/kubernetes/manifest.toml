@@ -1,0 +1,22 @@
+title = "Kubernetes"
+description = "Opens projects inside Kubernetes pods. k8s://pod/path runs every command there through kubectl exec."
+enabled = false
+permissions = ["environments"]
+
+[[settings]]
+key = "context"
+title = "Context"
+description = "The kubeconfig context to use. Empty uses the current one."
+type = "string"
+
+[[settings]]
+key = "namespace"
+title = "Namespace"
+description = "The namespace of the pods. Empty uses the context's namespace."
+type = "string"
+
+[[settings]]
+key = "container"
+title = "Container"
+description = "The container in each pod. Empty uses the pod's default container."
+type = "string"

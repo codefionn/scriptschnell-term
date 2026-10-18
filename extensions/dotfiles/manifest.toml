@@ -1,0 +1,17 @@
+title = "Dotfiles"
+description = "Copies chosen dotfiles into devcontainers, VMs and remote machines when they come up."
+permissions = ["env", "filesystem", "copy"]
+
+[[settings]]
+key = "files"
+title = "Files"
+description = "Paths under your home directory. Each lands at the same place under the environment's home. Missing ones are skipped."
+type = "list"
+default = [".gitconfig", ".config/git", ".tmux.conf", ".inputrc", ".config/nvim", ".config/starship.toml"]
+
+[[settings]]
+key = "kinds"
+title = "Environments"
+description = "Kinds of environment to copy into when they come up: devcontainer, vm, remote, ssh."
+type = "list"
+default = ["devcontainer", "vm", "remote"]

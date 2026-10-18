@@ -1,0 +1,19 @@
+# htop for PID 1 only, with the ephemeral meters hidden by the scratch config. Not
+# deterministic, which does not matter: the bytes are recorded once and replayed.
+command = "htop"
+args = ["-p", "1", "-d", "100"]
+rows = 24
+cols = 100
+
+[[step]]
+wait_quiet_ms = 800
+[[step]]
+send = "\u001b[15~"
+[[step]]
+wait_quiet_ms = 400
+[[step]]
+send = "F"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+stop = true

@@ -1,0 +1,3 @@
+title = "Gitea"
+description = "Gitea pull requests for the Agents tab. Tells whether the branches of finished agents have pull requests and whether they are merged, and asks before sandboxes open, comment on or merge pull requests."
+permissions = ["network", "guards"]

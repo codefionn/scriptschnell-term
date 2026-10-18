@@ -1,0 +1,22 @@
+size 12x17
+title ""
+icon ""
+cursor row=10 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00~|red green bold pl|
+   runs 0-3 fg=1; 4-13 bold fg=2
+01~|ain text that is|
+02~|long enough to wr|
+03~|ap in a narrow wi|
+04 |ndow|
+05~|你好世界 你好世界|
+06 | ééé 😀😀😀 end|
+07 |short|
+08 |typed|
+09 |typed|
+10 ||
+11 ||

@@ -1,0 +1,19 @@
+args = ["-N", "-+F", "-+X", "long.txt"]
+program = "less"
+program_version = "less 710 (PCRE2 regular expressions)"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 50
+rows = 16

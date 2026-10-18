@@ -1,0 +1,21 @@
+size 10x40
+title "unicode title"
+icon "unicode title"
+cursor row=9 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 1
+sb 0000 |$ emoji: 😀 👨‍👩‍👧 🇩🇪 👍🏽|
+screen
+00 |cjk: 你好世界 こんにちは 한글|
+01 |combining: é ạ̈|
+02 |link: click after|
+   runs 6-10 link
+03~|edge: 你你你你你你你你你你你你你你你你😀|
+04 |xxxx|
+05~|yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy|
+06 |你z|
+07 |tabs:   a       b|
+08 |out|
+09 ||

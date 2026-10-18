@@ -1,0 +1,3 @@
+title = "GitLab"
+description = "GitLab merge requests for the Agents tab. Tells whether the branches of finished agents have merge requests and whether they are merged, and asks before sandboxes open, comment on or merge merge requests."
+permissions = ["network", "guards"]

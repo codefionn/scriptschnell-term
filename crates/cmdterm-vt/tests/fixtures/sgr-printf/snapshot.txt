@@ -1,0 +1,21 @@
+size 10x40
+title "smoke title"
+icon "smoke title"
+cursor row=5 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |red bold plain under rgb|
+   runs 0-7 bold fg=1; 15-23 underline=Single fg=#0a141e
+01 |é 你好 😀|
+02 ||
+03 |            abbbb|
+04 |bg|
+   runs 0-39 bg=202
+05 |    moved|
+06 ||
+07 ||
+08 ||
+09 ||

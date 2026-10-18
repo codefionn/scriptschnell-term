@@ -1,0 +1,30 @@
+[package]
+name = "cmdterm-vt"
+description = "Terminal emulator core for scriptschnell-term: VT parser and screen model"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+unicode-width.workspace = true
+unicode-segmentation.workspace = true
+rustc-hash.workspace = true
+
+[dev-dependencies]
+proptest.workspace = true
+# Only the record example (a PTY for scenarios); the library does no I/O.
+cmdterm-env.workspace = true
+serde.workspace = true
+# Scenario files and fixture metadata.
+toml = "1"
+# Counting allocator for the allocation gates in tests/alloc.rs. The workspace does not
+# declare it, so the version is pinned here.
+allocation-counter = "0.8.1"
+
+[lints]
+workspace = true
+
+[[bench]]
+name = "throughput"
+harness = false

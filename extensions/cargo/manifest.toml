@@ -1,0 +1,7 @@
+title = "Cargo"
+description = "Cargo registry cache and logins for sandboxes. Fake tokens stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets", "guards"]
+
+[logins]
+title = "Cargo"
+sources = ["~/.cargo/credentials.toml", "CARGO_HOME", "CARGO_REGISTRY_TOKEN"]

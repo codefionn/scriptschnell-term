@@ -1,0 +1,24 @@
+size 12x30
+title ""
+icon ""
+cursor row=9 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00~|README.md  data.tar.gz  main.r|
+01 |s  notes.txt  src/|
+   runs 14-16 bold fg=4
+02~|README.md  data.tar.gz  main.r|
+03 |s  notes.txt  src|
+   runs 14-16 bold fg=4
+04 |README.md|
+05 |data.tar.gz|
+06 |main.rs|
+07 |notes.txt|
+08 |src|
+   runs 0-2 bold fg=4
+09 ||
+10 ||
+11 ||

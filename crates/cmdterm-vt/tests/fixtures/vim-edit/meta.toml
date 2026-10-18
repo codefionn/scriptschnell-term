@@ -1,0 +1,19 @@
+args = ["-u", "NONE", "-i", "NONE", "-n", "--noplugin", "-c", "set nocompatible laststatus=2 ruler number", "lines.txt"]
+program = "vim"
+program_version = "VIM - Vi IMproved 9.2 (2026 Feb 14, compiled Oct 12 2026 22:40:28)"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 60
+rows = 20

@@ -1,0 +1,13 @@
+title = "Forge CLIs"
+description = "Logins of fj, tea, glab and gh for sandboxes. Fake tokens stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets", "run", "process"]
+
+[logins]
+title = "Forge CLIs"
+sources = [
+  "~/.local/share/forgejo-cli/keys.json",
+  "~/.config/tea/config.yml",
+  "~/.config/glab-cli/config.yml",
+  "~/.config/gh/hosts.yml",
+  "gh auth token",
+]

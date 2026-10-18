@@ -1,0 +1,33 @@
+# cargo build --offline of a tiny crate with a deliberate type error: colored
+# diagnostics, a progress line and a final error. The build prints its working
+# directory, so record this one with TMPDIR=/tmp (the scratch path is then
+# /tmp/cmdterm-vt-record-cargo-error/work, free of any home directory).
+command = "cargo"
+args = ["build", "--offline", "--color=always"]
+rows = 30
+cols = 100
+timeout_ms = 60000
+
+[host_paths]
+RUSTUP_HOME = "~/.rustup"
+
+[env]
+CARGO_TERM_PROGRESS_WHEN = "always"
+CARGO_TERM_PROGRESS_WIDTH = "60"
+CARGO_TERM_COLOR = "always"
+CARGO_HOME = "/tmp/cmdterm-vt-record-cargo-error/cargo-state"
+
+[files]
+"Cargo.toml" = '''[package]
+name = "demo"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+'''
+"src/main.rs" = '''fn main() {
+    let count: u32 = "three";
+    let unused = 5;
+    println!("{}", count + missing);
+}
+'''

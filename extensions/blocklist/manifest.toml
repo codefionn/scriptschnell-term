@@ -1,0 +1,37 @@
+title = "Blocklist"
+description = "Blocks ad, tracker and malware hosts in sandboxes. Uses HaGeZi's DNS blocklist, cached for a week."
+permissions = ["sandbox", "network"]
+# Where the HaGeZi lists come from. The hosts of "More lists" are allowed as well.
+hosts = ["raw.githubusercontent.com", "codeberg.org"]
+
+[[settings]]
+key = "list"
+title = "List"
+description = "Which HaGeZi list to block: light, multi (normal), pro, pro.plus or ultimate blocks more with each step; tif is threat intelligence only. Off blocks no list."
+type = "choice"
+choices = ["pro", "light", "multi", "pro.plus", "ultimate", "tif", "off"]
+
+[[settings]]
+key = "max_age_days"
+title = "Download again after (days)"
+description = "How old the cached copy may get before it is downloaded again."
+type = "integer"
+default = 7
+
+[[settings]]
+key = "urls"
+title = "More lists"
+description = "https:// URLs of further lists: plain domains, hosts files or Adblock domain rules."
+type = "urls"
+
+[[settings]]
+key = "blocked"
+title = "Blocked hosts"
+description = "Hosts to block as well. A name blocks its subdomains too, *.example.com only the subdomains."
+type = "list"
+
+[[settings]]
+key = "unblocked"
+title = "Never blocked"
+description = "Hosts no list blocks, in the same form."
+type = "list"

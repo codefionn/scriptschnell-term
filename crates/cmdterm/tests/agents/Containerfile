@@ -1,0 +1,39 @@
+# The agent harness: real coding agents next to a fake, stateful model API.
+# See README.md in this directory.
+FROM docker.io/library/node:22-bookworm-slim
+
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends python3 git procps ca-certificates \
+ && rm -rf /var/lib/apt/lists/*
+
+# Pin versions with --build-arg, such as CLAUDE_CODE=2.1.0.
+ARG CLAUDE_CODE=latest
+ARG CODEX=latest
+ARG QWEN_CODE=latest
+RUN npm install -g \
+      "@anthropic-ai/claude-code@${CLAUDE_CODE}" \
+      "@openai/codex@${CODEX}" \
+      "@qwen-code/qwen-code@${QWEN_CODE}" \
+ && npm cache clean --force
+
+# Codex's background server looks for bubblewrap, as on a Linux desktop.
+RUN apt-get update \
+ && apt-get install -y --no-install-recommends bubblewrap \
+ && rm -rf /var/lib/apt/lists/*
+
+COPY fake_api.py setup.sh /opt/harness/
+RUN chmod 755 /opt/harness/*.py /opt/harness/*.sh \
+ && mkdir -p /home/agent /harness-state \
+ && chmod 777 /home/agent /harness-state
+
+ENV HOME=/home/agent \
+    HARNESS_STATE=/harness-state \
+    ANTHROPIC_BASE_URL=http://127.0.0.1:8787 \
+    ANTHROPIC_API_KEY=sk-ant-api03-harness-0000000000000000000000000000 \
+    CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC=1 \
+    DISABLE_AUTOUPDATER=1 \
+    OPENAI_API_KEY=sk-harness-0000000000000000 \
+    OPENAI_BASE_URL=http://127.0.0.1:8787/v1 \
+    OPENAI_MODEL=harness-model
+
+CMD ["python3", "/opt/harness/fake_api.py"]

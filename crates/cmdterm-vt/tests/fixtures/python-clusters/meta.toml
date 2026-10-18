@@ -1,0 +1,25 @@
+args = ["-c", '''
+import sys
+w = sys.stdout.write
+w("heart: ❤️|❤|\r\n")
+w("hindi: नमस्ते|\r\n")
+w("ka: का|\r\n")
+''']
+program = "python3"
+program_version = "Python 3.14.8"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 30
+rows = 6

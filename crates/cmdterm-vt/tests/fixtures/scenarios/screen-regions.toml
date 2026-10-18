@@ -1,0 +1,44 @@
+# NOT RECORDED: GNU screen is not installed on the machine that recorded the corpus.
+# A screen session with a split region and a scrolling pane, the screen counterpart of
+# tmux-panes. Record it where `screen` exists; check the status line for a host name first
+# (a fixture must hold no host name or home path).
+command = "screen"
+args = ["-c", "screenrc", "-S", "cmdterm-vt", "bash", "--noprofile", "--norc", "-i"]
+rows = 20
+cols = 60
+cleanup = ["screen", "-S", "cmdterm-vt", "-X", "quit"]
+
+[env]
+SCREENDIR = "/tmp/cmdterm-vt-screen"
+HISTFILE = "/dev/null"
+
+[files]
+"screenrc" = '''startup_message off
+hardstatus alwayslastline "[screen] %n"
+defscrollback 200
+'''
+
+[[step]]
+wait_quiet_ms = 600
+[[step]]
+send = "seq 1 30\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0001S"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0001\t"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0001c"
+[[step]]
+wait_quiet_ms = 500
+[[step]]
+send = "echo second region\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+stop = true

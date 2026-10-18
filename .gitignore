@@ -1,0 +1,4 @@
+/target
+/.zvec-grep
+/security-audit
+/.claude/scheduled_tasks.lock

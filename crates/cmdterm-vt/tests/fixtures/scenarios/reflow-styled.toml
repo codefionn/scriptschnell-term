@@ -1,0 +1,29 @@
+# Long lines with color, wide characters and a combining mark, written once, then the
+# window narrows, widens past the original width and narrows again. A program that
+# does not redraw (cat) leaves all the repair to the terminal's reflow.
+command = "sh"
+version_command = ["cat", "--version"]
+args = ["-c", '''printf '\033[31mred \033[1;32mgreen bold\033[0m plain text that is long enough to wrap in a narrow window\r\n'; printf '\344\275\240\345\245\275\344\270\226\347\225\214 \344\275\240\345\245\275\344\270\226\347\225\214 e\314\201e\314\201e\314\201 \360\237\230\200\360\237\230\200\360\237\230\200 end\r\n'; printf 'short\r\n'; cat''']
+rows = 12
+cols = 40
+
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+resize = [12, 25]
+[[step]]
+wait_quiet_ms = 150
+[[step]]
+resize = [12, 61]
+[[step]]
+wait_quiet_ms = 150
+[[step]]
+resize = [12, 17]
+[[step]]
+wait_quiet_ms = 150
+[[step]]
+send = "typed\r"
+[[step]]
+wait_quiet_ms = 150
+[[step]]
+send = "\u0004"

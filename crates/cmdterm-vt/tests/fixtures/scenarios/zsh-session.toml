@@ -1,0 +1,46 @@
+# Interactive zsh -f: prompt set by the session, line editor redraws, history
+# search with Ctrl-R, clear-screen and exit.
+command = "zsh"
+args = ["-f", "-i"]
+rows = 16
+cols = 60
+
+[env]
+HISTFILE = "/dev/null"
+ZDOTDIR = "/nonexistent"
+
+[files]
+"a.txt" = "alpha\nbeta\n"
+
+[[step]]
+wait_quiet_ms = 400
+[[step]]
+send = "PS1='$ '\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "echo hello world\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "ls --color=always\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\u0012echo"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\f"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "echo done\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "exit\r"

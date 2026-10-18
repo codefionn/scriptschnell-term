@@ -1,0 +1,7 @@
+title = "PyPI"
+description = "PyPI logins for sandboxes. Fake passwords stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets", "guards"]
+
+[logins]
+title = "PyPI"
+sources = ["~/.pypirc", "TWINE_PASSWORD"]

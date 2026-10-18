@@ -1,0 +1,31 @@
+title = "Claude Code"
+description = "Claude Code in devcontainers, VMs and remote machines. Copies its settings and login there and installs it."
+permissions = ["env", "filesystem", "copy", "run"]
+
+[[settings]]
+key = "kinds"
+title = "Environments"
+description = "Kinds of environment to set up when they come up: devcontainer, vm, remote, ssh."
+type = "list"
+default = ["devcontainer", "vm", "remote"]
+
+[[settings]]
+key = "copy"
+title = "Entries of ~/.claude to copy"
+description = "Missing ones are skipped."
+type = "list"
+default = ["settings.json", "CLAUDE.md", "agents", "commands", "skills", "hooks", "output-styles", "plugins"]
+
+[[settings]]
+key = "credentials"
+title = "Copy the login"
+description = "Copies ~/.claude/.credentials.json, which gives everything in the environment your Claude account."
+type = "bool"
+default = false
+
+[[settings]]
+key = "install"
+title = "Install Claude Code"
+description = "Runs the official install script where claude is missing."
+type = "bool"
+default = true

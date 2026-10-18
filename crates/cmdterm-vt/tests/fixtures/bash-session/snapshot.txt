@@ -1,0 +1,25 @@
+size 16x60
+title ""
+icon ""
+cursor row=11 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |$ echo again|
+01 |again|
+02 |$ echo again|
+03 |again|
+04 |$ printf 'x%.0s' $(seq 1 70); echo|
+05~|xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx|
+06 |xxxxxxxxxx|
+07 |$ echo done|
+08 |done|
+09 |$ exit|
+10 |exit|
+11 ||
+12 ||
+13 ||
+14 ||
+15 ||

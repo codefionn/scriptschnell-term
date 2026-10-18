@@ -1,0 +1,19 @@
+args = ["-c", '''printf '\033]0;smoke title\007'; printf '\033[1;31mred bold\033[0m plain \033[4;38;2;10;20;30munder rgb\033[0m\r\n'; printf 'e\314\201 \344\275\240\345\245\275 \360\237\230\200\r\n'; printf '\033[6;5Hmoved\033[2A\033[3Cab\033[3b\r\n'; printf '\033[48;5;202mbg\033[K\033[0m\r\n'''']
+program = "sh"
+program_version = "GNU bash, version 5.3.20(1)-release (x86_64-pc-linux-gnu)"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 40
+rows = 10

@@ -1,0 +1,7 @@
+title = "npm"
+description = "npm cache and logins for sandboxes. Fake tokens stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets", "guards"]
+
+[logins]
+title = "npm"
+sources = ["~/.npmrc", "NPM_CONFIG_USERCONFIG", "NPM_TOKEN", "NODE_AUTH_TOKEN"]

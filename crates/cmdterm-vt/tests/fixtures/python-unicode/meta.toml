@@ -1,0 +1,32 @@
+args = ["-c", '''
+import sys
+w = sys.stdout.write
+w("\x1b]0;unicode title\x07")
+w("\x1b]133;A\x07$ \x1b]133;B\x07")
+w("emoji: \U0001F600 \U0001F468\u200d\U0001F469\u200d\U0001F467 \U0001F1E9\U0001F1EA \U0001F44D\U0001F3FD\r\n")
+w("cjk: \u4f60\u597d\u4e16\u754c \u3053\u3093\u306b\u3061\u306f \ud55c\uae00\r\n")
+w("combining: e\u0301 a\u0308\u0323\r\n")
+w("link: \x1b]8;id=1;https://example.invalid/a\x1b\\click\x1b]8;;\x1b\\ after\r\n")
+w("edge: " + "\u4f60" * 16 + "\U0001F600" + "x" * 4 + "\r\n")
+w("y" * 39 + "\u4f60z\r\n")
+w("tabs:\ta\tb\x1b[3g\r\n")
+w("\x1b]133;C\x07out\r\n\x1b]133;D;0\x07")
+''']
+program = "python3"
+program_version = "Python 3.14.8"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 40
+rows = 10

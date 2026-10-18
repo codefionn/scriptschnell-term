@@ -1,0 +1,18 @@
+size 8x40
+title ""
+icon ""
+cursor row=3 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |[####################] 100%|
+01 |\done|
+02 |bold rev strike|
+   runs 0-3 bold; 5-7 inverse; 9-14 strike
+03 ||
+04 ||
+05 ||
+06 ||
+07 ||

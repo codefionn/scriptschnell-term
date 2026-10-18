@@ -1,0 +1,25 @@
+title = "Coder"
+description = "Opens projects in Coder workspaces. coder://workspace/path runs every command there through coder ssh."
+enabled = false
+permissions = ["environments"]
+
+[[settings]]
+key = "wait"
+title = "Wait for the startup script"
+description = "auto follows the template's startup script behavior; yes waits for it to finish, no connects as soon as the agent does."
+type = "choice"
+choices = ["auto", "yes", "no"]
+
+[[settings]]
+key = "autostart"
+title = "Start stopped workspaces"
+description = "Starts a stopped workspace when a command or terminal connects. Off, commands in a stopped workspace fail."
+type = "bool"
+default = true
+
+[[settings]]
+key = "forward_agent"
+title = "Forward the SSH agent"
+description = "Lets programs in the workspace use the keys of this machine's SSH agent, such as for git push."
+type = "bool"
+default = false

@@ -1,0 +1,7 @@
+title = "NuGet"
+description = "NuGet package cache and feed logins for sandboxes. Fake passwords stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets", "guards"]
+
+[logins]
+title = "NuGet"
+sources = ["~/.nuget/NuGet/NuGet.Config", "~/.config/NuGet/NuGet.Config"]

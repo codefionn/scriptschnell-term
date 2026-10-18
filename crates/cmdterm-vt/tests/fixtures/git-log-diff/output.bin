@@ -1,0 +1,22 @@
+*   [33m3c2a45a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;33mtag: [m[1;33mv1[m[33m)[m merge topic
+[31m|[m[32m\[m    Fixed Author <fixed@example.invalid> 2024-01-02 03:04:05 +0000
+[31m|[m * [33m56588ee[m[33m ([m[1;32mtopic[m[33m)[m topic work
+[31m|[m [32m|[m   Fixed Author <fixed@example.invalid> 2024-01-02 03:04:05 +0000
+* [32m|[m [33m6f510b7[m main work
+[32m|[m[32m/[m    Fixed Author <fixed@example.invalid> 2024-01-02 03:04:05 +0000
+* [33m5096e3d[m first commit
+    Fixed Author <fixed@example.invalid> 2024-01-02 03:04:05 +0000
+[1mdiff --git a/base.txt b/base.txt[m
+[1mindex 621ce14..edd1b45 100644[m
+[1m--- a/base.txt[m
+[1m+++ b/base.txt[m
+[36m@@ -1,2 +1,2 @@[m
+[32m+[m[32mchanged[m
+ base[m
+[31m-topic line[m
+*   [33m3c2a45a[m[33m ([m[1;36mHEAD[m[33m -> [m[1;32mmain[m[33m, [m[1;33mtag: [m[1;33mv1[m[33m)[m merge topic
+[31m|[m[32m\[m  
+[31m|[m * [33m56588ee[m[33m ([m[1;32mtopic[m[33m)[m topic work
+* [32m|[m [33m6f510b7[m main work
+[32m|[m[32m/[m  
+* [33m5096e3d[m first commit

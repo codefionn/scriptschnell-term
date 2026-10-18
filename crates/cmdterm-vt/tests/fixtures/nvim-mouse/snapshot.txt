@@ -1,0 +1,30 @@
+size 20x60
+title ""
+icon ""
+cursor row=0 col=15 visible=true pending_wrap=false shape=Block blink=false
+alt_screen true
+modes autowrap app_cursor app_keypad focus_events bracketed_paste
+mouse ButtonEvent encoding Sgr kitty_flags 0
+scrollback 0
+screen
+00 |  1 hello edited|
+01 |  2 你好 world|
+02 |  3 café 😀|
+03 |  4 last line|
+04 |~|
+05 |~|
+06 |~|
+07 |~|
+08 |~|
+09 |~|
+10 |~|
+11 |~|
+12 |~|
+13 |~|
+14 |~|
+15 |~|
+16 |~|
+17 |~|
+18 |text.txt [+]                              1,12           All|
+   runs 0-59 inverse
+19 |:set mouse=a|

@@ -1,0 +1,49 @@
+size 20x60
+title ""
+icon ""
+cursor row=12 col=41 visible=true pending_wrap=false shape=Block blink=false
+alt_screen true
+modes autowrap app_cursor app_keypad bracketed_paste
+mouse ButtonEvent encoding Sgr kitty_flags 0
+scrollback 0
+screen
+00 |13                            │bash-5.3$ echo right pane|
+   runs 30-30 fg=7
+01 |14                            │right pane|
+   runs 30-30 fg=7
+02 |15                            │bash-5.3$|
+   runs 30-30 fg=7
+03 |16                            │|
+   runs 30-30 fg=7
+04 |17                            │|
+   runs 30-30 fg=7
+05 |18                            │|
+   runs 30-30 fg=7
+06 |19                            │|
+   runs 30-30 fg=7
+07 |20                            │|
+   runs 30-30 fg=7
+08 |21                            │|
+   runs 30-30 fg=7
+09 |22                            ├─────────────────────────────|
+   runs 30-59 fg=3
+10 |23                            │bash-5.3$ printf '\033[1[0/0]|
+   runs 30-30 fg=3; 55-59 fg=0 bg=3
+11 |24                            │reen\033[0m \344\275\240\345\|
+   runs 30-30 fg=3
+12 |25                            │245\275\n'|
+   runs 30-30 fg=3
+13 |26                            │green 你好|
+   runs 30-30 fg=3; 31-35 bold fg=2
+14 |27                            │bash-5.3$|
+   runs 30-30 fg=3
+15 |28                            │|
+   runs 30-30 fg=3
+16 |29                            │|
+   runs 30-30 fg=3
+17 |30                            │|
+   runs 30-30 fg=3
+18 |bash-5.3$                     │|
+   runs 30-30 fg=3
+19 |[demo] 0:bash*|
+   runs 0-6 fg=0 bg=2; 7-13 underline=Single fg=0 bg=2; 14-59 fg=0 bg=2

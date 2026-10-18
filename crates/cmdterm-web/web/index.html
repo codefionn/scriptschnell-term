@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="color-scheme" content="light dark">
+<meta name="theme-color" content="#f4f4f1" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#151719" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="schnell">
+<title>scriptschnell-term</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="stylesheet" href="vendor/xterm.css">
+<link rel="stylesheet" href="app.css">
+<script src="vendor/xterm.js" defer></script>
+<script src="vendor/addon-fit.js" defer></script>
+<script type="module" src="app.js"></script>
+</head>
+<body>
+<header class="topbar">
+  <a class="brand" href="#machines">
+    <img src="icon.svg" alt="" width="24" height="24">
+    <span>scriptschnell-term</span>
+  </a>
+  <nav id="nav" aria-label="Main" hidden>
+    <a href="#machines">Machines</a>
+    <a href="#account">Account</a>
+  </nav>
+</header>
+<div id="offline-banner" class="offline-banner" role="status" hidden>Offline. Showing what this device saw last, read-only.</div>
+<main id="view"></main>
+<noscript><p class="noscript">scriptschnell-term needs JavaScript.</p></noscript>
+</body>
+</html>

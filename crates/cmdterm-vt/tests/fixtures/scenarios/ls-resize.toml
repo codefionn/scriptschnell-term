@@ -1,0 +1,20 @@
+# ls --color=always in a directory with fixed file names, narrowed while the program
+# waits. wezterm-term's reflow lost text here; see COMPAT.md.
+version_command = ["ls", "--version"]
+command = "sh"
+args = ["-c", "ls --color=always -F; ls --color=always; sleep 0.3; ls --color=always -1"]
+rows = 12
+cols = 50
+
+[files]
+"README.md" = "readme\n"
+"main.rs" = "fn main() {}\n"
+"data.tar.gz" = "x"
+"notes.txt" = "hello\n"
+"src/lib.rs" = "pub fn f() {}\n"
+
+[[step]]
+wait_quiet_ms = 150
+
+[[step]]
+resize = [12, 30]

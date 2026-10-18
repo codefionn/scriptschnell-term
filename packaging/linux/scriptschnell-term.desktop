@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=scriptschnell-term
+Comment=Terminal and browser panels organized by project and worktree
+Exec=scriptschnell-term %F
+Icon=scriptschnell-term
+Terminal=false
+Categories=Development;TerminalEmulator;
+StartupWMClass=scriptschnell-term

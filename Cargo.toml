@@ -1,0 +1,64 @@
+[workspace]
+resolver = "3"
+members = [
+    "crates/cmdterm-env",
+    "crates/cmdterm-remote",
+    "crates/cmdterm-update",
+    "crates/cmdterm-web",
+    "crates/cmdterm-vt",
+    "crates/cmdterm",
+]
+
+[workspace.package]
+edition = "2024"
+version = "0.1.0"
+license = "MIT OR Apache-2.0"
+rust-version = "1.97"
+
+[workspace.dependencies]
+cmdterm-env = { path = "crates/cmdterm-env" }
+cmdterm-remote = { path = "crates/cmdterm-remote" }
+cmdterm-update = { path = "crates/cmdterm-update" }
+cmdterm-vt = { path = "crates/cmdterm-vt" }
+
+# Sibling checkouts. cmdterm changes them when it needs to (see AGENTS.md).
+schnellui = { path = "../schnellui/crates/schnellui" }
+schnellui-widgets = { path = "../schnellui/crates/schnellui-widgets" }
+schnellui-icons-md = { path = "../schnellui/crates/schnellui-icons-md" }
+schnellui-servo = { path = "../schnellui/crates/schnellui-servo" }
+oximond = { path = "../oximond/crates/oximond" }
+
+rustix = { version = "1.1.5", features = ["fs", "process", "pty", "stdio", "termios"] }
+shell-words = "1.1.1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.151"
+thiserror = "2.0.21"
+ureq = { version = "3.4.2", features = ["json", "platform-verifier"] }
+smallvec = "1.16.2"
+rustc-hash = "2.1.3"
+tempfile = "3.27.0"
+proptest = "1.7.0"
+unicode-width = "=0.2.2"
+unicode-segmentation = "=1.13.3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+all = "warn"
+
+# Debug info made up over 90% of every binary. Our own crates keep line tables, so
+# panics and backtraces still name files and lines; dependencies carry none.
+[profile.dev]
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+opt-level = 2
+debug = false
+
+# Shipped builds carry no debug info. Symbol names stay so backtraces name functions.
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = false
+strip = "debuginfo"

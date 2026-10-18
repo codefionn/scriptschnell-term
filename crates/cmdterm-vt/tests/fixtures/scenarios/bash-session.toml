@@ -1,0 +1,54 @@
+# Interactive bash with a fixed prompt: commands, history search with Ctrl-R, a
+# bracketed paste prompt, Ctrl-L to clear the screen, and exit.
+command = "bash"
+args = ["--noprofile", "--norc", "-i"]
+rows = 16
+cols = 60
+
+[env]
+HISTFILE = "/dev/null"
+HISTSIZE = "50"
+
+[files]
+"a.txt" = "alpha\nbeta\n"
+
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "echo hello world\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "ls --color=always\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "cat a.txt | wc -l\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\f"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "echo again\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\u0012echo"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "printf 'x%.0s' $(seq 1 70); echo\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "echo done\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "exit\r"

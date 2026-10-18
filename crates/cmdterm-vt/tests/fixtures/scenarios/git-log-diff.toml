@@ -1,0 +1,32 @@
+# git log --graph with decorations and a colored diff in a scratch repository with a
+# fixed author and fixed dates, so the commit ids are the same on every machine.
+command = "sh"
+version_command = ["git", "--version"]
+args = ["-c", '''set -e
+git init -q -b main .
+git add base.txt && git commit -q -m "first commit" 
+git checkout -q -b topic
+printf 'topic line\n' >> base.txt && git commit -q -am "topic work"
+git checkout -q main
+printf 'main line\n' > other.txt && git add other.txt && git commit -q -m "main work"
+git merge -q --no-ff topic -m "merge topic"
+git tag v1
+printf 'changed\nbase\n' > base.txt
+git -c core.pager=cat log --graph --decorate --color=always --format='%C(auto)%h%d %s%n  %an <%ae> %ad' --date=iso
+git -c core.pager=cat diff --color=always
+git -c core.pager=cat log --graph --color=always --oneline --all''']
+rows = 30
+cols = 80
+
+[env]
+GIT_AUTHOR_NAME = "Fixed Author"
+GIT_AUTHOR_EMAIL = "fixed@example.invalid"
+GIT_COMMITTER_NAME = "Fixed Author"
+GIT_COMMITTER_EMAIL = "fixed@example.invalid"
+GIT_AUTHOR_DATE = "2024-01-02T03:04:05+00:00"
+GIT_COMMITTER_DATE = "2024-01-02T03:04:05+00:00"
+GIT_CONFIG_GLOBAL = "/dev/null"
+GIT_CONFIG_NOSYSTEM = "1"
+
+[files]
+"base.txt" = "base\n"

@@ -1,0 +1,88 @@
+[?1049h[22;0;0t[16;1H[?1h=      [1m1(B[m alpha one
+      [1m2(B[m beta two
+      [1m3(B[m gamma three
+      [1m4(B[m delta four
+      [1m5(B[m epsilon five
+      [1m6(B[m zeta six
+      [1m7(B[m eta seven
+      [1m8(B[m theta eight
+      [1m9(B[m iota nine
+     [1m10(B[m kappa ten
+     [1m11(B[m lambda eleven
+     [1m12(B[m mu twelve
+     [1m13(B[m nu thirteen
+     [1m14(B[m xi fourteen
+     [1m15(B[m omicron fifteen
+[7mlong.txt[27m[K[K     [1m16(B[m pi sixteen
+     [1m17(B[m rho seventeen
+     [1m18(B[m sigma eighteen
+     [1m19(B[m tau nineteen
+     [1m20(B[m upsilon twenty
+     [1m21(B[m phi 21 alpha
+     [1m22(B[m chi 22
+     [1m23(B[m psi 23
+     [1m24(B[m omega 24 alpha
+     [1m25(B[m last 25
+[7m(END)[27m[K[K/[Kaa[Kll[Kpp[Khh[Kaa[K[1;1H[K     [1m11(B[m lambda eleven
+[2;1H[K     [1m12(B[m mu twelve
+[3;1H[K     [1m13(B[m nu thirteen
+[4;1H[K     [1m14(B[m xi fourteen
+[5;1H[K     [1m15(B[m omicron fifteen
+[6;1H[K     [1m16(B[m pi sixteen
+[7;1H[K     [1m17(B[m rho seventeen
+[8;1H[K     [1m18(B[m sigma eighteen
+[9;1H[K     [1m19(B[m tau nineteen
+[10;1H[K     [1m20(B[m upsilon twenty
+[11;1H[K     [1m21(B[m phi 21 alpha
+[12;1H[K     [1m22(B[m chi 22
+[13;1H[K     [1m23(B[m psi 23
+[14;1H[K     [1m24(B[m omega 24 alpha
+[15;1H[K     [1m25(B[m last 25
+[16;1H[1;1H[K     [1m11(B[m lambda eleven
+[2;1H[K     [1m12(B[m mu twelve
+[3;1H[K     [1m13(B[m nu thirteen
+[4;1H[K     [1m14(B[m xi fourteen
+[5;1H[K     [1m15(B[m omicron fifteen
+[6;1H[K     [1m16(B[m pi sixteen
+[7;1H[K     [1m17(B[m rho seventeen
+[8;1H[K     [1m18(B[m sigma eighteen
+[9;1H[K     [1m19(B[m tau nineteen
+[10;1H[K     [1m20(B[m upsilon twenty
+[11;1H[K     [1m21(B[m phi 21 [7malpha[27m
+[12;1H[K     [1m22(B[m chi 22
+[13;1H[K     [1m23(B[m psi 23
+[14;1H[K     [1m24(B[m omega 24 [7malpha[27m
+[15;1H[K     [1m25(B[m last 25
+[16;1H[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[7m(END)[27m[K[K/[K[1m~(B[m
+[1m~(B[m
+[1m~(B[m
+[7m(END)[27m[K[K[HM     [1m23(B[m psi 23
+[HM     [1m22(B[m chi 22
+[HM     [1m21(B[m phi 21 [7malpha[27m
+[HM     [1m20(B[m upsilon twenty
+[HM     [1m19(B[m tau nineteen
+[HM     [1m18(B[m sigma eighteen
+[HM     [1m17(B[m rho seventeen
+[HM     [1m16(B[m pi sixteen
+[HM     [1m15(B[m omicron fifteen
+[HM     [1m14(B[m xi fourteen
+[HM     [1m13(B[m nu thirteen
+[HM     [1m12(B[m mu twelve
+[HM     [1m11(B[m lambda eleven
+[HM     [1m10(B[m kappa ten
+[HM      [1m9(B[m iota nine
+[16;1H[K:[K[K:[K55[K[HM      [1m8(B[m theta eight
+[HM      [1m7(B[m eta seven
+[HM      [1m6(B[m zeta six
+[HM      [1m5(B[m epsilon five
+[16;1H[K:[K

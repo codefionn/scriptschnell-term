@@ -1,0 +1,13 @@
+# ls --color=always in a directory with fixed file names.
+version_command = ["ls", "--version"]
+command = "sh"
+args = ["-c", "ls --color=always -F; ls --color=always"]
+rows = 12
+cols = 50
+
+[files]
+"README.md" = "readme\n"
+"main.rs" = "fn main() {}\n"
+"data.tar.gz" = "x"
+"notes.txt" = "hello\n"
+"src/lib.rs" = "pub fn f() {}\n"

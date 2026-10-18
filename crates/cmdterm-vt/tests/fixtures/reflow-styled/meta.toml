@@ -1,0 +1,19 @@
+args = ["-c", '''printf '\033[31mred \033[1;32mgreen bold\033[0m plain text that is long enough to wrap in a narrow window\r\n'; printf '\344\275\240\345\245\275\344\270\226\347\225\214 \344\275\240\345\245\275\344\270\226\347\225\214 e\314\201e\314\201e\314\201 \360\237\230\200\360\237\230\200\360\237\230\200 end\r\n'; printf 'short\r\n'; cat''']
+program = "sh"
+program_version = "cat (GNU coreutils) 9.12"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = []
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 40
+rows = 12

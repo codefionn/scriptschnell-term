@@ -1,0 +1,40 @@
+size 16x50
+title ""
+icon ""
+cursor row=15 col=1 visible=true pending_wrap=false shape=Block blink=false
+alt_screen true
+modes autowrap app_cursor app_keypad
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |      5 epsilon five|
+   runs 6-6 bold
+01 |      6 zeta six|
+   runs 6-6 bold
+02 |      7 eta seven|
+   runs 6-6 bold
+03 |      8 theta eight|
+   runs 6-6 bold
+04 |      9 iota nine|
+   runs 6-6 bold
+05 |     10 kappa ten|
+   runs 5-6 bold
+06 |     11 lambda eleven|
+   runs 5-6 bold
+07 |     12 mu twelve|
+   runs 5-6 bold
+08 |     13 nu thirteen|
+   runs 5-6 bold
+09 |     14 xi fourteen|
+   runs 5-6 bold
+10 |     15 omicron fifteen|
+   runs 5-6 bold
+11 |     16 pi sixteen|
+   runs 5-6 bold
+12 |     17 rho seventeen|
+   runs 5-6 bold
+13 |     18 sigma eighteen|
+   runs 5-6 bold
+14 |     19 tau nineteen|
+   runs 5-6 bold
+15 |:|

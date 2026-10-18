@@ -1,0 +1,32 @@
+args = ["-c", '''
+set -e
+git init -q -b main .
+git add base.txt && git commit -q -m "first commit" 
+git checkout -q -b topic
+printf 'topic line\n' >> base.txt && git commit -q -am "topic work"
+git checkout -q main
+printf 'main line\n' > other.txt && git add other.txt && git commit -q -m "main work"
+git merge -q --no-ff topic -m "merge topic"
+git tag v1
+printf 'changed\nbase\n' > base.txt
+git -c core.pager=cat log --graph --decorate --color=always --format='%C(auto)%h%d %s%n  %an <%ae> %ad' --date=iso
+git -c core.pager=cat diff --color=always
+git -c core.pager=cat log --graph --color=always --oneline --all''']
+program = "sh"
+program_version = "git version 2.56.0"
+recorded_at = "2026-11-01"
+tool_version = "cmdterm-vt record 0.1.0"
+
+[env]
+LANG = "C.UTF-8"
+PATH = "/usr/local/bin:/usr/bin:/bin"
+PS1 = "$ "
+TERM = "xterm-256color"
+cleared = true
+host_paths = []
+overrides = ["GIT_AUTHOR_DATE=2024-01-02T03:04:05+00:00", "GIT_AUTHOR_EMAIL=fixed@example.invalid", "GIT_AUTHOR_NAME=Fixed Author", "GIT_COMMITTER_DATE=2024-01-02T03:04:05+00:00", "GIT_COMMITTER_EMAIL=fixed@example.invalid", "GIT_COMMITTER_NAME=Fixed Author", "GIT_CONFIG_GLOBAL=/dev/null", "GIT_CONFIG_NOSYSTEM=1"]
+scratch_dirs = ["HOME", "XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_CACHE_HOME", "XDG_STATE_HOME"]
+
+[size]
+cols = 80
+rows = 30

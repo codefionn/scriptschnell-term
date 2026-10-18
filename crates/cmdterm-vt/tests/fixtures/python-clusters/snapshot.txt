@@ -1,0 +1,15 @@
+size 6x30
+title ""
+icon ""
+cursor row=3 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |heart: ❤️|❤||
+01 |hindi: नमस्ते||
+02 |ka: का||
+03 ||
+04 ||
+05 ||

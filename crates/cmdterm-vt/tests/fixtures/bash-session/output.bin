@@ -1,0 +1,16 @@
+[?2004h$ echo hello world
+[?2004lhello world
+[?2004h$ ls --color=always
+[?2004la.txt
+[?2004h$ cat a.txt | wc -l
+[?2004l2
+[?2004h$ [H[2J$ echo again
+[?2004lagain
+[?2004h$ (reverse-i-search)`': e': [7me[27mcho again[1@c': [7mec[27m[1@h': [7mech[27m[1@o': [7mecho[27m[24P$ echo[C[C
+[?2004lagain
+[?2004h$ printf 'x%.0s' $(seq 1 70); echo
+[?2004lxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+[?2004h$ echo done
+[?2004ldone
+[?2004h$ exit
+[?2004lexit

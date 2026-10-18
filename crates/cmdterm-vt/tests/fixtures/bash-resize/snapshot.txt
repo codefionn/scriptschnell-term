@@ -1,0 +1,21 @@
+size 8x80
+title ""
+icon ""
+cursor row=7 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 4
+sb 0000 |$ echo 0123456789012345678901234567890123456789012345678901234567890123456789|
+sb 0001 |0123456789012345678901234567890123456789012345678901234567890123456789|
+sb 0002 |$ stty size; echo $COLUMNS|
+sb 0003 |12 50|
+screen
+00 |50|
+01 |$ stty size|
+02 |12 30|
+03 |$ stty size|
+04 |8 80|
+05 |$ exit|
+06 |exit|
+07 ||

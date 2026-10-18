@@ -1,0 +1,56 @@
+# tmux with a fixed config (no status clock or host name): split panes, output that
+# scrolls inside a pane (scroll regions), copy mode on the alternate screen, and
+# a window title. The session ends mid-way so the final screen shows the panes.
+command = "tmux"
+version_command = ["tmux", "-V"]
+args = ["-f", "tmux.conf", "-L", "cmdterm-vt-record", "new-session", "-s", "demo"]
+cleanup = ["tmux", "-L", "cmdterm-vt-record", "kill-server"]
+rows = 20
+cols = 60
+
+[env]
+TMUX_TMPDIR = "/tmp"
+HISTFILE = "/dev/null"
+SHELL = "/bin/bash"
+
+[files]
+"tmux.conf" = '''set -g default-command "bash --noprofile --norc -i"
+set -g status-left "[#S] "
+set -g status-right ""
+set -g status-interval 0
+set -g escape-time 0
+set -g history-limit 200
+'''
+
+[[step]]
+wait_quiet_ms = 600
+[[step]]
+send = "echo left pane; seq 1 30\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0002%"
+[[step]]
+wait_quiet_ms = 500
+[[step]]
+send = "echo right pane\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0002\""
+[[step]]
+wait_quiet_ms = 500
+[[step]]
+send = "printf '\\033[1;32mgreen\\033[0m \\344\\275\\240\\345\\245\\275\\n'\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u0002["
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "\u001b[5~"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+stop = true

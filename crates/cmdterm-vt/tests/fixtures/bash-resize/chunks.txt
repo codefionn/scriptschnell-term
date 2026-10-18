@@ -1,0 +1,24 @@
+chunk 8
+chunk 2
+chunk 75
+chunk 11
+chunk 72
+chunk 8
+chunk 2
+chunk 35
+chunk 7
+chunk 4
+chunk 8
+chunk 2
+resize 12 30
+chunk 7
+chunk 20
+chunk 7
+chunk 8
+chunk 2
+resize 8 80
+chunk 7
+chunk 20
+chunk 6
+chunk 10
+chunk 21

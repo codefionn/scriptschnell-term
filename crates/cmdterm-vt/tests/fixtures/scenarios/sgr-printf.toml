@@ -1,0 +1,7 @@
+# Colors, attributes, wide and combining characters, cursor movement and a title,
+# written by printf through sh.
+version_command = ["sh", "--version"]
+command = "sh"
+args = ["-c", '''printf '\033]0;smoke title\007'; printf '\033[1;31mred bold\033[0m plain \033[4;38;2;10;20;30munder rgb\033[0m\r\n'; printf 'e\314\201 \344\275\240\345\245\275 \360\237\230\200\r\n'; printf '\033[6;5Hmoved\033[2A\033[3Cab\033[3b\r\n'; printf '\033[48;5;202mbg\033[K\033[0m\r\n'''']
+rows = 10
+cols = 40

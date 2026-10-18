@@ -1,0 +1,38 @@
+# bash prompt with wrapped long lines, narrowed and widened while the shell is idle:
+# the shell redraws after SIGWINCH and the terminal reflows what it kept.
+command = "bash"
+args = ["--noprofile", "--norc", "-i"]
+rows = 12
+cols = 50
+
+[env]
+HISTFILE = "/dev/null"
+
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "echo 0123456789012345678901234567890123456789012345678901234567890123456789\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "stty size; echo $COLUMNS\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+resize = [12, 30]
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "stty size\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+resize = [8, 80]
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "stty size\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "exit\r"

@@ -1,0 +1,6 @@
+# A progress bar redrawn with CR and EL, a spinner using backspace, and a final line.
+command = "sh"
+version_command = ["sh", "--version"]
+args = ["-c", '''i=0; while [ $i -le 20 ]; do bar=$(printf '%*s' $i '' | tr ' ' '#'); printf '\r[%-20s] %3d%%\033[K' "$bar" $((i*5)); i=$((i+1)); sleep 0.02; done; printf '\n'; for c in '|' '/' '-' '\\'; do printf '%s\b' "$c"; sleep 0.02; done; printf 'done\n\033[1mbold\033[0m \033[7mrev\033[27m \033[9mstrike\033[0m\n'''']
+rows = 8
+cols = 40

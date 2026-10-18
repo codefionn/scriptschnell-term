@@ -1,0 +1,7 @@
+title = "Git over HTTPS"
+description = "HTTPS logins for git hosts in sandboxes. Fake tokens stand in for real ones."
+permissions = ["env", "filesystem", "sandbox", "secrets"]
+
+[logins]
+title = "Git over HTTPS"
+sources = ["~/.git-credentials", "GH_TOKEN", "GITHUB_TOKEN", "GITLAB_TOKEN"]

@@ -1,0 +1,12 @@
+# Clusters where terminals disagree on width, from python3: a heart with VS16 and a
+# Devanagari conjunct. wezterm-term differs on both; see COMPAT.md.
+command = "python3"
+args = ["-c", '''
+import sys
+w = sys.stdout.write
+w("heart: ❤️|❤|\r\n")
+w("hindi: नमस्ते|\r\n")
+w("ka: का|\r\n")
+''']
+rows = 6
+cols = 30

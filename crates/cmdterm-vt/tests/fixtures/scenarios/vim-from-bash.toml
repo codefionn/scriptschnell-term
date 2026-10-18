@@ -1,0 +1,31 @@
+# bash prompt, then vim and back: the alternate screen must restore the shell's screen,
+# and the wide and combining text typed in vim must not leak into it.
+command = "bash"
+args = ["--noprofile", "--norc", "-i"]
+rows = 14
+cols = 50
+version_command = ["vim", "--version"]
+
+[env]
+HISTFILE = "/dev/null"
+
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = "echo before vim\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "vim -u NONE -i NONE -n --noplugin new.txt\r"
+[[step]]
+wait_quiet_ms = 500
+[[step]]
+send = "ihello é 你好 😀\u001b:wq\r"
+[[step]]
+wait_quiet_ms = 400
+[[step]]
+send = "cat new.txt\r"
+[[step]]
+wait_quiet_ms = 200
+[[step]]
+send = "exit\r"

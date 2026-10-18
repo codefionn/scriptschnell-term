@@ -1,0 +1,36 @@
+[package]
+name = "cmdterm-web"
+description = "Web access to scriptschnell-term machines from browsers and phones"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "cmdterm-web"
+path = "src/main.rs"
+
+[dependencies]
+argon2 = "0.6.0"
+axum = { version = "0.8.9", features = ["ws"] }
+axum-server = { version = "0.8.0", features = ["tls-rustls-no-provider"] }
+base64 = "0.22.1"
+clap = { version = "4.6.7", features = ["derive"] }
+cmdterm-remote.workspace = true
+getrandom = "0.4.3"
+rustix = { version = "1.1.5", features = ["termios"] }
+rustls = { version = "0.23.46", default-features = false, features = ["ring", "std", "tls12"] }
+serde.workspace = true
+serde_json.workspace = true
+sha2 = "0.10.9"
+sha3 = "0.11.0"
+tokio = { version = "1.54.1", features = ["rt-multi-thread", "macros", "net", "sync", "time", "signal"] }
+ureq.workspace = true
+
+[dev-dependencies]
+futures-util = { version = "0.3", default-features = false, features = ["sink", "std"] }
+tempfile.workspace = true
+tokio-tungstenite = "0.29.0"
+
+[lints]
+workspace = true

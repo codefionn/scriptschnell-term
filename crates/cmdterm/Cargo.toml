@@ -1,0 +1,61 @@
+[package]
+name = "cmdterm"
+description = "GPU-rendered terminal and browser panels organized by VCS project and worktree"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+rust-version.workspace = true
+
+[[bin]]
+name = "scriptschnell-term"
+path = "src/main.rs"
+
+[features]
+default = []
+# Servo-rendered browser panels. Off by default: Servo adds a long first build.
+browser = ["dep:schnellui-servo", "dep:url", "dep:rustls"]
+# SchnellUI's debug server, for driving a headless instance from an agent.
+debug-instrumentation = ["schnellui/debug-instrumentation"]
+# Allocation budget tests: cargo test -p cmdterm --features count-allocations
+count-allocations = ["dep:allocation-counter", "schnellui/count-allocations"]
+
+[dependencies]
+allocation-counter = { version = "0.8.1", optional = true }
+base64 = "0.22.1"
+clap = { version = "4.6.7", features = ["derive"] }
+cmdterm-env.workspace = true
+cmdterm-remote.workspace = true
+cmdterm-update.workspace = true
+cmdterm-vt.workspace = true
+getrandom = "0.3.4"
+# The file panel's rendered mode: pictures, SVG, PDF pages and Markdown.
+hayro = "0.8.0"
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp", "bmp", "ico"] }
+oximond.workspace = true
+pulldown-cmark = { version = "0.13.4", default-features = false }
+resvg = "0.48.1"
+rustls = { version = "0.23.45", optional = true }
+schnellui.workspace = true
+schnellui-icons-md.workspace = true
+schnellui-servo = { workspace = true, optional = true, features = ["servo-engine"] }
+serde.workspace = true
+serde_json = { workspace = true, features = ["preserve_order"] }
+thiserror.workspace = true
+toml = "1.1.8"
+# Agents' TOML settings keep their comments when a sandbox's change comes over.
+toml_edit = "0.25.17"
+unicode-width = "0.2.2"
+ureq.workspace = true
+url = { version = "2.5.8", optional = true }
+
+[target.'cfg(unix)'.dependencies]
+# `scriptschnell-term fix` relays the agent's PTY to the user's terminal.
+# Signals tell remote session clients whether their terminal shows.
+rustix = { version = "1.1.5", features = ["process", "stdio", "termios"] }
+signal-hook = "0.3.18"
+
+[dev-dependencies]
+tempfile.workspace = true
+
+[lints]
+workspace = true

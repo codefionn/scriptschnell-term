@@ -1,0 +1,26 @@
+# nvim --clean with mouse=a: toggles the mouse reporting modes, bracketed paste, focus
+# reporting and the alternate screen, then edits a file with wide text.
+command = "nvim"
+args = ["--clean", "-n", "-i", "NONE", "-c", "set mouse=a number", "text.txt"]
+rows = 20
+cols = 60
+
+[files]
+"text.txt" = "hello\n你好 world\ncafé 😀\nlast line\n"
+
+[[step]]
+wait_quiet_ms = 700
+[[step]]
+send = "A edited\u001b"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = ":set mouse=\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+send = ":set mouse=a\r"
+[[step]]
+wait_quiet_ms = 300
+[[step]]
+stop = true

@@ -1,0 +1,25 @@
+size 16x60
+title ""
+icon ""
+cursor row=3 col=0 visible=true pending_wrap=false shape=Block blink=false
+alt_screen false
+modes autowrap
+mouse Off encoding X10 kitty_flags 0
+scrollback 0
+screen
+00 |$ echo done|
+01 |done|
+02 |$ exit|
+03 ||
+04 ||
+05 ||
+06 ||
+07 ||
+08 ||
+09 ||
+10 ||
+11 ||
+12 ||
+13 ||
+14 ||
+15 ||
