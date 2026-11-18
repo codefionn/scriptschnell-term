@@ -53,7 +53,7 @@ fn have(program: &str) -> bool {
 /// Canonical path, since git reports symlink-resolved paths.
 fn temp() -> (tempfile::TempDir, std::path::PathBuf) {
     let dir = tempfile::tempdir().unwrap();
-    let path = dir.path().canonicalize().unwrap();
+    let path = cmdterm_env::canonicalize(dir.path()).unwrap();
     (dir, path)
 }
 
@@ -206,6 +206,7 @@ fn git_conflicts_and_ahead() {
     git(&clone, &["checkout", "-q", "main"]);
     let _ = ENV
         .command("git")
+        .args(["-c", "user.name=test", "-c", "user.email=t@t"])
         .args(["merge", "-q", "other"])
         .cwd(&clone)
         .output();
@@ -422,7 +423,10 @@ fn clone_creates_the_parent_and_reopens_an_existing_checkout() {
     let parent = base.join("src/nested");
     let repo = clone(&ENV, &url, &parent).unwrap();
     assert_eq!(repo.kind, VcsKind::Git);
-    assert_eq!(repo.root, parent.canonicalize().unwrap().join("up"));
+    assert_eq!(
+        repo.root,
+        cmdterm_env::canonicalize(&parent).unwrap().join("up")
+    );
     assert!(repo.root.join("f").is_file());
     // A second clone of the same URL opens the checkout that is there.
     assert_eq!(clone(&ENV, &url, &parent).unwrap().root, repo.root);

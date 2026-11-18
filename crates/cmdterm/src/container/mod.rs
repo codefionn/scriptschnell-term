@@ -541,7 +541,8 @@ fn local_program(name: &str, path: std::ffi::OsString, windows: bool) -> Option<
             .unwrap_or_else(|_| ".COM;.EXE;.BAT;.CMD".to_owned())
             .split(';')
             .filter(|ext| !ext.is_empty())
-            .map(str::to_owned)
+            // `.cmd` rather than PATHEXT's `.CMD`, as the files are named.
+            .map(str::to_ascii_lowercase)
             .collect()
     } else {
         vec![String::new()]

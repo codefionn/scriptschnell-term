@@ -917,6 +917,9 @@ pub struct Strings {
     /// Rule groups of the macOS sandbox profile that `sandbox-exec` turned
     /// down, comma-separated.
     pub sandbox_rules_dropped: fn(&str) -> String,
+    /// Terminals in Windows sandboxes start the second shell instead of
+    /// the first, which runs on Git's MSYS runtime.
+    pub sandbox_shell_replaced: fn(&str, &str) -> String,
     /// A terminal's program exited with an error right after it started:
     /// its exit code (`None` for a signal) and its last line of output.
     pub terminal_failed_start: fn(Option<i32>, &str) -> String,
@@ -2272,6 +2275,12 @@ pub static EN: Strings = Strings {
     sandbox_rules_dropped: |groups| {
         format!("sandbox-exec turned down some sandbox rules; sandboxes run without: {groups}")
     },
+    sandbox_shell_replaced: |shell, with| {
+        format!(
+            "{shell} cannot run in the Windows sandbox, which keeps it from the memory \
+             Git's MSYS programs share; sandboxed terminals start {with} instead"
+        )
+    },
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "signal".to_owned(), |code| format!("code {code}"));
         if output.is_empty() {
@@ -3474,6 +3483,13 @@ pub static DE: Strings = Strings {
     terminal_failed: |error| format!("Terminal fehlgeschlagen: {error}"),
     sandbox_rules_dropped: |groups| {
         format!("sandbox-exec hat Sandbox-Regeln abgelehnt; Sandboxes laufen ohne: {groups}")
+    },
+    sandbox_shell_replaced: |shell, with| {
+        format!(
+            "{shell} kann nicht in der Windows-Sandbox laufen, die ihm den Speicher \
+             vorenthält, den Gits MSYS-Programme teilen; Terminals in Sandboxes starten \
+             stattdessen {with}"
+        )
     },
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "Signal".to_owned(), |code| format!("Code {code}"));

@@ -264,7 +264,7 @@ pub fn sandbox_shims(dir: &Path) -> Vec<(PathBuf, PathBuf)> {
         let Some(real) = std::env::split_paths(&path)
             .map(|d| d.join(tool))
             .find(|p| p.is_file())
-            .and_then(|p| std::fs::canonicalize(p).ok())
+            .and_then(|p| cmdterm_env::canonicalize(p).ok())
         else {
             continue;
         };
@@ -376,6 +376,7 @@ mod tests {
         }
     }
 
+    #[cfg_attr(not(unix), allow(dead_code))]
     fn run_shim(shim: &Path, args: &[&str], path: &str) -> std::process::Output {
         // A test thread that forks while another writes a script makes
         // running it fail with ETXTBSY for a moment.
@@ -458,6 +459,7 @@ mod tests {
 
     /// Runs `shim` with `input` on stdin and a file standing in for its
     /// terminal, and returns what it wrote there.
+    #[cfg_attr(not(unix), allow(dead_code))]
     fn copy_through(shim: &Path, args: &[&str], input: &[u8], path: &str) -> String {
         let tty = tempfile::NamedTempFile::new().unwrap();
         for _ in 0..50 {
@@ -617,7 +619,7 @@ mod tests {
     #[cfg(target_os = "linux")]
     fn a_bubblewrap_sandbox_reads_the_staged_image_through_its_shim() {
         let scratch = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(staging_dir(scratch.path())).unwrap();
+        let dir = cmdterm_env::canonicalize(staging_dir(scratch.path())).unwrap();
         let shims = sandbox_shims(&dir);
         if shims.is_empty() {
             eprintln!("skipped: neither xclip nor wl-paste is installed");

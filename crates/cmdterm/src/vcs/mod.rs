@@ -147,8 +147,8 @@ impl GitDirs {
         let same = |a: &Path, b: &Path| {
             normalize(a) == normalize(b)
                 || (local
-                    && std::fs::canonicalize(a)
-                        .is_ok_and(|a| std::fs::canonicalize(b).is_ok_and(|b| a == b)))
+                    && cmdterm_env::canonicalize(a)
+                        .is_ok_and(|a| cmdterm_env::canonicalize(b).is_ok_and(|b| a == b)))
         };
         if same(root, worktree) {
             return Some(&self.common);
@@ -259,6 +259,12 @@ pub fn clone_with(
         .arg(name)
         .arg(if jj { "1" } else { "0" })
         .stdout()?;
+    // Git for Windows' `sh` prints an MSYS path such as `/c/x`, so there the
+    // checkout is found from `parent` here instead.
+    if cfg!(windows) && env.is_local() {
+        let parent = resolve_folder(env, parent)?;
+        return discover_with(env, &parent.join(name), jj);
+    }
     discover_with(env, &path_from_bytes(trim_newline(&out)), jj)
 }
 
@@ -308,13 +314,14 @@ cd -- "$p" && pwd -P
 "#;
 
 /// The directory name a clone of `url` gets: its last path segment without
-/// `.git`, as `git clone` picks it.
+/// `.git`, as `git clone` picks it. Git for Windows also splits local paths
+/// such as `file://C:\src\app` at backslashes.
 pub fn clone_name(url: &str) -> Option<&str> {
-    let url = url.trim().trim_end_matches('/');
-    let name = url.rsplit(['/', ':']).next()?;
+    let url = url.trim().trim_end_matches(['/', '\\']);
+    let name = url.rsplit(['/', ':', '\\']).next()?;
     let name = name.strip_suffix(".git").unwrap_or(name);
     let bad = name.is_empty() || name == "." || name == ".." || name.starts_with('-');
-    (!bad && !name.contains(['\0', '\n', '\\'])).then_some(name)
+    (!bad && !name.contains(['\0', '\n'])).then_some(name)
 }
 
 impl Repository {
@@ -661,6 +668,15 @@ fn non_empty_string(bytes: &[u8]) -> Option<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn clone_names_are_the_last_segment() {
+        assert_eq!(clone_name("https://host/team/app.git/"), Some("app"));
+        assert_eq!(clone_name("git@host:app.git"), Some("app"));
+        assert_eq!(clone_name(r"file://C:\src\app"), Some("app"));
+        assert_eq!(clone_name("https://host/-x"), None);
+        assert_eq!(clone_name("https://host/.."), None);
+    }
 
     #[test]
     fn normalize_resolves_dots() {

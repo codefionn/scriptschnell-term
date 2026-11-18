@@ -39,6 +39,7 @@ pub use driver::{
 /// Starts the `kind` browser headless with its profile in `profiles`,
 /// opens `page` in a context behind `proxy` and returns the page's text.
 #[cfg(test)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub(crate) fn text_through_proxy(
     kind: Choice,
     profiles: &std::path::Path,

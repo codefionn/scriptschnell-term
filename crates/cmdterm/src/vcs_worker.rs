@@ -407,11 +407,13 @@ fn run(jobs: Receiver<Job>, replies: Sender<Reply>, wake: Arc<dyn Fn() + Send + 
                 repo,
                 path,
             }) => {
-                if let Err(error) = repo.remove_worktree(&path, false) {
-                    send(Reply::Error {
+                match repo.remove_worktree(&path, false) {
+                    Ok(()) if cfg!(windows) && repo.env.is_local() => remove_left_dir(&path),
+                    Ok(()) => {}
+                    Err(error) => send(Reply::Error {
                         project,
                         message: format!("could not remove worktree: {error}"),
-                    });
+                    }),
                 }
                 Some((
                     project,
@@ -455,6 +457,19 @@ fn run(jobs: Receiver<Job>, replies: Sender<Reply>, wake: Arc<dyn Fn() + Send + 
 /// repository the job ran on is one.
 fn jj(repo: &Repository) -> bool {
     repo.kind == crate::vcs::VcsKind::Jujutsu
+}
+
+/// Removes the empty directory a removed worktree may leave on Windows,
+/// which keeps a directory while it is the working directory of a process,
+/// here a shell of the worktree that is still ending. Gives up after two
+/// seconds; a directory that is not empty stays.
+fn remove_left_dir(path: &Path) {
+    for _ in 0..20 {
+        if !path.exists() || std::fs::remove_dir(path).is_ok() {
+            return;
+        }
+        std::thread::sleep(Duration::from_millis(100));
+    }
 }
 
 fn snapshot(

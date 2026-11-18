@@ -1444,7 +1444,7 @@ mod tests {
         let link = dir.path().join("link");
         std::os::unix::fs::symlink(&real, &link).unwrap();
         let policy = SandboxPolicy::local(vec![], &[link, real.clone()], true);
-        assert_eq!(policy.hidden_dirs, [real.canonicalize().unwrap()]);
+        assert_eq!(policy.hidden_dirs, [crate::canonicalize(&real).unwrap()]);
     }
 
     fn strings(args: &[OsString]) -> Vec<String> {
@@ -2432,7 +2432,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = crate::canonicalize(dir.path()).unwrap();
         let (home, copies) = (dir.join("home"), dir.join("copies"));
         std::fs::create_dir_all(home.join("state")).unwrap();
         std::fs::create_dir_all(&copies).unwrap();
@@ -2630,7 +2630,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = crate::canonicalize(dir.path()).unwrap();
         let (work, hidden) = (dir.join("work"), dir.join("hidden"));
         std::fs::create_dir_all(work.join(".ssh")).unwrap();
         std::fs::create_dir_all(hidden.join("own")).unwrap();
@@ -2670,7 +2670,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = crate::canonicalize(dir.path()).unwrap();
         let run = dir.join("run");
         std::fs::create_dir_all(run.join("systemd")).unwrap();
         std::fs::write(run.join("early"), "early").unwrap();
@@ -2708,7 +2708,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = crate::canonicalize(dir.path()).unwrap();
         let socket = dir.join("engine.sock");
         let other = dir.join("other.sock");
         let _listeners =

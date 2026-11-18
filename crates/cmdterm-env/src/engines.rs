@@ -139,6 +139,11 @@ fn pass_with(policy: &mut SandboxPolicy, vars: Vars) {
 
 fn hide_with(policy: &mut SandboxPolicy, vars: Vars) {
     if cfg!(windows) {
+        // The sandbox gets no engine pipe; the variables naming the host's
+        // engines go too, so a sidecar's stand in for all of them.
+        policy
+            .unset
+            .extend(ENGINES.iter().map(|engine| engine.var.into()));
         return;
     }
     // An engine started after the sandbox puts its socket where nothing is
@@ -149,7 +154,7 @@ fn hide_with(policy: &mut SandboxPolicy, vars: Vars) {
     if policy.kind == SandboxKind::Bwrap && run.is_dir() && !policy.scratch_dirs.contains(&run) {
         policy.scratch_dirs.push(run.clone());
     }
-    let real = |path: Option<PathBuf>| path.and_then(|p| std::fs::canonicalize(p).ok());
+    let real = |path: Option<PathBuf>| path.and_then(|p| crate::canonicalize(p).ok());
     let shared = [Some(run), vars("XDG_RUNTIME_DIR").map(PathBuf::from)].map(real);
     for engine in ENGINES {
         let defaults: Vec<PathBuf> = (engine.sockets.iter())
@@ -168,7 +173,7 @@ fn hide_with(policy: &mut SandboxPolicy, vars: Vars) {
             }
         }
         for socket in defaults.iter().cloned().chain(from_var(engine, vars)) {
-            let socket = match std::fs::canonicalize(&socket) {
+            let socket = match crate::canonicalize(&socket) {
                 Ok(socket) if is_socket(&socket) => socket,
                 Ok(_) => continue,
                 Err(_) if policy.kind == SandboxKind::Seatbelt => socket,
@@ -205,7 +210,7 @@ fn docker_tls_files(vars: Vars) -> Vec<PathBuf> {
     };
     ["ca.pem", "cert.pem", "key.pem"]
         .iter()
-        .filter_map(|name| std::fs::canonicalize(dir.join(name)).ok())
+        .filter_map(|name| crate::canonicalize(dir.join(name)).ok())
         .collect()
 }
 
@@ -238,7 +243,7 @@ fn wsl_interop(vars: Vars) -> Option<PathBuf> {
 }
 
 fn real_socket(path: PathBuf) -> Option<PathBuf> {
-    let path = std::fs::canonicalize(path).ok()?;
+    let path = crate::canonicalize(path).ok()?;
     is_socket(&path).then_some(path)
 }
 
@@ -293,7 +298,7 @@ mod tests {
         }
 
         fn path(&self, name: &str) -> PathBuf {
-            std::fs::canonicalize(self.dir.path()).unwrap().join(name)
+            crate::canonicalize(self.dir.path()).unwrap().join(name)
         }
 
         fn vars(&self, extra: &[(&str, String)]) -> HashMap<String, String> {

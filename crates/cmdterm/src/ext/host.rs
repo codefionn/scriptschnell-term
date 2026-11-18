@@ -1378,8 +1378,8 @@ fn scoped_source_reader(
             return Err(std::io::ErrorKind::NotFound.into());
         };
         let candidate = std::str::from_utf8(path).map_err(|_| std::io::ErrorKind::NotFound)?;
-        let real = std::fs::canonicalize(candidate)?;
-        let real_dir = std::fs::canonicalize(dir)?;
+        let real = cmdterm_env::canonicalize(candidate)?;
+        let real_dir = cmdterm_env::canonicalize(dir)?;
         if !real.starts_with(&real_dir) {
             return Err(std::io::ErrorKind::NotFound.into());
         }

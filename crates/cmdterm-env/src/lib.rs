@@ -212,7 +212,7 @@ pub fn remote_client() -> &'static RemoteClient {
 /// drive paths there. `cmd.exe` cannot start in such a directory and Git
 /// for Windows shows it everywhere, so paths the app stores or hands to
 /// programs come from here. Network paths keep the prefix.
-pub fn canonicalize(path: &Path) -> std::io::Result<PathBuf> {
+pub fn canonicalize(path: impl AsRef<Path>) -> std::io::Result<PathBuf> {
     let real = std::fs::canonicalize(path)?;
     if cfg!(windows)
         && let Some(rest) = real.to_str().and_then(|s| s.strip_prefix(r"\\?\"))
@@ -509,7 +509,7 @@ impl Environment {
             }
             // Windows has no `sh` to find the login shell with.
             Self::Sandbox(target) if target.policy.kind == SandboxKind::Windows => {
-                let shell = local_shell();
+                let shell = shells::windows_sandbox_shell();
                 let mut command = self.command(&shell[0]).args(&shell[1..]);
                 if let Some(cwd) = cwd {
                     command = command.cwd(cwd);
@@ -728,7 +728,7 @@ impl EnvCommand {
         match &self.env {
             Environment::Local => {
                 let mut command = Command::new(local_program(&self.program));
-                command.args(&self.args);
+                add_local_args(&mut command, &self.args);
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
                 }
@@ -764,7 +764,33 @@ impl EnvCommand {
             }
         }
     }
+}
 
+/// Adds `args` to a local `command`. On Windows the standard library quotes
+/// an argument only when it holds a space or tab, so one such as `a\nb` would
+/// reach the program unquoted, and the MSYS runtime of Git's `sh` splits it
+/// at the line break. Those arguments are quoted here instead.
+fn add_local_args(command: &mut Command, args: &[OsString]) {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        for arg in args {
+            if arg
+                .as_encoded_bytes()
+                .iter()
+                .any(|b| matches!(b, b'\n' | b'\r'))
+            {
+                command.raw_arg(windows_sandbox::quoted_arg(arg));
+            } else {
+                command.arg(arg);
+            }
+        }
+    }
+    #[cfg(not(windows))]
+    command.args(args);
+}
+
+impl EnvCommand {
     /// Runs to completion and captures stdout and stderr. Stdin is closed.
     pub fn output(&self) -> io::Result<Output> {
         self.to_std().stdin(Stdio::null()).output()

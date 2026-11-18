@@ -46,7 +46,7 @@ tests in `crates/cmdterm/src/ext` load them. `cmdterm-remote image alpine|ubuntu
 ## Sibling checkouts
 
 - `../schnellui` is a path dependency that scriptschnell-term changes when it needs to (SOUL
-  principle 6). Work on its `cmdterm-perf` branch. Its `SOUL.md` and
+  principle 6). Its `SOUL.md` and
   `docs/architecture.md` apply to every change there, including its allocation
   budgets, which only go down. Add a budget test or bench row for every hot path
   you add to it.

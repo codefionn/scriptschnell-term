@@ -171,8 +171,7 @@ impl Pty {
         }
         if command.clear_env {
             // Drop every inherited variable except the names the builder sets.
-            // `environment_block` also drops `vars` entries named in `unset`,
-            // and Windows names ignore case.
+            // Windows names ignore case.
             let upper = |key: &std::ffi::OsStr| key.to_string_lossy().to_uppercase();
             let set: Vec<String> = vars.iter().map(|(key, _)| upper(key)).collect();
             unset.extend(

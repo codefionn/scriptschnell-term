@@ -105,6 +105,59 @@ impl Probe<'_> {
             .find(|path| (self.is_file)(path))
     }
 
+    /// Whether `program` runs on the MSYS runtime of Git for Windows, or on
+    /// Cygwin's: its folder, or the `usr\bin` beside it as for Git Bash's
+    /// `bin\bash.exe`, holds the runtime's DLL. A bare `sh` or `bash` is
+    /// the one that comes with Git, see [`local_program`].
+    fn is_msys(&self, program: &OsStr) -> bool {
+        let path = Path::new(program);
+        let name = path.file_stem().and_then(OsStr::to_str).unwrap_or("");
+        let path = if path.parent().is_none_or(|dir| dir.as_os_str().is_empty()) {
+            if name.eq_ignore_ascii_case("sh") || name.eq_ignore_ascii_case("bash") {
+                return true;
+            }
+            let exe = format!("{name}.exe");
+            match self.on_path(&exe).or_else(|| self.on_path(name)) {
+                Some(path) => path,
+                None => return false,
+            }
+        } else {
+            path.to_path_buf()
+        };
+        let Some(dir) = path.parent() else {
+            return false;
+        };
+        let beside = dir.parent().map(|root| root.join("usr").join("bin"));
+        [Some(dir.to_path_buf()), beside]
+            .into_iter()
+            .flatten()
+            .any(|dir| {
+                (self.is_file)(&dir.join("msys-2.0.dll"))
+                    || (self.is_file)(&dir.join("cygwin1.dll"))
+            })
+    }
+
+    /// The shell a terminal in a Windows sandbox starts for `shell`, and
+    /// the name of the shell that replaced it, if one did. A program on the
+    /// MSYS runtime cannot run there: the runtime keeps a section of shared
+    /// memory per user that every MSYS program of that user opens for
+    /// writing, which the sandbox may not, and sharing it would let the
+    /// sandbox change what programs outside it read. The first native shell
+    /// installed takes its place.
+    fn sandbox_shell(&self, shell: Vec<OsString>) -> (Vec<OsString>, Option<&'static str>) {
+        if !shell.first().is_some_and(|program| self.is_msys(program)) {
+            return (shell, None);
+        }
+        let native = self
+            .shells()
+            .into_iter()
+            .find(|option| matches!(option.id, "pwsh" | "powershell" | "cmd"));
+        match native {
+            Some(option) => (option.argv, Some(option.name)),
+            None => (vec!["cmd.exe".into()], Some("Command Prompt")),
+        }
+    }
+
     /// The shells installed here, in the order the settings list them.
     pub fn shells(&self) -> Vec<ShellOption> {
         let argv = |path: PathBuf, args: &[&str]| {
@@ -237,6 +290,60 @@ pub fn set_default_shell(argv: Option<Vec<OsString>>) {
     *DEFAULT_SHELL.write().unwrap_or_else(|e| e.into_inner()) = argv;
 }
 
+/// The interactive shell of a terminal in a Windows sandbox: [`local_shell`],
+/// or a native shell in place of one on the MSYS runtime, which says so
+/// once through [`crate::take_sandbox_warnings`].
+pub(crate) fn windows_sandbox_shell() -> Vec<OsString> {
+    let shell = local_shell();
+    #[cfg(windows)]
+    {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        static TOLD: AtomicBool = AtomicBool::new(false);
+        let program = shell.first().cloned().unwrap_or_default();
+        let (shell, replaced) = machine(|probe| probe.sandbox_shell(shell));
+        if let Some(name) = replaced
+            && !TOLD.swap(true, Ordering::Relaxed)
+        {
+            crate::seatbelt::warn(crate::SandboxWarning::ShellReplaced {
+                shell: Path::new(&program)
+                    .file_name()
+                    .unwrap_or(&program)
+                    .to_string_lossy()
+                    .into_owned(),
+                with: name,
+            });
+        }
+        sandbox_history(shell)
+    }
+    #[cfg(not(windows))]
+    shell
+}
+
+/// `shell` with PowerShell's history kept in the sandbox's own `TEMP`.
+/// PSReadLine keeps it under `AppData\Roaming`, which the sandbox may not
+/// write, and says so after every command otherwise.
+fn sandbox_history(mut shell: Vec<OsString>) -> Vec<OsString> {
+    let powershell = shell.first().is_some_and(|program| {
+        let stem = Path::new(program).file_stem().unwrap_or_default();
+        stem.eq_ignore_ascii_case("pwsh") || stem.eq_ignore_ascii_case("powershell")
+    });
+    // Other arguments may already run a command or a file.
+    if powershell
+        && shell[1..]
+            .iter()
+            .all(|arg| arg.eq_ignore_ascii_case("-NoLogo"))
+    {
+        shell.extend([
+            "-NoExit".into(),
+            "-Command".into(),
+            "if (Get-Command Set-PSReadLineOption -ErrorAction Ignore) { \
+             Set-PSReadLineOption -HistorySavePath (Join-Path $env:TEMP 'PSReadLine_history.txt') }"
+                .into(),
+        ]);
+    }
+    shell
+}
+
 /// This machine's interactive shell: what [`set_default_shell`] set, else
 /// `$SHELL` (on Windows only when it is the full path of a file), else
 /// `%COMSPEC%` on Windows, else `/bin/sh`.
@@ -325,6 +432,47 @@ mod tests {
                 ("cmd", vec![cmd.into()]),
             ]
         );
+    }
+
+    #[test]
+    fn sandboxes_start_a_native_shell_for_one_on_msys() {
+        let git_bash = path(&["/pf", "Git", "bin", "bash.exe"]);
+        let msys = path(&["/pf", "Git", "usr", "bin", "msys-2.0.dll"]);
+        let usr_bash = path(&["/pf", "Git", "usr", "bin", "bash.exe"]);
+        let pwsh = path(&["/pf", "PowerShell", "7", "pwsh.exe"]);
+        let cmd = path(&["/win", "System32", "cmd.exe"]);
+        let files = [
+            git_bash.clone(),
+            msys,
+            usr_bash.clone(),
+            pwsh.clone(),
+            cmd.clone(),
+        ];
+        let vars = [("ProgramFiles", "/pf"), ("SystemRoot", "/win")];
+        probe_with(&vars, &files, |p| {
+            assert!(p.is_msys(git_bash.as_os_str()));
+            assert!(p.is_msys(usr_bash.as_os_str()));
+            assert!(p.is_msys("bash".as_ref()));
+            assert!(!p.is_msys(pwsh.as_os_str()));
+            assert!(!p.is_msys(cmd.as_os_str()));
+            let (shell, replaced) = p.sandbox_shell(vec![git_bash.clone().into(), "-i".into()]);
+            assert_eq!(shell, [OsString::from(&pwsh), "-NoLogo".into()]);
+            assert_eq!(replaced, Some("PowerShell"));
+            let native = vec![cmd.clone().into_os_string()];
+            assert_eq!(p.sandbox_shell(native.clone()), (native, None));
+        });
+    }
+
+    #[test]
+    fn powershell_in_sandboxes_keeps_history_in_temp() {
+        let shell = sandbox_history(vec!["C:\\pf\\pwsh.exe".into(), "-NoLogo".into()]);
+        assert_eq!(shell[2..4], ["-NoExit", "-Command"]);
+        assert!(shell[4].to_string_lossy().contains("$env:TEMP"));
+        let script = vec!["PowerShell.EXE".into(), "-File".into(), "x.ps1".into()];
+        assert_eq!(sandbox_history(script.clone()), script);
+        let cmd = vec![OsString::from("cmd.exe")];
+        assert_eq!(sandbox_history(cmd.clone()), cmd);
+        assert!(sandbox_history(Vec::new()).is_empty());
     }
 
     #[test]

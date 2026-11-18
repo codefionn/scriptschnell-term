@@ -282,10 +282,15 @@ mod tests {
 
     #[test]
     fn an_explicit_directory_holds_everything() {
-        let dirs = AppDirs::resolve(Some(Path::new("/scratch/cfg")));
+        let root = Path::new(if cfg!(windows) {
+            r"C:\scratch\cfg"
+        } else {
+            "/scratch/cfg"
+        });
+        let dirs = AppDirs::resolve(Some(root));
         assert!(dirs.is_single());
-        assert_eq!(dirs.state, Path::new("/scratch/cfg"));
-        assert_eq!(dirs.logs, Path::new("/scratch/cfg/logs"));
+        assert_eq!(dirs.state, root);
+        assert_eq!(dirs.logs, root.join("logs"));
     }
 
     #[test]

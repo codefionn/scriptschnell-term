@@ -309,12 +309,15 @@ impl TerminalPanel {
     /// Ends the remote session the program runs in, off the UI thread, so
     /// closing the panel ends the program as it does locally. Quitting the
     /// app does not call this: the session keeps running, and the panel
-    /// attaches to it on the next start.
+    /// attaches to it on the next start. A local program ends here too,
+    /// rather than when the last reference to the panel drops: on Windows
+    /// its working directory cannot be removed while it runs.
     pub fn end_session(&self) {
         if self.session.exit_code().is_some() {
             return;
         }
         let (Some(env), Some(name)) = (self.remote_env.clone(), self.remote_session.clone()) else {
+            self.session.kill();
             return;
         };
         let _ = std::thread::Builder::new()

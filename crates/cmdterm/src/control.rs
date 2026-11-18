@@ -717,8 +717,10 @@ impl Control {
                     let dir = target.parent().unwrap_or(&root);
                     std::fs::create_dir_all(dir).map_err(|e| format!("{path}: {e}"))?;
                     // A symlink in the extension must not lead the write out.
-                    let real = std::fs::canonicalize(dir).map_err(|e| format!("{path}: {e}"))?;
-                    let base = std::fs::canonicalize(&root).map_err(|e| format!("{path}: {e}"))?;
+                    let real =
+                        cmdterm_env::canonicalize(dir).map_err(|e| format!("{path}: {e}"))?;
+                    let base =
+                        cmdterm_env::canonicalize(&root).map_err(|e| format!("{path}: {e}"))?;
                     if !real.starts_with(&base) {
                         return Err(format!("{path}: leads outside the extension"));
                     }

@@ -801,7 +801,8 @@ pub fn sandbox_env(
         // The project's own folders were picked for it, so they show
         // through the user's hidden paths. They never uncover a hidden path
         // or reach into the app's directories.
-        let real = |path: &Path| std::fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+        let real =
+            |path: &Path| cmdterm_env::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
         let both = |paths: &[PathBuf]| -> Vec<PathBuf> {
             (paths.iter())
                 .flat_map(|path| [path.clone(), real(path)])
@@ -823,7 +824,7 @@ pub fn sandbox_env(
         let own_readable: Vec<PathBuf> = (own.readable.iter())
             .map(expand)
             .filter(picked)
-            .filter_map(|path| std::fs::canonicalize(path).ok())
+            .filter_map(|path| cmdterm_env::canonicalize(path).ok())
             .collect();
         read_only.extend(
             (app.iter())
@@ -833,7 +834,7 @@ pub fn sandbox_env(
         // The CA files and directories the app's variables name, which the
         // sandbox inherits, unless they lie in the app's directories.
         let ca_paths: Vec<PathBuf> = (cmdterm_env::host_env::ca_paths().into_iter())
-            .filter_map(|path| std::fs::canonicalize(path).ok())
+            .filter_map(|path| cmdterm_env::canonicalize(path).ok())
             .filter(|path| !app_real.iter().any(|dir| path.starts_with(dir)))
             .collect();
         hidden.extend(app);
@@ -849,16 +850,16 @@ pub fn sandbox_env(
         let mut policy = SandboxPolicy::local(writable, &hidden, network);
         // Mounts land on real paths, like the hidden ones they show through.
         policy.readable = (readable.iter())
-            .filter_map(|path| std::fs::canonicalize(path).ok())
+            .filter_map(|path| cmdterm_env::canonicalize(path).ok())
             .collect();
         // Seatbelt denies writes to a missing path too, such as a git
         // directory's `commondir`, so a missing one keeps its place under
         // its real parent. bwrap and the launcher skip missing ones.
         policy.read_only = (read_only.iter())
-            .filter_map(|path| match std::fs::canonicalize(path) {
+            .filter_map(|path| match cmdterm_env::canonicalize(path) {
                 Ok(path) => Some(path),
                 Err(_) if !placeholders => {
-                    let parent = std::fs::canonicalize(path.parent()?).ok()?;
+                    let parent = cmdterm_env::canonicalize(path.parent()?).ok()?;
                     Some(parent.join(path.file_name()?))
                 }
                 Err(_) => None,
@@ -871,7 +872,7 @@ pub fn sandbox_env(
         // Pasted images, and for Ctrl+V the shims that hand them to
         // programs asking xclip or wl-paste, see `clipboard.rs`.
         let clipboard = crate::clipboard::staging_dir(&app_dirs.cache);
-        if let Ok(staged) = std::fs::canonicalize(&clipboard) {
+        if let Ok(staged) = cmdterm_env::canonicalize(&clipboard) {
             if bind_files {
                 let shims = crate::clipboard::sandbox_shims(&staged);
                 policy.files.extend(shims);
@@ -949,7 +950,7 @@ pub fn sandbox_env(
             let prepared = sync.prepare(project.id, home, |path| {
                 exposes(path) || hidden.iter().any(|h| path.starts_with(h))
             });
-            let real_home = std::fs::canonicalize(home).unwrap_or_else(|_| home.clone());
+            let real_home = cmdterm_env::canonicalize(home).unwrap_or_else(|_| home.clone());
             if (prepared.binds.iter()).any(|(_, inside)| inside.parent() == Some(&real_home)) {
                 policy.scratch_home = Some(real_home);
             }
@@ -1001,11 +1002,12 @@ pub fn sandbox_env(
         policy
     } else {
         // The project's folders are on its machine, where `~/` means a home
-        // directory this one does not know.
+        // directory this one does not know. That machine runs bwrap, so its
+        // absolute paths start with `/` even when this one is Windows.
         let absolute = |list: &[String]| -> Vec<PathBuf> {
             (list.iter())
+                .filter(|path| path.starts_with('/'))
                 .map(PathBuf::from)
-                .filter(|path| path.is_absolute())
                 .collect()
         };
         writable.extend(absolute(&project.sandbox.writable));
@@ -1125,8 +1127,10 @@ impl VcsMetadata {
         admin: Option<&Path>,
     ) -> Self {
         let real = |path: &Path| {
-            (local.then(|| std::fs::canonicalize(path).ok()).flatten())
-                .unwrap_or_else(|| path.to_path_buf())
+            (local
+                .then(|| cmdterm_env::canonicalize(path).ok())
+                .flatten())
+            .unwrap_or_else(|| path.to_path_buf())
         };
         let (worktree, root) = (real(worktree), real(root));
         let mut meta = Self {
@@ -1208,7 +1212,7 @@ impl VcsMetadata {
         // bwrap cannot mount over a symlink, so a linked `.git` is
         // followed: what it leads to is protected, the link itself is not.
         let (dot, meta) = if meta.is_symlink() {
-            let Ok(real) = std::fs::canonicalize(&dot) else {
+            let Ok(real) = cmdterm_env::canonicalize(&dot) else {
                 return;
             };
             let Ok(meta) = std::fs::metadata(&real) else {
@@ -1244,7 +1248,7 @@ impl VcsMetadata {
         self.protect(admin.join("config.worktree"), false);
         let common = std::fs::read_to_string(&commondir)
             .ok()
-            .and_then(|dir| std::fs::canonicalize(admin.join(dir.trim_end())).ok());
+            .and_then(|dir| cmdterm_env::canonicalize(admin.join(dir.trim_end())).ok());
         if let Some(common) = common {
             self.common(&common);
         }
@@ -1302,7 +1306,7 @@ impl VcsMetadata {
 fn gitdir_of(top: &Path, dot: &Path) -> Option<PathBuf> {
     let text = std::fs::read_to_string(dot).ok()?;
     let dir = text.strip_prefix("gitdir:")?.trim();
-    std::fs::canonicalize(top.join(dir)).ok()
+    cmdterm_env::canonicalize(top.join(dir)).ok()
 }
 
 /// Creates the missing read-only `path` inside `inside`, a directory the
@@ -1838,7 +1842,10 @@ fn copies_onto_itself(env: &Environment, from: &Path, to: &str) -> bool {
     let Some(name) = from.file_name() else {
         return false;
     };
-    match (dir.join(name).canonicalize(), from.canonicalize()) {
+    match (
+        cmdterm_env::canonicalize(dir.join(name)),
+        cmdterm_env::canonicalize(from),
+    ) {
         (Ok(dest), Ok(source)) => dest == source,
         _ => false,
     }
@@ -2615,7 +2622,7 @@ mod tests {
             panic!("not a sandbox");
         };
         let policy = &target.policy;
-        let real = |name: &str| std::fs::canonicalize(path(name)).unwrap();
+        let real = |name: &str| cmdterm_env::canonicalize(path(name)).unwrap();
         assert!(policy.writable.contains(&path("shared")));
         // `home` would uncover `home/.ssh`, `config/keys` lies in the app's.
         assert!(!policy.writable.contains(&path("home")));
@@ -2654,8 +2661,8 @@ mod tests {
             target.policy.writable,
             [
                 path("repo"),
-                path("repo/.git"),
-                path("repo/.hg"),
+                path("repo").join(".git"),
+                path("repo").join(".hg"),
                 "/srv/data".into()
             ]
         );
@@ -2729,7 +2736,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (repo, wt) = repo_with_worktree(&dir);
         let meta = VcsMetadata::of(&wt, &repo, true, None, None);
         let git = repo.join(".git");
@@ -2820,7 +2827,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         // A `.git` file that leads to a git directory of its own, as
         // `--separate-git-dir` and a submodule's checkout leave it.
         let (repo, sep) = (dir.join("repo"), dir.join("sep.git"));
@@ -2959,7 +2966,7 @@ mod tests {
     fn a_sandbox_on_an_ssh_host_loses_that_hosts_credentials() {
         use std::os::unix::fs::PermissionsExt as _;
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let repo = dir.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         if !bwrap_and_git() {
@@ -3047,7 +3054,7 @@ mod tests {
     #[test]
     fn a_sandbox_cannot_point_git_at_another_common_directory() {
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let repo = dir.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         run_git(&repo, &["init", "-q"]);
@@ -3084,7 +3091,7 @@ mod tests {
     #[test]
     fn a_separate_or_linked_git_directory_keeps_its_configuration() {
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (repo, sep) = (dir.join("repo"), dir.join("sep.git"));
         std::fs::create_dir_all(&repo).unwrap();
         run_git(&repo, &["init", "-q", "--separate-git-dir", "../sep.git"]);
@@ -3147,7 +3154,7 @@ mod tests {
     #[test]
     fn a_replaced_git_link_runs_nothing_on_the_host() {
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (linked, real) = (dir.join("linked"), dir.join("real.git"));
         std::fs::create_dir_all(&linked).unwrap();
         run_git(&dir, &["init", "-q", "--bare", "real.git"]);
@@ -3192,7 +3199,7 @@ mod tests {
     #[test]
     fn a_rewritten_git_file_of_a_nested_worktree_runs_nothing_on_the_host() {
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let repo = dir.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         run_git(&repo, &["init", "-q"]);
@@ -3236,7 +3243,7 @@ mod tests {
     fn a_remote_separate_git_directory_keeps_its_configuration() {
         use std::os::unix::fs::PermissionsExt as _;
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (repo, sep) = (dir.join("repo"), dir.join("sep.git"));
         let (first, wt) = (dir.join("a/wt"), dir.join("b/wt"));
         std::fs::create_dir_all(&repo).unwrap();
@@ -3348,7 +3355,7 @@ mod tests {
             return;
         }
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (repo, wt) = repo_with_worktree(&dir);
         let project: Project = serde_json::from_value(serde_json::json!({
             "id": 1, "name": "p", "root": &repo, "vcs": "git",
@@ -3509,7 +3516,7 @@ mod tests {
             };
             target.policy
         };
-        let real = |path: PathBuf| path.canonicalize().unwrap();
+        let real = |path: PathBuf| cmdterm_env::canonicalize(&path).unwrap();
         // Hidden although the settings do not name them.
         let open = policy(Vec::new());
         for dir in [&app.config, &app.data, &app.state, &app.cache] {

@@ -339,12 +339,15 @@ pub enum SandboxWarning {
     /// `sandbox-exec` rejected these rule groups of the Seatbelt profile,
     /// so sandboxes on that host run without them.
     SeatbeltRulesDropped(Vec<&'static str>),
+    /// Terminals in Windows sandboxes start `with` instead of the shell
+    /// `shell`, which runs on the MSYS runtime and cannot start there.
+    ShellReplaced { shell: String, with: &'static str },
 }
 
 static PENDING: AtomicBool = AtomicBool::new(false);
 static WARNINGS: Mutex<Vec<SandboxWarning>> = Mutex::new(Vec::new());
 
-fn warn(warning: SandboxWarning) {
+pub(crate) fn warn(warning: SandboxWarning) {
     if let Ok(mut warnings) = WARNINGS.lock() {
         warnings.push(warning);
         PENDING.store(true, Ordering::Release);

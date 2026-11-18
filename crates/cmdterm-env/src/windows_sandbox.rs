@@ -57,6 +57,7 @@ use windows_sys::Win32::Storage::FileSystem::{
 };
 use windows_sys::Win32::System::Console::{
     GetStdHandle, STD_ERROR_HANDLE, STD_INPUT_HANDLE, STD_OUTPUT_HANDLE, SetConsoleCtrlHandler,
+    SetConsoleTitleW,
 };
 use windows_sys::Win32::System::JobObjects::{
     AssignProcessToJobObject, CreateJobObjectW, JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
@@ -118,7 +119,7 @@ const ALL_DENIED: u32 = FILE_ALL_ACCESS;
 
 /// How the command is confined.
 enum Isolation {
-    /// A write-restricted token, with this capability SID as one of its
+    /// A write-restricted token, with this SID (see [`token_sid`]) as one of its
     /// restricting SIDs.
     Token(Handle, Sid),
     /// An AppContainer with this SID.
@@ -187,10 +188,10 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
     let isolation = match appcontainer {
         Some(isolation) => isolation,
         None => {
-            let capability = capability_sid(profile.as_deref().unwrap_or(LEGACY_PROFILE))?;
-            grant_writable(&capability, &writable, legacy);
-            deny_writes(&capability, &launch.read_only, legacy);
-            Isolation::Token(Handle(restricted_token(&capability)?), capability)
+            let sid = token_sid(profile.as_deref().unwrap_or(LEGACY_PROFILE))?;
+            grant_writable(&sid, &writable, legacy);
+            deny_writes(&sid, &launch.read_only, legacy);
+            Isolation::Token(Handle(restricted_token(&sid)?), sid)
         }
     };
     let job = Handle(kill_on_close_job()?);
@@ -238,6 +239,15 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
     }
     unsafe {
         SetConsoleCtrlHandler(Some(swallow), 1);
+    }
+    // The console's title starts as this launcher's path, and the command
+    // shares the console, so its terminal would be named after the launcher
+    // until the command sets a title itself.
+    let title = wide(launch.program.as_os_str());
+    // SAFETY: `title` is NUL-terminated and outlives the call. Without a
+    // console the call fails, which only leaves the title as it was.
+    unsafe {
+        SetConsoleTitleW(title.as_ptr());
     }
 
     let mut startup: STARTUPINFOW = unsafe { std::mem::zeroed() };
@@ -405,6 +415,27 @@ impl Sid {
     }
 }
 
+/// The restricting SID of the restricted token for `name`: the capability
+/// SID derived from `name`, `S-1-15-3-...`, moved to the resource manager
+/// authority, `S-1-9-3-...`. Windows 11 build 26200 refuses capability SIDs as
+/// restricting SIDs with `ERROR_INVALID_PARAMETER`; the resource manager
+/// authority is the one meant for SIDs an application defines.
+fn token_sid(name: &str) -> Result<Sid, String> {
+    let mut sid = capability_sid(name)?;
+    // A SID starts with its revision, its count of subauthorities and its
+    // six-byte, big-endian identifier authority.
+    let bytes: &mut [u8] = sid_bytes(&mut sid.0);
+    debug_assert_eq!(bytes[2..8], [0, 0, 0, 0, 0, 15]);
+    bytes[7] = 9;
+    Ok(sid)
+}
+
+fn sid_bytes(words: &mut [u32]) -> &mut [u8] {
+    // SAFETY: any bytes are valid `u8`s, and the slice covers exactly the
+    // memory of `words`, which it borrows mutably.
+    unsafe { std::slice::from_raw_parts_mut(words.as_mut_ptr().cast(), size_of_val(words)) }
+}
+
 /// The capability SID derived from `name`.
 fn capability_sid(name: &str) -> Result<Sid, String> {
     let name = wide(OsStr::new(name));
@@ -526,6 +557,14 @@ fn set_access(path: &Path, rules: &[Rule], legacy: Option<&Sid>) -> Result<(), S
         let mut code = ERROR_SUCCESS;
         if !missing.is_empty() || stale.is_some() {
             let inheritance = if path.is_dir() {
+                // Windows writes the change into every file below, which
+                // takes minutes for a toolchain's folder. It happens once per
+                // sandbox, and the terminal would stay blank meanwhile.
+                eprintln!(
+                    "cmdterm-sandbox: changing who may use {} and everything in it \
+                     (first start of this sandbox only)",
+                    path.display()
+                );
                 SUB_CONTAINERS_AND_OBJECTS_INHERIT
             } else {
                 NO_INHERITANCE
@@ -795,12 +834,12 @@ pub(crate) fn last_error() -> String {
 pub(crate) fn environment_block(unset: &[OsString], vars: &[(OsString, OsString)]) -> Vec<u16> {
     let upper = |key: &OsStr| key.to_string_lossy().to_uppercase();
     let mut entries: Vec<(String, OsString, OsString)> = Vec::new();
-    let all = std::env::vars_os().chain(vars.iter().cloned());
-    for (key, value) in all {
+    let inherited = std::env::vars_os().filter(|(key, _)| {
+        let name = upper(key);
+        !unset.iter().any(|u| upper(u) == name)
+    });
+    for (key, value) in inherited.chain(vars.iter().cloned()) {
         let name = upper(&key);
-        if unset.iter().any(|u| upper(u) == name) {
-            continue;
-        }
         entries.retain(|(other, _, _)| *other != name);
         entries.push((name, key, value));
     }
@@ -830,6 +869,15 @@ pub(crate) fn command_line(program: &OsStr, args: &[OsString]) -> Vec<u16> {
     }
     line.push(0);
     line
+}
+
+/// `arg` quoted the way `CommandLineToArgvW` splits it, for
+/// [`std::os::windows::process::CommandExt::raw_arg`].
+pub(crate) fn quoted_arg(arg: &OsStr) -> OsString {
+    use std::os::windows::ffi::OsStringExt;
+    let mut out = Vec::new();
+    quote(arg, &mut out);
+    OsString::from_wide(&out)
 }
 
 fn quote(arg: &OsStr, out: &mut Vec<u16>) {
@@ -876,5 +924,32 @@ mod tests {
         assert_eq!(quoted("b c"), r#""b c""#);
         assert_eq!(quoted(r#"x"y"#), r#""x\"y""#);
         assert_eq!(quoted(r"d\ e\"), r#""d\ e\\""#);
+        assert_eq!(quoted("f\ng"), "\"f\ng\"");
+    }
+
+    #[test]
+    fn set_variables_win_over_unset_ones() {
+        let block = environment_block(
+            &["PATH".into(), "DOCKER_HOST".into()],
+            &[("docker_host".into(), "unix:///s".into())],
+        );
+        let block = String::from_utf16_lossy(&block);
+        let entries: Vec<&str> = block.split('\0').collect();
+        assert!(entries.contains(&"docker_host=unix:///s"), "{entries:?}");
+        assert!(
+            !entries
+                .iter()
+                .any(|e| e.to_uppercase().starts_with("PATH="))
+        );
+    }
+
+    #[test]
+    fn line_breaks_reach_local_programs_whole() {
+        let out = crate::Environment::Local
+            .command("sh")
+            .args(["-c", "printf '%s' \"$1\"", "sh", "one\ntwo\r\n"])
+            .stdout()
+            .unwrap();
+        assert_eq!(out, b"one\ntwo\r\n");
     }
 }

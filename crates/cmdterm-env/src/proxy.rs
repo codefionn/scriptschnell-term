@@ -329,10 +329,10 @@ mod tests {
     #[test]
     fn the_bridge_is_the_program_beside_the_app_else_the_app_itself() {
         let exe = Path::new("/opt/term/scriptschnell-term");
-        let beside = format!(
-            "/opt/term/cmdterm-proxy-bridge{}",
+        let beside = Path::new("/opt/term").join(format!(
+            "cmdterm-proxy-bridge{}",
             std::env::consts::EXE_SUFFIX
-        );
+        ));
         let flag = OsString::from("--proxy-bridge");
         assert_eq!(
             bridge_command(Some(exe), Some(&flag), |path| path == Path::new(&beside)),

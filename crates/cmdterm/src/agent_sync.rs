@@ -124,7 +124,7 @@ impl AgentSync {
                 (agent.sandbox_home_var()).filter(|(var, _)| std::env::var_os(var).is_none());
             for file in agent.sandbox_synced() {
                 let original = home.join(file);
-                let Ok(host) = std::fs::canonicalize(&original) else {
+                let Ok(host) = cmdterm_env::canonicalize(&original) else {
                     continue;
                 };
                 if !host.is_file() || skip(&original) || skip(&host) {
@@ -426,7 +426,7 @@ fn write_atomic(path: &Path, bytes: &[u8]) -> io::Result<()> {
 /// does not keep read-only, moves to the host first, as if the sandbox had
 /// written the host's directory. Returns whether the directory is ready.
 fn link_entries(shadow: &Path, home: &Path, dir: &str, agent: Agent, own: &Path) -> bool {
-    let Ok(real) = std::fs::canonicalize(home.join(dir)) else {
+    let Ok(real) = cmdterm_env::canonicalize(home.join(dir)) else {
         return false;
     };
     if std::fs::create_dir_all(shadow).is_err() {
@@ -826,7 +826,7 @@ mod tests {
 
     fn home() -> (tempfile::TempDir, PathBuf, PathBuf) {
         let dir = tempfile::tempdir().unwrap();
-        let root = std::fs::canonicalize(dir.path()).unwrap();
+        let root = cmdterm_env::canonicalize(dir.path()).unwrap();
         let home = root.join("home");
         std::fs::create_dir_all(home.join(".claude")).unwrap();
         (dir, home, root.join("sync"))
@@ -938,6 +938,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "the links are for bubblewrap sandboxes, which are Linux only"
+    )]
     fn codex_gets_a_directory_with_links_and_its_own_config() {
         let (_dir, home, sync_dir) = home();
         let codex = home.join(".codex");
@@ -952,7 +956,7 @@ mod tests {
         let approvals = approvals();
         let sync = AgentSync::new(sync_dir.clone(), Arc::clone(&approvals));
         sync.set_mode(GuardMode::Allow);
-        let shadow = sync_dir.join("3/copy/.codex");
+        let shadow = sync_dir.join("3").join("copy").join(".codex");
         let prepared = sync.prepare(3, &home, |_| false);
         assert!(prepared.binds.is_empty());
         assert_eq!(prepared.dirs, std::slice::from_ref(&shadow));

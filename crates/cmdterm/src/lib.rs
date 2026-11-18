@@ -8,6 +8,8 @@ mod browser;
 mod bundle;
 mod clipboard;
 pub mod container;
+// The control socket needs Unix sockets, and `fix` relays a Unix PTY.
+#[cfg_attr(not(unix), allow(dead_code))]
 mod control;
 mod cpu;
 mod debug_browser;
@@ -16,6 +18,7 @@ mod discussion;
 mod explore;
 pub mod ext;
 mod files;
+#[cfg_attr(not(unix), allow(dead_code))]
 mod fix;
 pub mod forge;
 mod forges;

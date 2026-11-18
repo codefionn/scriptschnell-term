@@ -126,7 +126,7 @@ impl Setup {
         let scratch = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch");
         std::fs::create_dir_all(&scratch).unwrap();
         let dir = tempfile::tempdir_in(&scratch).unwrap();
-        let root = dir.path().canonicalize().unwrap();
+        let root = cmdterm_env::canonicalize(dir.path()).unwrap();
         let repo = repo(&root);
         let home = root.join("home");
         let bin = root.join("bin");

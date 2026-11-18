@@ -141,7 +141,7 @@ fn prompt(dirs: &AppDirs) -> String {
         state = at(&dirs.state, "state.json"),
         logs = dirs.logs.display(),
         reference = at(&dirs.data, "CONFIGURATION.md"),
-        api = at(&dirs.data, "extensions/README.md"),
+        api = dirs.data.join("extensions").join("README.md").display(),
     )
 }
 
@@ -524,11 +524,13 @@ mod tests {
 
     #[test]
     fn the_prompt_is_one_line_naming_the_files() {
-        let dirs = AppDirs::under(std::path::Path::new("/cfg"));
+        let root = std::path::Path::new("/cfg");
+        let dirs = AppDirs::under(root);
         let prompt = prompt(&dirs);
+        let shown = |file: &str| root.join(file).display().to_string();
         assert!(!prompt.contains('\n'));
-        assert!(prompt.contains("/cfg/settings.json"));
-        assert!(prompt.contains("/cfg/CONFIGURATION.md"));
+        assert!(prompt.contains(&shown("settings.json")));
+        assert!(prompt.contains(&shown("CONFIGURATION.md")));
         assert!(prompt.ends_with("What broke: "));
     }
 

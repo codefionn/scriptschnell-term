@@ -139,7 +139,7 @@ mod unix {
     #[test]
     fn env_and_cwd() {
         let dir = tempfile::tempdir().unwrap();
-        let dir_path = dir.path().canonicalize().unwrap();
+        let dir_path = cmdterm_env::canonicalize(dir.path()).unwrap();
         let mut b = sh("echo A=$A B=$B C=$C TERM=$TERM; pwd");
         b.env("A", "one")
             .env("B", "two")
@@ -212,7 +212,7 @@ mod unix {
         let mut out = Collector::new(pty.reader().unwrap());
         let mut child = pty.spawn(&sh("pwd -P")).unwrap();
         child.wait().unwrap();
-        let home = std::fs::canonicalize(std::env::var_os("HOME").unwrap()).unwrap();
+        let home = cmdterm_env::canonicalize(std::env::var_os("HOME").unwrap()).unwrap();
         assert!(out.drain().contains(home.to_str().unwrap()));
     }
 
@@ -449,7 +449,13 @@ mod windows {
         let pty = Pty::open(PtySize::default()).unwrap();
         let mut out = Collector::new(pty.reader().unwrap());
         let writer = pty.writer().unwrap();
-        let mut child = pty.spawn(&cmd("ping -n 30 127.0.0.1 > nul")).unwrap();
+        // `set /a` prints 42, which the window title does not hold.
+        let mut child = pty
+            .spawn(&cmd("set /a 40+2 & ping -n 30 127.0.0.1 > nul"))
+            .unwrap();
+        // A console closed before the child attached to it sends that child
+        // no close event, so the test waits for its first output.
+        out.until("42");
         assert!(child.try_wait().unwrap().is_none());
         drop(pty);
         drop(writer);

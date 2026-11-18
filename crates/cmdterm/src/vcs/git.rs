@@ -151,18 +151,18 @@ fn parse_discover(stdout: &[u8], success: bool) -> Option<KnownRepo> {
 pub(crate) fn local_common_dir(root: &Path) -> Option<PathBuf> {
     let dot = root.join(".git");
     let git_dir = if std::fs::metadata(&dot).ok()?.is_dir() {
-        std::fs::canonicalize(&dot).ok()?
+        cmdterm_env::canonicalize(&dot).ok()?
     } else {
         let text = std::fs::read_to_string(&dot).ok()?;
         let dir = text.strip_prefix("gitdir:")?.trim();
-        std::fs::canonicalize(root.join(dir)).ok()?
+        cmdterm_env::canonicalize(root.join(dir)).ok()?
     };
     if !git_dir.join("HEAD").is_file() {
         return None;
     }
     match std::fs::read_to_string(git_dir.join("commondir")) {
         Ok(text) if text.trim_end() != "." => {
-            std::fs::canonicalize(git_dir.join(text.trim_end())).ok()
+            cmdterm_env::canonicalize(git_dir.join(text.trim_end())).ok()
         }
         _ => Some(git_dir),
     }
@@ -197,13 +197,13 @@ fn leads_to(worktree: &Path, git_dir: &Path) -> bool {
         return true;
     };
     let found = if meta.is_dir() {
-        std::fs::canonicalize(&dot).ok()
+        cmdterm_env::canonicalize(&dot).ok()
     } else {
         (std::fs::read_to_string(&dot).ok())
             .and_then(|text| Some(worktree.join(text.strip_prefix("gitdir:")?.trim())))
-            .and_then(|dir| std::fs::canonicalize(dir).ok())
+            .and_then(|dir| cmdterm_env::canonicalize(dir).ok())
     };
-    found.is_some() && found == std::fs::canonicalize(git_dir).ok()
+    found.is_some() && found == cmdterm_env::canonicalize(git_dir).ok()
 }
 
 /// The git directories of the repository whose common directory is
@@ -782,7 +782,7 @@ mod tests {
                 .is_ok_and(|out| out.status.success())
         };
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (sub, top) = (dir.join("sub"), dir.join("top"));
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::create_dir_all(&top).unwrap();
@@ -839,7 +839,7 @@ mod tests {
                 .is_ok_and(|out| out.status.success())
         };
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let repo = dir.join("repo");
         std::fs::create_dir_all(&repo).unwrap();
         if !(run(&repo, &["init", "-q"])
@@ -897,7 +897,7 @@ mod tests {
                 .is_ok_and(|out| out.status.success())
         };
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (sub, top, wt) = (dir.join("sub"), dir.join("top"), dir.join("wt"));
         std::fs::create_dir_all(&sub).unwrap();
         std::fs::create_dir_all(&top).unwrap();
@@ -972,7 +972,7 @@ mod tests {
                 .is_ok_and(|out| out.status.success())
         };
         let dir = tempfile::tempdir().unwrap();
-        let dir = std::fs::canonicalize(dir.path()).unwrap();
+        let dir = cmdterm_env::canonicalize(dir.path()).unwrap();
         let (plain, sep, linked) = (dir.join("plain"), dir.join("sep"), dir.join("linked"));
         for repo in [&plain, &sep, &linked] {
             std::fs::create_dir_all(repo).unwrap();

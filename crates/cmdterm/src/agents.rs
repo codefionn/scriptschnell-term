@@ -926,6 +926,7 @@ pub const PROMPT_PLACEHOLDER: &str = "{prompt}";
 
 /// How a launched agent gets its first prompt.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub enum PromptVia {
     /// In its arguments, which run once.
     Args,
@@ -937,6 +938,7 @@ pub enum PromptVia {
 /// run once, and the text to type once it is ready. `via` picks the way;
 /// without it, arguments where the agent takes them, else typing. An error
 /// names what the agent cannot do.
+#[cfg_attr(not(unix), allow(dead_code))]
 pub fn first_prompt(
     agent: Agent,
     prompt: &str,
@@ -1115,6 +1117,7 @@ impl Agent {
 
     /// Whether the agent can do `capability`. Built-in agents have what
     /// their integration provides; extension agents what they opted in to.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub fn supports(self, capability: Capability) -> bool {
         use Capability::*;
         let set: &[Capability] = match self {
@@ -1134,6 +1137,7 @@ impl Agent {
     }
 
     /// What the agent can do, as [`Capability::name`]s.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub fn capabilities(self) -> Vec<&'static str> {
         (Capability::ALL.into_iter())
             .filter(|c| self.supports(*c))
@@ -1144,6 +1148,7 @@ impl Agent {
     /// The arguments after the program that start the agent's TUI with a
     /// first prompt, with [`PROMPT_PLACEHOLDER`] where it goes. `None` for
     /// an agent without [`Capability::Prompt`].
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub fn prompt_args(self) -> Option<&'static [&'static str]> {
         if !self.supports(Capability::Prompt) {
             return None;
@@ -1160,6 +1165,7 @@ impl Agent {
     }
 
     /// Whether the agent takes a first prompt `via` that way.
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub fn takes_prompt(self, via: PromptVia) -> bool {
         match via {
             PromptVia::Args => self.prompt_args().is_some(),
@@ -2144,6 +2150,7 @@ fn install(home: &Home, agent: Agent) -> Result<(), String> {
 /// Installs `agent`'s integration on `env` as the settings page does, but
 /// without the references the skill points at.
 #[cfg(test)]
+#[cfg_attr(not(unix), allow(dead_code))]
 pub fn install_for_test(env: &Environment, agent: Agent) -> Result<(), String> {
     let home = Home {
         env: env.clone(),
@@ -3569,6 +3576,7 @@ mod tests {
     }
 
     /// Lines of JSON a server printed for `input`.
+    #[cfg_attr(not(unix), allow(dead_code))]
     fn mcp_lines(dir: &Path, input: &str, vars: &[(&str, &str)]) -> Vec<Value> {
         let mut command = Environment::Local
             .command("sh")

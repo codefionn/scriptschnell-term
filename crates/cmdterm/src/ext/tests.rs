@@ -228,7 +228,7 @@ fn cache_dirs_are_per_extension() {
     });
     host.load_source("keep", "term.notify(term.cache_dir())")
         .unwrap();
-    let expected = dir.path().join("extensions/keep");
+    let expected = dir.path().join("extensions").join("keep");
     assert_eq!(notes(&mut host), [expected.to_string_lossy().into_owned()]);
     assert!(expected.is_dir());
     let mut host = ExtensionHost::new();

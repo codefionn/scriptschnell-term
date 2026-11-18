@@ -670,8 +670,11 @@ mod tests {
         let session =
             TerminalSession::spawn(1, command, size, TermColors::default(), Arc::new(|| {}))
                 .unwrap();
+        // Windows' own ConPTY answers DECRQM itself, and it does not know
+        // mode 2026.
+        let sync = if cfg!(windows) { 0 } else { 2 };
         let expected = format!(
-            "EP>|{} {}E\\E[?2026;2$yE[?0u",
+            "EP>|{} {}E\\E[?2026;{sync}$yE[?0u",
             crate::term::identity::PROGRAM,
             crate::term::identity::VERSION
         );
@@ -706,6 +709,10 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        windows,
+        ignore = "Windows' own ConPTY drops the OSC 7501 query or its reply"
+    )]
     fn program_status_probes_are_answered() {
         let session = spawn_script(
             "stty raw -echo; printf '\\033]7501;?\\033\\\\'; sleep 0.5; \

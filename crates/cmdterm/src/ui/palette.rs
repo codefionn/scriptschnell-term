@@ -355,8 +355,10 @@ pub enum Action {
     SetRuntime(Runtime),
     RebuildDevcontainer,
     /// Forwards a port of the active worktree's sandbox to the host.
+    #[cfg_attr(not(unix), allow(dead_code))]
     ExposePort(u16),
     /// Stops forwarding it.
+    #[cfg_attr(not(unix), allow(dead_code))]
     UnexposePort(u16),
 }
 

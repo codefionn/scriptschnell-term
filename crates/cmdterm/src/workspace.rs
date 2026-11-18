@@ -1254,6 +1254,9 @@ impl Workspace {
                 cmdterm_env::SandboxWarning::SeatbeltRulesDropped(groups) => {
                     (inner.tr.sandbox_rules_dropped)(&groups.join(", "))
                 }
+                cmdterm_env::SandboxWarning::ShellReplaced { shell, with } => {
+                    (inner.tr.sandbox_shell_replaced)(&shell, with)
+                }
             };
             inner.push_notice(text);
         }
@@ -1382,6 +1385,7 @@ impl Workspace {
 
     /// Sets the ssh executable for remote projects added from now on.
     #[cfg(test)]
+    #[cfg_attr(not(unix), allow(dead_code))]
     pub fn set_ssh_program(&self, program: Option<String>) {
         self.0.borrow_mut().ssh_program = program;
     }
@@ -5536,17 +5540,26 @@ pub fn parse_location(input: &str) -> Option<(Environment, PathBuf)> {
     if let Some((host, path)) = input.split_once(':')
         && !host.is_empty()
         && !host.contains('/')
+        && !windows_drive(host)
         && (path.starts_with('/') || path.starts_with('~'))
     {
         return cmdterm_env::valid_ssh_destination(host)
             .then(|| (Environment::ssh(host), PathBuf::from(path)));
     }
     let path = match input.strip_prefix("~/") {
-        Some(rest) => std::env::var_os("HOME").map(PathBuf::from)?.join(rest),
+        Some(rest) => std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
+            .map(PathBuf::from)?
+            .join(rest),
         None => PathBuf::from(input),
     };
     let path = cmdterm_env::canonicalize(&path).unwrap_or(path);
     Some((Environment::Local, path))
+}
+
+/// On Windows, the `C` of `C:/src` is a drive letter, not an SSH host.
+fn windows_drive(host: &str) -> bool {
+    cfg!(windows) && host.len() == 1 && host.as_bytes()[0].is_ascii_alphabetic()
 }
 
 /// The repository URL in `input` when it names a repository to clone rather
@@ -5770,6 +5783,19 @@ mod tests {
             ))
         );
         assert_eq!(parse_location("vm:///x"), None);
+    }
+
+    #[test]
+    fn drive_letters_are_local_on_windows() {
+        let (env, _) = parse_location("C:/src/app").unwrap();
+        if cfg!(windows) {
+            assert_eq!(env, Environment::Local);
+            assert_eq!(parse_location("C:\\src").unwrap().0, Environment::Local);
+        } else {
+            assert_eq!(env, Environment::ssh("C"));
+        }
+        // Longer hosts stay SSH hosts everywhere.
+        assert_eq!(parse_location("cd:/srv").unwrap().0, Environment::ssh("cd"));
     }
 
     #[test]

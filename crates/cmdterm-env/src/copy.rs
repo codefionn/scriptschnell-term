@@ -11,8 +11,11 @@ use std::thread;
 use crate::{CommandError, Environment};
 
 /// Creates the destination directory, expanding a leading `~` to the
-/// target's home, then unpacks stdin into it.
+/// target's home, then unpacks stdin into it. Git for Windows' `tar` cannot
+/// change into a path such as `C:\x`, so where `cygpath` exists the path
+/// becomes `/c/x` first.
 const UNPACK: &str = "d=$1; case $d in '~') d=$HOME ;; '~/'*) d=$HOME/${d#'~/'} ;; esac; \
+if command -v cygpath >/dev/null 2>&1; then d=$(cygpath -u -- \"$d\") || exit 1; fi; \
 mkdir -p \"$d\" && exec tar -xf - -C \"$d\"";
 
 impl Environment {

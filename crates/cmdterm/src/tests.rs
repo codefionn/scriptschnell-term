@@ -43,7 +43,7 @@ fn repo(root: &Path) -> std::path::PathBuf {
     std::fs::write(repo.join("README"), "hi\n").unwrap();
     git(&repo, &["add", "README"]);
     git(&repo, &["commit", "-qm", "init"]);
-    repo.canonicalize().unwrap()
+    cmdterm_env::canonicalize(&repo).unwrap()
 }
 
 fn workspace(root: &Path) -> Workspace {
@@ -54,6 +54,13 @@ fn workspace(root: &Path) -> Workspace {
     let mut saved = settings.load().unwrap();
     saved.sandbox.restrict_network = false;
     saved.sandbox.host_network = true;
+    // Git for Windows' `sh`, which these tests type into, cannot start under
+    // the restricted token while another MSYS program runs: it cannot open
+    // the per-user memory section the others made. Tests that need the
+    // sandbox there pick it themselves.
+    if cfg!(windows) {
+        saved.default_runtime = crate::state::Runtime::Host;
+    }
     settings.save(&saved).unwrap();
     Workspace::new(
         StateStore::new(root.join("cfg/state.json")),
@@ -87,6 +94,25 @@ fn wait_until(mut step: impl FnMut() -> bool) {
     while !step() {
         assert!(Instant::now() < deadline, "timed out");
         std::thread::sleep(Duration::from_millis(20));
+    }
+}
+
+/// Typed into `sh`: prints the directory, then `marker-42`. Git for
+/// Windows' `sh` prints `/tmp/x` for a plain `pwd`, `C:/Users/.../x` for
+/// `pwd -W`.
+const PWD_AND_MARKER: &str = if cfg!(windows) {
+    "pwd -W; echo marker-$((40+2))\r"
+} else {
+    "pwd; echo marker-$((40+2))\r"
+};
+
+/// `dir` as [`PWD_AND_MARKER`] prints it.
+fn shell_dir(dir: &Path) -> String {
+    let shown = dir.display().to_string();
+    if cfg!(windows) {
+        shown.replace('\\', "/")
+    } else {
+        shown
     }
 }
 
@@ -160,7 +186,7 @@ fn a_global_session_runs_on_the_host_in_its_folder_and_is_saved_once_kept() {
     let repo = repo(dir.path());
     let home = dir.path().join("home");
     std::fs::create_dir_all(&home).unwrap();
-    let home = home.canonicalize().unwrap();
+    let home = cmdterm_env::canonicalize(&home).unwrap();
     let ws = workspace(dir.path());
     add_project_and_wait(&ws, &repo);
     ws.open_global_session(home.to_str().unwrap());
@@ -188,10 +214,10 @@ fn a_global_session_runs_on_the_host_in_its_folder_and_is_saved_once_kept() {
     let mut app = crate::build_app(&ws, VIEWPORT);
     app.frame();
     let typed = app.dispatch_focused_input(FocusedInputEvent::Ime(RawImeEvent::Commit(
-        "pwd; echo marker-$((40+2))\r".into(),
+        PWD_AND_MARKER.into(),
     )));
     assert!(typed.is_handled(), "the terminal has focus");
-    let expected_dir = home.display().to_string();
+    let expected_dir = shell_dir(&home);
     wait_until(|| {
         ws.poll();
         app.frame();
@@ -237,10 +263,10 @@ fn typed_text_runs_in_the_worktree_and_shows_in_the_grid() {
     let mut app = crate::build_app(&ws, VIEWPORT);
     app.frame();
     let typed = app.dispatch_focused_input(FocusedInputEvent::Ime(RawImeEvent::Commit(
-        "pwd; echo marker-$((40+2))\r".into(),
+        PWD_AND_MARKER.into(),
     )));
     assert!(typed.is_handled(), "the terminal has focus");
-    let expected_dir = repo.display().to_string();
+    let expected_dir = shell_dir(&repo);
     wait_until(|| {
         ws.poll();
         app.frame();
@@ -591,6 +617,8 @@ fn the_new_panel_list_offers_the_listed_shells() {
     use crate::ui::{PaletteAction, palette_entries};
     let dir = tempfile::tempdir().unwrap();
     let (ws, _) = palette_fixture(dir.path());
+    // Windows has no `/bin/sh`; a bare `sh` is the one Git brings.
+    let sh = if cfg!(windows) { "sh" } else { "/bin/sh" };
     {
         let mut inner = ws.borrow_mut();
         inner.shells = vec![cmdterm_env::ShellOption {
@@ -602,7 +630,7 @@ fn the_new_panel_list_offers_the_listed_shells() {
             ShellChoice::Name("pwsh".into()),
             // Not installed here: left out.
             ShellChoice::Name("git-bash".into()),
-            ShellChoice::Command(vec!["/bin/sh".into(), "-i".into()]),
+            ShellChoice::Command(vec![sh.into(), "-i".into()]),
         ];
     }
     ws.open_new_panel();
@@ -625,7 +653,7 @@ fn the_new_panel_list_offers_the_listed_shells() {
                 "New shell: sh".to_owned(),
                 PaletteAction::NewShellWith {
                     name: "sh".into(),
-                    argv: vec!["/bin/sh".into(), "-i".into()],
+                    argv: vec![sh.into(), "-i".into()],
                 }
             ),
         ]
@@ -1687,10 +1715,10 @@ fn remote_project_works_end_to_end_through_an_ssh_shim() {
     let mut app = crate::build_app(&ws, VIEWPORT);
     app.frame();
     let typed = app.dispatch_focused_input(FocusedInputEvent::Ime(RawImeEvent::Commit(
-        "pwd; echo marker-$((40+2))\r".into(),
+        PWD_AND_MARKER.into(),
     )));
     assert!(typed.is_handled());
-    let expected_dir = repo.display().to_string();
+    let expected_dir = shell_dir(&repo);
     wait_until(|| {
         ws.poll();
         app.frame();
@@ -2103,7 +2131,7 @@ fn pasting_an_image_pastes_the_path_of_a_png_file() {
             "sh".into(),
             "-c".into(),
             format!(
-                "echo ready; read -r path; cp \"$path\" {0}.tmp && mv {0}.tmp {0}; sleep 30",
+                "echo ready; read -r path; cp \"$path\" '{0}.tmp' && mv '{0}.tmp' '{0}'; sleep 30",
                 pasted.display()
             ),
         ]),
@@ -2327,7 +2355,7 @@ fn the_rail_nests_every_projects_worktrees_under_it() {
     std::fs::write(lib.join("README"), "hi\n").unwrap();
     git(&lib, &["add", "README"]);
     git(&lib, &["commit", "-qm", "init"]);
-    let lib = lib.canonicalize().unwrap();
+    let lib = cmdterm_env::canonicalize(&lib).unwrap();
     {
         let ws = workspace(dir.path());
         add_project_and_wait(&ws, &app_repo);
@@ -3168,6 +3196,11 @@ fn the_search_shortcut_focuses_the_rail_search_and_escape_gives_it_back() {
     );
     let dirty = ws.take_dirty();
     assert!(dirty.search && ws.borrow().rail_search_focus);
+    // The branch name comes with the worker's first snapshot.
+    wait_until(|| {
+        ws.poll();
+        !ws.borrow().snapshots.is_empty()
+    });
     ws.set_rail_query("main".into());
     ws.open_rail_highlight();
     assert!(ws.borrow().rail_query.is_empty());
@@ -3263,11 +3296,13 @@ fn extensions_copy_files_into_the_terminal_environment() {
         "copier",
         &["copy"],
         &format!(
+            // Quoted with escapes, so Windows' backslashes stay in the Lua
+            // string.
             r#"cmdterm.command{{ name = "copy", run = function()
-                cmdterm.copy{{ from = "{}", to = "{}", exclude = {{ "*.log" }} }}
+                cmdterm.copy{{ from = {:?}, to = {:?}, exclude = {{ "*.log" }} }}
             end }}"#,
-            source.display(),
-            dest.display()
+            source.display().to_string(),
+            dest.display().to_string()
         ),
     );
     let ws = workspace(dir.path());
@@ -3456,7 +3491,10 @@ fn the_file_panel_lists_opens_and_highlights_and_survives_a_restart() {
         }
         wait_for_text(&ws, &mut app, "pub fn answer()");
         let a11y = app.a11y_json();
-        assert!(a11y.contains("src/lib.rs · Rust · 4 lines"), "{a11y}");
+        let header = format!("src{}lib.rs · Rust · 4 lines", std::path::MAIN_SEPARATOR);
+        // The a11y JSON escapes Windows' backslash.
+        let header = header.replace('\\', r"\\");
+        assert!(a11y.contains(&header), "{a11y}");
         assert!(a11y.contains("3     42 // the answer"), "{a11y}");
         ws.poll();
         assert!(panel_titles(&ws).iter().any(|t| t == "lib.rs"));
@@ -3758,7 +3796,10 @@ fn a_repository_url_asks_where_to_clone_and_adds_the_clone() {
     });
     let inner = ws.borrow();
     let project = inner.state.active().expect("clone added");
-    assert_eq!(project.root, parent.canonicalize().unwrap().join("app"));
+    assert_eq!(
+        project.root,
+        cmdterm_env::canonicalize(&parent).unwrap().join("app")
+    );
     assert!(project.root.join("README").is_file());
 }
 
@@ -3894,9 +3935,14 @@ fn the_tasks_panel_lists_panels_of_every_worktree_and_the_threads() {
                 (Kind::Tasks, Status::Shown, 2),
             ]
         );
-        // The thread sampler finds its own thread.
         // The thread sampler reports its threads; idle ones fold into a count.
-        wait_for_mounted_text(&ws, &mut app, "idle threads");
+        // Without `/proc/self/task` the panel says so instead.
+        let threads = if cfg!(target_os = "linux") {
+            "idle threads"
+        } else {
+            "no /proc/self/task"
+        };
+        wait_for_mounted_text(&ws, &mut app, threads);
         let text = tasks.text();
         assert!(text.contains("in background"), "{text}");
         assert!(text.contains("Extension tasks"), "{text}");
@@ -3904,7 +3950,8 @@ fn the_tasks_panel_lists_panels_of_every_worktree_and_the_threads() {
         ws.with_active(|live| {
             for (_, panel) in &live.unwrap().panels {
                 if let crate::workspace::LivePanel::Terminal(terminal) = panel {
-                    let _ = terminal.session.write_bytes(b"exit\n");
+                    // Enter as a keyboard sends it, which `cmd.exe` needs.
+                    let _ = terminal.session.write_bytes(b"exit\r");
                 }
             }
         });
@@ -5187,7 +5234,7 @@ fn the_agents_tab_keeps_finished_agents_open_and_merged_ones_collapsed() {
                 path.to_str().unwrap(),
             ],
         );
-        paths.push(path.canonicalize().unwrap());
+        paths.push(cmdterm_env::canonicalize(&path).unwrap());
     }
     granted_extension(dir.path(), "hub", &["network"], HUB_FORGE);
     let ws = workspace(dir.path());
@@ -5376,7 +5423,7 @@ fn change_request_pages_of_worktrees_without_agents_stop_waiting() {
             feature.to_str().unwrap(),
         ],
     );
-    let feature = feature.canonicalize().unwrap();
+    let feature = cmdterm_env::canonicalize(&feature).unwrap();
     // Only `feature` has a change request.
     let forge = HUB_FORGE.replace(
         r#"state = branch == "merged-work" and "merged" or "open", number = 3,"#,
@@ -5399,7 +5446,7 @@ fn change_request_pages_of_worktrees_without_agents_stop_waiting() {
     assert!(ws.borrow().agent_rows().is_empty());
 
     let id = ws.borrow().state.projects[0].id;
-    let main = repo.canonicalize().unwrap();
+    let main = cmdterm_env::canonicalize(&repo).unwrap();
     for path in [&feature, &main] {
         ws.open_discussion(id, path);
     }
@@ -5451,7 +5498,7 @@ fn repositories_take_the_forge_account_of_their_owner() {
             path.to_str().unwrap(),
         ],
     );
-    let path = path.canonicalize().unwrap();
+    let path = cmdterm_env::canonicalize(&path).unwrap();
     let source = HUB_FORGE.replace(
         r#"default = { "git.example.com" }"#,
         r#"default = { "git.example.com", "git.example.com/team" }"#,

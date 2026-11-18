@@ -1,0 +1,7 @@
+# Text files keep LF on every platform. The app embeds shell scripts, docs
+# and Lua with `include_str!`, and a Windows checkout with CRLF would ship
+# them changed.
+* text=auto eol=lf
+
+# Recorded terminal output replays byte for byte.
+*.bin binary

@@ -172,18 +172,15 @@ fn a_linked_machine_serves_terminals_to_its_account_only() {
     // A wrong --fingerprint refuses the link before anything is pinned.
     let (_, pairing, _) = web.request("POST", "/api/machines/pair", Some(json!({})));
     let code = pairing["code"].as_str().unwrap();
-    let error =
-        cmdterm_remote::link::redeem(&paths, &web.url, code, "box", Some("SHA3-256:wrong"))
-            .unwrap_err();
+    let error = cmdterm_remote::link::redeem(&paths, &web.url, code, "box", Some("SHA3-256:wrong"))
+        .unwrap_err();
     assert!(error.to_string().contains("not linking"), "{error}");
     assert_eq!(cmdterm_remote::link::load(&paths).unwrap().len(), 1);
     // The right fingerprint links.
     let (_, pairing, _) = web.request("POST", "/api/machines/pair", Some(json!({})));
     let code = pairing["code"].as_str().unwrap();
     let expected = link.key().unwrap().fingerprint();
-    assert!(
-        cmdterm_remote::link::redeem(&paths, &web.url, code, "box", Some(&expected)).is_ok()
-    );
+    assert!(cmdterm_remote::link::redeem(&paths, &web.url, code, "box", Some(&expected)).is_ok());
 
     let server = Server::new(paths.clone()).unwrap();
     server.spawn("127.0.0.1:0").unwrap();
@@ -228,10 +225,15 @@ fn a_linked_machine_serves_terminals_to_its_account_only() {
                         let value: Value = serde_json::from_str(&text).unwrap();
                         if value["type"] == "attached" && !attached {
                             attached = true;
+                            // The typed line itself must not hold "hello".
+                            // Windows' shell is `cmd.exe`, whose escape is `^`.
+                            let typed: &[u8] = if cfg!(windows) {
+                                b"echo hel^lo\r"
+                            } else {
+                                b"echo hel\"\"lo\r"
+                            };
                             socket
-                                .send(tungstenite::Message::Binary(
-                                    b"echo hel\"\"lo\r".to_vec().into(),
-                                ))
+                                .send(tungstenite::Message::Binary(typed.to_vec().into()))
                                 .await
                                 .unwrap();
                         }

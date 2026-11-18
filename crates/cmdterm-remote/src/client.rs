@@ -316,6 +316,8 @@ fn forward_client(
         .lock()
         .unwrap()
         .insert(id, Route::start(&local, session)?);
+    // Closes the socket; Windows' stand-in for it has nothing to close.
+    #[cfg_attr(not(unix), allow(clippy::drop_non_drop))]
     drop(local);
     let result = (|| {
         remote

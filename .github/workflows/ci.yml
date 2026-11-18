@@ -233,8 +233,13 @@ jobs:
           workspaces: scriptschnell-term
           key: release
 
-      - name: PTY tests
-        run: cargo test -p cmdterm-env --test pty --locked
+      # Paths, quoting, ConPTY and the sandbox differ on Windows, so the
+      # whole workspace is checked and tested here too.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+
+      - name: Test
+        run: cargo test --workspace --locked
 
       - name: Build
         run: cargo build --release --locked --bin scriptschnell-term --bin cmdterm-sandbox
