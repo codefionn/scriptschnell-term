@@ -1,19 +1,24 @@
 //! Signed release manifests and self-updates.
 //!
-//! Every platform of a release channel has a directory with a
-//! `manifest.json` and its signature `manifest.json.sig`:
+//! Releases are GitHub releases. Every platform has a manifest asset and its
+//! signature next to the release's files:
 //!
 //! ```text
-//! <channel>/windows-x86_64/manifest.json
-//! <channel>/windows-x86_64/manifest.json.sig
-//! <channel>/windows-x86_64/0.2.0/scriptschnell-term.exe
+//! <source>/latest/download/manifest-windows-x86_64.json
+//! <source>/latest/download/manifest-windows-x86_64.json.sig
+//! <source>/download/v0.2.0/windows-x86_64-scriptschnell-term.exe
 //! ```
+//!
+//! A source is `https://github.com/<repo>/releases` or a mirror that copies
+//! the same paths, such as `https://releases.codefionn.eu/scriptschnell-term`.
+//! The app asks the mirror first and GitHub when the mirror fails.
 //!
 //! The manifest names the version, the platform and every file with its
 //! size and SHA3-256 hash. The signature covers the manifest bytes, so a
 //! file the app downloads is only installed when its hash matches a manifest
-//! the release key signed. The app takes a manifest only when its version is
-//! newer than its own, so an old signed manifest cannot roll it back.
+//! the release key signed, whichever source served it. The app takes a
+//! manifest only when its version is newer than its own, so an old signed
+//! manifest cannot roll it back.
 
 pub mod keys;
 pub mod proxy;
@@ -30,10 +35,12 @@ use sha3::{Digest, Sha3_256};
 
 pub use keys::{SigningKey, VerifyingKey};
 
-/// The release channel the app checks unless `update_channel` says otherwise.
-pub const DEFAULT_CHANNEL: &str = "https://update.scriptschnell.codefionn.eu/scriptschnell-term";
-pub const MANIFEST: &str = "manifest.json";
-pub const SIGNATURE: &str = "manifest.json.sig";
+/// The mirror the app asks before GitHub. It copies the GitHub release
+/// paths of `<repo>` under `<MIRROR>/<repo name>/`.
+pub const MIRROR: &str = "https://releases.codefionn.eu";
+/// The GitHub repository releases come from, unless
+/// `SCRIPTSCHNELL_RELEASE_REPO` named another at build time.
+pub const DEFAULT_REPO: &str = "codefionn/scriptschnell-term";
 
 /// TLS settings for every HTTP agent: the operating system verifies server
 /// certificates against its own trust store, so certificates the user or an
@@ -45,6 +52,8 @@ pub fn system_tls() -> ureq::tls::TlsConfig {
 }
 /// Signatures cover this prefix and the manifest bytes.
 const DOMAIN: &[u8] = b"scriptschnell-term update manifest v1\n";
+/// Suffix of a manifest's signature asset.
+pub const SIGNATURE_SUFFIX: &str = ".sig";
 /// Suffix of a downloaded file before it replaces the installed one.
 const NEW_SUFFIX: &str = ".update-new";
 /// Suffix of a replaced file. Windows cannot delete a running executable,
@@ -53,19 +62,118 @@ const OLD_SUFFIX: &str = ".update-old";
 const MAX_MANIFEST: u64 = 64 * 1024;
 const MAX_FILE: u64 = 1024 * 1024 * 1024;
 
-/// The platform this build updates itself on. `None` where the app does not
-/// replace its own files, such as Linux, where the AppImage or the package
-/// manager does.
+/// The platform this build looks for releases of. `None` where no release
+/// is built.
 pub const PLATFORM: Option<&str> = if cfg!(all(windows, target_arch = "x86_64")) {
     Some("windows-x86_64")
+} else if cfg!(all(target_os = "linux", target_arch = "x86_64")) {
+    Some("linux-x86_64")
 } else {
     None
 };
 
 /// The release key this build trusts: `SCRIPTSCHNELL_RELEASE_KEY` at build
-/// time. A build without one never updates itself.
+/// time. A build without one never looks for releases.
 pub fn release_key() -> Option<VerifyingKey> {
     option_env!("SCRIPTSCHNELL_RELEASE_KEY").and_then(VerifyingKey::parse)
+}
+
+/// `owner/name` of the GitHub repository: `SCRIPTSCHNELL_RELEASE_REPO` at
+/// build time, else [`DEFAULT_REPO`].
+pub fn release_repo() -> &'static str {
+    option_env!("SCRIPTSCHNELL_RELEASE_REPO")
+        .filter(|repo| valid_repo(repo))
+        .unwrap_or(DEFAULT_REPO)
+}
+
+fn valid_repo(repo: &str) -> bool {
+    let mut parts = repo.split('/');
+    let ok = |part: Option<&str>| {
+        part.is_some_and(|part| {
+            !part.is_empty()
+                && part != "."
+                && part != ".."
+                && part
+                    .bytes()
+                    .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'-' | b'_' | b'.'))
+        })
+    };
+    ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
+}
+
+/// The sources of `repo`'s releases in the order the app asks them: the
+/// mirror, then GitHub.
+pub fn sources(repo: &str) -> Vec<String> {
+    let name = repo.rsplit('/').next().unwrap_or(repo);
+    vec![
+        format!("{MIRROR}/{name}"),
+        format!("https://github.com/{repo}/releases"),
+    ]
+}
+
+/// The GitHub page of release `version`, for people who install it by hand.
+pub fn release_page(repo: &str, version: &str) -> String {
+    format!("https://github.com/{repo}/releases/tag/v{version}")
+}
+
+/// The release asset that holds `platform`'s manifest.
+pub fn manifest_asset(platform: &str) -> String {
+    format!("manifest-{platform}.json")
+}
+
+/// The release asset name of the installed file `name` of `platform`. Assets
+/// of every platform share one release, so the platform prefixes them.
+pub fn file_asset(platform: &str, name: &str) -> String {
+    format!("{platform}-{name}")
+}
+
+/// How this installation takes a release.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Target {
+    /// Replace the files next to the executable in this directory: the
+    /// Windows installer's per-user directory.
+    Replace(PathBuf),
+    /// Replace this AppImage file.
+    AppImage(PathBuf),
+    /// Tell the user. A package manager, `cargo install` or a copy the user
+    /// put somewhere owns the files.
+    Notify,
+}
+
+/// How the running executable takes a release.
+pub fn target() -> Target {
+    let Ok(exe) = std::env::current_exe() else {
+        return Target::Notify;
+    };
+    target_for(
+        &exe,
+        cfg!(windows),
+        std::env::var_os("APPIMAGE").map(PathBuf::from),
+        cargo_home().as_deref(),
+    )
+}
+
+fn target_for(
+    exe: &Path,
+    windows: bool,
+    appimage: Option<PathBuf>,
+    cargo_home: Option<&Path>,
+) -> Target {
+    if cargo_home.is_some_and(|home| installed_by_cargo_in(exe, home)) {
+        return Target::Notify;
+    }
+    if windows {
+        return match exe.parent() {
+            Some(dir) => Target::Replace(dir.to_owned()),
+            None => Target::Notify,
+        };
+    }
+    // The AppImage runtime sets APPIMAGE to the absolute path of the file
+    // it mounted.
+    match appimage {
+        Some(path) if path.is_absolute() && path.is_file() => Target::AppImage(path),
+        _ => Target::Notify,
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -95,7 +203,7 @@ pub struct Manifest {
 pub struct FileEntry {
     /// The installed file's name, next to the running executable.
     pub name: String,
-    /// Where to download it, relative to the platform directory.
+    /// The release asset to download it from.
     pub path: String,
     pub size: u64,
     /// Lowercase hex.
@@ -106,6 +214,15 @@ impl Manifest {
     /// Rejects names that leave the install directory and paths that leave
     /// the channel.
     fn validate(&self) -> Result<(), Error> {
+        // The version names the release tag in download URLs.
+        let version_ok = !self.version.is_empty()
+            && self
+                .version
+                .bytes()
+                .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'.' | b'-' | b'+' | b'_'));
+        if !version_ok {
+            return Err(Error::Manifest(format!("bad version {:?}", self.version)));
+        }
         if self.files.is_empty() {
             return Err(Error::Manifest("it lists no files".into()));
         }
@@ -184,18 +301,23 @@ pub fn hash(mut reader: impl Read, mut copy: impl Write) -> io::Result<(String, 
     Ok((hex, size))
 }
 
-/// One platform directory of a release channel.
+/// The releases of one platform, from one or more sources.
 pub struct Channel {
-    base: String,
+    sources: Vec<String>,
     platform: String,
     key: VerifyingKey,
     agent: ureq::Agent,
 }
 
 impl Channel {
-    /// `base` is the channel URL without the platform, such as
-    /// [`DEFAULT_CHANNEL`]. Requests go through `proxy`, else directly.
-    pub fn new(base: &str, platform: &str, key: VerifyingKey, proxy: Option<ureq::Proxy>) -> Self {
+    /// `sources` are release URLs such as [`sources`] returns, asked in
+    /// order. Requests go through `proxy`, else directly.
+    pub fn new(
+        sources: &[String],
+        platform: &str,
+        key: VerifyingKey,
+        proxy: Option<ureq::Proxy>,
+    ) -> Self {
         let agent = ureq::Agent::config_builder()
             .timeout_connect(Some(Duration::from_secs(10)))
             .timeout_global(Some(Duration::from_secs(30 * 60)))
@@ -205,41 +327,53 @@ impl Channel {
             .build()
             .new_agent();
         Self {
-            base: base.trim_end_matches('/').to_owned(),
+            sources: sources
+                .iter()
+                .map(|source| source.trim_end_matches('/').to_owned())
+                .collect(),
             platform: platform.to_owned(),
             key,
             agent,
         }
     }
 
-    fn url(&self, path: &str) -> String {
-        format!("{}/{}/{path}", self.base, self.platform)
-    }
-
-    fn get(&self, path: &str) -> Result<ureq::http::Response<ureq::Body>, Error> {
-        let url = self.url(path);
-        self.agent.get(&url).call().map_err(|e| Error::Http {
+    fn get(&self, url: &str) -> Result<ureq::http::Response<ureq::Body>, Error> {
+        self.agent.get(url).call().map_err(|e| Error::Http {
             message: e.to_string(),
-            url,
+            url: url.to_owned(),
         })
     }
 
-    fn get_small(&self, path: &str) -> Result<Vec<u8>, Error> {
-        self.get(path)?
+    fn get_small(&self, url: &str) -> Result<Vec<u8>, Error> {
+        self.get(url)?
             .body_mut()
             .with_config()
             .limit(MAX_MANIFEST)
             .read_to_vec()
             .map_err(|e| Error::Http {
-                url: self.url(path),
+                url: url.to_owned(),
                 message: e.to_string(),
             })
     }
 
-    /// The channel's verified manifest.
+    /// The verified manifest of the newest release, from the first source
+    /// that serves a valid one.
     pub fn latest(&self) -> Result<Manifest, Error> {
-        let manifest = self.get_small(MANIFEST)?;
-        let signature = self.get_small(SIGNATURE)?;
+        let mut last = Error::Manifest("no release source".into());
+        for source in &self.sources {
+            match self.latest_from(source) {
+                Ok(manifest) => return Ok(manifest),
+                Err(error) => last = error,
+            }
+        }
+        Err(last)
+    }
+
+    fn latest_from(&self, source: &str) -> Result<Manifest, Error> {
+        let asset = manifest_asset(&self.platform);
+        let url = format!("{source}/latest/download/{asset}");
+        let manifest = self.get_small(&url)?;
+        let signature = self.get_small(&format!("{url}{SIGNATURE_SUFFIX}"))?;
         let signature = String::from_utf8(signature).map_err(|_| Error::Signature)?;
         let manifest = verify(&self.key, &manifest, &signature)?;
         if manifest.platform != self.platform {
@@ -251,19 +385,38 @@ impl Channel {
         Ok(manifest)
     }
 
-    /// The channel's manifest when it is newer than `current`.
+    /// The newest release when it is newer than `current`.
     pub fn check(&self, current: &str) -> Result<Option<Manifest>, Error> {
         let manifest = self.latest()?;
         Ok(newer(&manifest.version, current).then_some(manifest))
     }
 
+    /// Installs `manifest` the way `target` takes releases. The running
+    /// program keeps its old files until it restarts.
+    pub fn install_to(&self, manifest: &Manifest, target: &Target) -> Result<(), Error> {
+        match target {
+            Target::Replace(dir) => self.install(manifest, dir),
+            Target::AppImage(path) => self.install_appimage(manifest, path),
+            Target::Notify => Err(Error::Manifest(
+                "this installation does not update itself".into(),
+            )),
+        }
+    }
+
     /// Downloads every file of `manifest` into `dir`, checks each against
     /// its hash, then replaces the installed files. A failed download
-    /// leaves the installation as it was. The running program keeps its old
-    /// files until it restarts.
+    /// leaves the installation as it was.
     pub fn install(&self, manifest: &Manifest, dir: &Path) -> Result<(), Error> {
-        let result = self
-            .download(manifest, dir)
+        let result = manifest
+            .files
+            .iter()
+            .try_for_each(|file| {
+                self.download(
+                    manifest,
+                    file,
+                    &dir.join(format!("{}{NEW_SUFFIX}", file.name)),
+                )
+            })
             .and_then(|()| swap(manifest, dir));
         for file in &manifest.files {
             let _ = std::fs::remove_file(dir.join(format!("{}{NEW_SUFFIX}", file.name)));
@@ -271,26 +424,91 @@ impl Channel {
         result
     }
 
-    fn download(&self, manifest: &Manifest, dir: &Path) -> Result<(), Error> {
-        for file in &manifest.files {
-            let target = dir.join(format!("{}{NEW_SUFFIX}", file.name));
-            let mut response = self.get(&file.path)?;
-            // One byte over the size, so a longer body fails the size check.
-            let body = response
-                .body_mut()
-                .with_config()
-                .limit(MAX_FILE + 1)
-                .reader()
-                .take(file.size + 1);
-            let mut out = File::create(&target)?;
-            let (hex, size) = hash(body, &mut out)?;
-            out.sync_all()?;
-            if hex != file.sha3_256 || size != file.size {
-                return Err(Error::Mismatch(file.name.clone()));
+    /// Downloads the one file of an AppImage release next to `appimage`,
+    /// checks its hash and renames it over `appimage`. The running AppImage
+    /// keeps the old file open, so it runs on until it restarts.
+    pub fn install_appimage(&self, manifest: &Manifest, appimage: &Path) -> Result<(), Error> {
+        let [file] = manifest.files.as_slice() else {
+            return Err(Error::Manifest("an AppImage release has one file".into()));
+        };
+        if !file.name.ends_with(".AppImage") {
+            return Err(Error::Manifest(format!("{:?} is no AppImage", file.name)));
+        }
+        let (Some(dir), Some(name)) = (appimage.parent(), appimage.file_name()) else {
+            return Err(Error::Manifest("the AppImage has no directory".into()));
+        };
+        let new = dir.join(appimage_download_name(name));
+        let result = self.download(manifest, file, &new).and_then(|()| {
+            make_executable(&new, appimage)?;
+            std::fs::rename(&new, appimage).map_err(Error::from)
+        });
+        if result.is_err() {
+            let _ = std::fs::remove_file(&new);
+        }
+        result
+    }
+
+    /// Downloads `file` to `target`, from the first source whose copy
+    /// matches the manifest.
+    fn download(&self, manifest: &Manifest, file: &FileEntry, target: &Path) -> Result<(), Error> {
+        let mut last = Error::Manifest("no release source".into());
+        for source in &self.sources {
+            let url = format!("{source}/download/v{}/{}", manifest.version, file.path);
+            match self.download_from(&url, file, target) {
+                Ok(()) => return Ok(()),
+                // A full disk or a locked file fails on every source.
+                Err(Error::Io(error)) => return Err(Error::Io(error)),
+                Err(error) => last = error,
             }
+        }
+        Err(last)
+    }
+
+    fn download_from(&self, url: &str, file: &FileEntry, target: &Path) -> Result<(), Error> {
+        let mut response = self.get(url)?;
+        // One byte over the size, so a longer body fails the size check.
+        let body = response
+            .body_mut()
+            .with_config()
+            .limit(MAX_FILE + 1)
+            .reader()
+            .take(file.size + 1);
+        let mut out = File::create(target)?;
+        let (hex, size) = hash(body, &mut out).map_err(|error| Error::Http {
+            url: url.to_owned(),
+            message: error.to_string(),
+        })?;
+        out.sync_all()?;
+        if hex != file.sha3_256 || size != file.size {
+            return Err(Error::Mismatch(file.name.clone()));
         }
         Ok(())
     }
+}
+
+/// The hidden name an AppImage update downloads to, next to the AppImage.
+fn appimage_download_name(name: &std::ffi::OsStr) -> std::ffi::OsString {
+    let mut hidden = std::ffi::OsString::from(".");
+    hidden.push(name);
+    hidden.push(NEW_SUFFIX);
+    hidden
+}
+
+/// Gives `new` the permissions of `installed`, which runs, so at least
+/// read and execute for its owner.
+#[cfg(unix)]
+fn make_executable(new: &Path, installed: &Path) -> io::Result<()> {
+    use std::os::unix::fs::PermissionsExt as _;
+    let mode = std::fs::metadata(installed).map_or(0o755, |meta| meta.permissions().mode());
+    std::fs::set_permissions(
+        new,
+        std::fs::Permissions::from_mode((mode & 0o7777) | 0o500),
+    )
+}
+
+#[cfg(not(unix))]
+fn make_executable(_new: &Path, _installed: &Path) -> io::Result<()> {
+    Ok(())
 }
 
 /// Moves each installed file aside and the downloaded one into its place.
@@ -348,6 +566,14 @@ pub fn remove_leftovers(dir: &Path) {
         if name.ends_with(OLD_SUFFIX) || name.ends_with(NEW_SUFFIX) {
             let _ = std::fs::remove_file(entry.path());
         }
+    }
+}
+
+/// Removes the download an interrupted AppImage update left next to
+/// `appimage`. Call it at start.
+pub fn remove_appimage_leftover(appimage: &Path) {
+    if let (Some(dir), Some(name)) = (appimage.parent(), appimage.file_name()) {
+        let _ = std::fs::remove_file(dir.join(appimage_download_name(name)));
     }
 }
 

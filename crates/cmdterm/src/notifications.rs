@@ -2,7 +2,9 @@
 //! the recent status bar notices, so they can be read after they expire,
 //! and what the update checks find: agent integrations an older
 //! scriptschnell-term installed, newer releases of agents installed with npm
-//! or mise, and on Windows newer releases of scriptschnell-term itself.
+//! or mise, and newer releases of scriptschnell-term itself. Windows
+//! installs and AppImages install those releases, at once when
+//! `auto_update` is on; other installations only tell the user.
 //!
 //! The list is shared with worker threads. Checks and updates run on their
 //! own thread, since npm asks the registry and an SSH environment can take
@@ -15,7 +17,7 @@ use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{Duration, SystemTime};
 
 use cmdterm_env::Environment;
-use cmdterm_update::{Channel, newer};
+use cmdterm_update::{Channel, Manifest, Target, newer};
 use schnellui::RedrawSignal;
 use serde_json::Value;
 
@@ -76,8 +78,14 @@ pub enum Topic {
         env: Environment,
         error: String,
     },
-    /// A newer scriptschnell-term release on the update channel.
+    /// A newer scriptschnell-term release that this installation can
+    /// install itself.
     AppUpdate {
+        version: String,
+    },
+    /// A newer scriptschnell-term release that the user installs: a
+    /// package manager, `cargo install` or a copied binary owns this one.
+    AppRelease {
         version: String,
     },
     /// A scriptschnell-term release was installed; it runs after a restart.
@@ -115,7 +123,10 @@ impl Topic {
                     ..
                 },
             ) => agent == other_agent && env == other_env && manager == other_manager,
-            (Topic::AppUpdate { .. }, Topic::AppUpdate { .. }) => true,
+            (
+                Topic::AppUpdate { .. } | Topic::AppRelease { .. },
+                Topic::AppUpdate { .. } | Topic::AppRelease { .. },
+            ) => true,
             _ => false,
         }
     }
@@ -195,6 +206,9 @@ pub struct Notifications {
     /// Set by the schedule thread when a check is due.
     due: Arc<AtomicBool>,
     checking: Arc<AtomicBool>,
+    /// The app release this run installed. It runs after a restart, so
+    /// later checks do not offer it again.
+    installed_app: Arc<Mutex<Option<String>>>,
 }
 
 impl Notifications {
@@ -320,9 +334,16 @@ impl Notifications {
     }
 
     /// Checks every environment in `envs` for outdated agent integrations
-    /// and agent releases, and the update channel for a newer app release,
-    /// on a worker thread. Does nothing while a check runs.
-    pub fn check(&self, envs: Vec<Environment>, wake: Arc<OnceLock<RedrawSignal>>) {
+    /// and agent releases, and the release sources for a newer app release,
+    /// on a worker thread. With `auto_update`, an installation that updates
+    /// itself installs that release right away. Does nothing while a check
+    /// runs.
+    pub fn check(
+        &self,
+        envs: Vec<Environment>,
+        auto_update: bool,
+        wake: Arc<OnceLock<RedrawSignal>>,
+    ) {
         if self.checking.swap(true, Ordering::AcqRel) {
             return;
         }
@@ -343,29 +364,73 @@ impl Notifications {
                     });
                     center.signal(&wake);
                 }
-                if let Some(channel) = app_channel() {
-                    match channel.check(env!("CARGO_PKG_VERSION")) {
-                        Ok(found) => center.edit(|list| {
-                            list.items.retain(|item| {
-                                item.busy || !matches!(item.topic, Topic::AppUpdate { .. })
-                            });
-                            if let Some(manifest) = found {
-                                list.push(
-                                    Topic::AppUpdate {
-                                        version: manifest.version,
-                                    },
-                                    false,
-                                );
-                            }
-                        }),
-                        Err(error) => eprintln!("scriptschnell-term: update check: {error}"),
-                    }
+                if let Some(updater) = AppUpdater::new() {
+                    center.check_app(&updater, auto_update, &wake);
                 }
                 center.checking.store(false, Ordering::Release);
                 center.signal(&wake);
             });
         if spawned.is_err() {
             self.checking.store(false, Ordering::Release);
+        }
+    }
+
+    /// Asks the release sources for a newer app release and installs it
+    /// or reports it. Blocking; runs on the check thread.
+    fn check_app(&self, updater: &AppUpdater, auto_update: bool, wake: &OnceLock<RedrawSignal>) {
+        let found = match updater.channel.check(env!("CARGO_PKG_VERSION")) {
+            Ok(found) => found,
+            Err(error) => {
+                eprintln!("scriptschnell-term: update check: {error}");
+                return;
+            }
+        };
+        let installed = self
+            .installed_app
+            .lock()
+            .ok()
+            .and_then(|installed| installed.clone());
+        let found = found.filter(|manifest| installed.as_ref() != Some(&manifest.version));
+        let release = |item: &Notification| {
+            !item.busy
+                && matches!(
+                    item.topic,
+                    Topic::AppUpdate { .. } | Topic::AppRelease { .. }
+                )
+        };
+        let Some(manifest) = found else {
+            self.edit(|list| list.items.retain(|item| !release(item)));
+            return;
+        };
+        let version = manifest.version.clone();
+        if updater.target == Target::Notify {
+            self.edit(|list| list.push(Topic::AppRelease { version }, false));
+        } else if auto_update {
+            let topic = self.install_app(updater, &manifest);
+            self.edit(|list| {
+                list.items.retain(|item| !release(item));
+                list.push(topic, false);
+            });
+        } else {
+            self.edit(|list| list.push(Topic::AppUpdate { version }, false));
+        }
+        self.signal(wake);
+    }
+
+    /// Installs `manifest` and reports how it went.
+    fn install_app(&self, updater: &AppUpdater, manifest: &Manifest) -> Topic {
+        match updater.channel.install_to(manifest, &updater.target) {
+            Ok(()) => {
+                if let Ok(mut installed) = self.installed_app.lock() {
+                    *installed = Some(manifest.version.clone());
+                }
+                Topic::AppUpdated {
+                    version: manifest.version.clone(),
+                }
+            }
+            Err(error) => Topic::AppUpdateFailed {
+                error: error.to_string(),
+            },
         }
     }
 
@@ -400,8 +465,12 @@ impl Notifications {
             .name("update".into())
             .spawn(move || {
                 for (id, topic) in jobs {
-                    let Some(topic) = perform(topic) else {
-                        continue;
+                    let topic = match topic {
+                        Topic::AppUpdate { .. } => center.install_app_update(),
+                        topic => match perform(topic) {
+                            Some(topic) => topic,
+                            None => continue,
+                        },
                     };
                     center.edit(|list| {
                         list.items.retain(|item| item.id != id);
@@ -445,56 +514,66 @@ fn perform(topic: Topic) -> Option<Topic> {
             Ok(()) => Topic::Updated { agent, env },
             Err(error) => Topic::Failed { agent, env, error },
         },
-        Topic::AppUpdate { .. } => match install_app_update() {
-            Ok(version) => Topic::AppUpdated { version },
-            Err(error) => Topic::AppUpdateFailed { error },
-        },
         _ => return None,
     })
 }
 
-/// The update channel of this platform, when this build updates itself.
-/// A `cargo install` build leaves updates to cargo.
-fn app_channel() -> Option<Channel> {
-    let platform = cmdterm_update::PLATFORM?;
-    let key = cmdterm_update::release_key()?;
-    if std::env::current_exe().is_ok_and(|exe| cmdterm_update::installed_by_cargo(&exe)) {
-        return None;
+/// Where this build finds its releases and how it takes them.
+struct AppUpdater {
+    channel: Channel,
+    target: Target,
+}
+
+impl AppUpdater {
+    /// `None` for a build without a release key, such as a local `cargo
+    /// build`, and on platforms without releases.
+    fn new() -> Option<Self> {
+        let platform = cmdterm_update::PLATFORM?;
+        let key = cmdterm_update::release_key()?;
+        Some(Self {
+            channel: Channel::new(
+                &cmdterm_update::sources(cmdterm_update::release_repo()),
+                platform,
+                key,
+                crate::forge::http_proxy(),
+            ),
+            target: cmdterm_update::target(),
+        })
     }
-    Some(Channel::new(
-        cmdterm_update::DEFAULT_CHANNEL,
-        platform,
-        key,
-        crate::forge::http_proxy(),
-    ))
 }
 
-/// Downloads the channel's current release, checks it against the signed
-/// manifest and replaces the files next to the running executable. Asks the
-/// channel again rather than trusting the earlier check.
-fn install_app_update() -> Result<String, String> {
-    let channel = app_channel().ok_or("this build does not update itself")?;
-    let manifest = channel
-        .check(env!("CARGO_PKG_VERSION"))
-        .map_err(|e| e.to_string())?
-        .ok_or("no newer release")?;
-    let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    let dir = exe.parent().ok_or("the executable has no directory")?;
-    channel.install(&manifest, dir).map_err(|e| e.to_string())?;
-    Ok(manifest.version)
+impl Notifications {
+    /// Downloads the newest release, checks it against the signed manifest
+    /// and installs it. Asks the sources again rather than trusting the
+    /// earlier check.
+    fn install_app_update(&self) -> Topic {
+        let failed = |error: &str| Topic::AppUpdateFailed {
+            error: error.to_owned(),
+        };
+        let Some(updater) = AppUpdater::new() else {
+            return failed("this build does not update itself");
+        };
+        match updater.channel.check(env!("CARGO_PKG_VERSION")) {
+            Ok(Some(manifest)) => self.install_app(&updater, &manifest),
+            Ok(None) => failed("no newer release"),
+            Err(error) => failed(&error.to_string()),
+        }
+    }
 }
 
-/// Removes the files an earlier app update replaced. Windows keeps a
-/// running executable locked, so they can only go at the next start.
+/// The GitHub page of release `version`.
+pub fn app_release_page(version: &str) -> String {
+    cmdterm_update::release_page(cmdterm_update::release_repo(), version)
+}
+
+/// Removes what an earlier app update left: on Windows the replaced files,
+/// which stay locked while the old version runs, and an unfinished
+/// download.
 pub fn remove_update_leftovers() {
-    if cmdterm_update::PLATFORM.is_none() {
-        return;
-    }
-    if let Some(dir) = std::env::current_exe()
-        .ok()
-        .and_then(|exe| Some(exe.parent()?.to_owned()))
-    {
-        cmdterm_update::remove_leftovers(&dir);
+    match cmdterm_update::target() {
+        Target::Replace(dir) => cmdterm_update::remove_leftovers(&dir),
+        Target::AppImage(path) => cmdterm_update::remove_appimage_leftover(&path),
+        Target::Notify => {}
     }
 }
 
@@ -878,6 +957,122 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].topic, app("0.3.0"));
         assert!(items[0].topic.actionable());
+    }
+
+    #[test]
+    fn a_release_to_install_by_hand_offers_no_update_button() {
+        let center = Notifications::default();
+        center.push(
+            Topic::AppUpdate {
+                version: "0.2.0".into(),
+            },
+            false,
+        );
+        let release = Topic::AppRelease {
+            version: "0.3.0".into(),
+        };
+        center.push(release.clone(), false);
+        let items = center.items();
+        assert_eq!(items.len(), 1);
+        assert_eq!(items[0].topic, release);
+        assert!(!release.actionable());
+    }
+
+    /// Serves `files` (URL path to body) over plain HTTP and returns the
+    /// base URL.
+    fn serve(files: Vec<(String, Vec<u8>)>) -> String {
+        use std::io::{BufRead as _, BufReader, Write as _};
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for mut stream in listener.incoming().flatten() {
+                let mut reader = BufReader::new(stream.try_clone().unwrap());
+                let mut line = String::new();
+                let _ = reader.read_line(&mut line);
+                let path = line.split(' ').nth(1).unwrap_or("/").to_owned();
+                loop {
+                    let mut header = String::new();
+                    if reader.read_line(&mut header).unwrap_or(0) <= 2 {
+                        break;
+                    }
+                }
+                let body = files.iter().find(|(p, _)| *p == path).map(|(_, b)| b);
+                let head = match body {
+                    Some(body) => format!("HTTP/1.1 200 OK\r\ncontent-length: {}\r\n", body.len()),
+                    None => "HTTP/1.1 404 Not Found\r\ncontent-length: 0\r\n".to_owned(),
+                };
+                let _ = stream.write_all(format!("{head}connection: close\r\n\r\n").as_bytes());
+                if let Some(body) = body {
+                    let _ = stream.write_all(body);
+                }
+            }
+        });
+        base
+    }
+
+    #[test]
+    fn auto_update_installs_a_newer_release_once() {
+        use cmdterm_update::{FileEntry, Manifest, SigningKey};
+        let key = SigningKey::from_seed(&[9; 64]);
+        let (sha3_256, size) = cmdterm_update::hash(&b"new app"[..], std::io::sink()).unwrap();
+        let manifest = Manifest {
+            version: "99.0.0".into(),
+            platform: "test".into(),
+            files: vec![FileEntry {
+                name: "app.exe".into(),
+                path: "test-app.exe".into(),
+                size,
+                sha3_256,
+            }],
+        };
+        let json = serde_json::to_vec(&manifest).unwrap();
+        let base = serve(vec![
+            (
+                "/latest/download/manifest-test.json.sig".into(),
+                cmdterm_update::sign(&key, &json).into_bytes(),
+            ),
+            ("/latest/download/manifest-test.json".into(), json),
+            ("/download/v99.0.0/test-app.exe".into(), b"new app".to_vec()),
+        ]);
+        let dir = tempfile::tempdir().unwrap();
+        let updater = AppUpdater {
+            channel: Channel::new(&[base], "test", key.public(), None),
+            target: Target::Replace(dir.path().to_owned()),
+        };
+        let center = Notifications::default();
+        let wake = OnceLock::new();
+        center.check_app(&updater, true, &wake);
+        assert_eq!(
+            std::fs::read(dir.path().join("app.exe")).unwrap(),
+            b"new app"
+        );
+        let installed = Topic::AppUpdated {
+            version: "99.0.0".into(),
+        };
+        assert_eq!(center.items()[0].topic, installed);
+
+        // The old version still runs; the next check leaves it alone.
+        std::fs::remove_file(dir.path().join("app.exe")).unwrap();
+        center.check_app(&updater, true, &wake);
+        assert!(!dir.path().join("app.exe").exists());
+        assert_eq!(center.items().len(), 1);
+
+        // Without auto_update the bell offers it; elsewhere it only tells.
+        let center = Notifications::default();
+        center.check_app(&updater, false, &wake);
+        assert!(center.items()[0].topic.actionable());
+        let notify = AppUpdater {
+            target: Target::Notify,
+            ..updater
+        };
+        let center = Notifications::default();
+        center.check_app(&notify, true, &wake);
+        assert_eq!(
+            center.items()[0].topic,
+            Topic::AppRelease {
+                version: "99.0.0".into()
+            }
+        );
     }
 
     #[test]

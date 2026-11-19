@@ -123,6 +123,9 @@ pub struct Strings {
     pub agent_update_failed: fn(&str, &str) -> String,
     pub app_update: fn(&str) -> String,
     pub app_update_body: &'static str,
+    /// A newer release this installation does not install itself. Takes
+    /// the release page.
+    pub app_release_body: fn(&str) -> String,
     pub app_updated: fn(&str) -> String,
     pub app_updated_body: &'static str,
     pub app_update_failed: &'static str,
@@ -1443,6 +1446,11 @@ pub static EN: Strings = Strings {
     agent_update_failed: |agent, env| format!("Updating {agent} on {env} failed"),
     app_update: |version| format!("scriptschnell-term {version} is available"),
     app_update_body: "Update downloads it, checks it against the signed release manifest and replaces the installed files.",
+    app_release_body: |url| {
+        format!(
+            "Your package manager or cargo installed this copy, so update it there, or download the release from {url}."
+        )
+    },
     app_updated: |version| format!("scriptschnell-term {version} is installed"),
     app_updated_body: "Restart scriptschnell-term to use it.",
     app_update_failed: "Updating scriptschnell-term failed",
@@ -2613,6 +2621,11 @@ pub static DE: Strings = Strings {
     },
     app_update: |version| format!("scriptschnell-term {version} ist verfügbar"),
     app_update_body: "Aktualisieren lädt die Version herunter, prüft sie gegen das signierte Release-Manifest und ersetzt die installierten Dateien.",
+    app_release_body: |url| {
+        format!(
+            "Diese Kopie hat ein Paketmanager oder cargo installiert. Aktualisiere sie dort oder lade das Release von {url} herunter."
+        )
+    },
     app_updated: |version| format!("scriptschnell-term {version} ist installiert"),
     app_updated_body: "Starte scriptschnell-term neu, um sie zu verwenden.",
     app_update_failed: "scriptschnell-term zu aktualisieren ist fehlgeschlagen",

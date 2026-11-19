@@ -805,6 +805,10 @@ pub struct Settings {
     /// releases of agents installed with npm or mise, at start and every
     /// 12 hours.
     pub check_updates: bool,
+    /// Whether an update check that finds a newer scriptschnell-term
+    /// installs it right away, on Windows and in an AppImage. Off, the bell
+    /// offers it with an Update button.
+    pub auto_update: bool,
     /// Minutes an agent may sit idle in a hidden terminal before the app
     /// stops it, to resume its session when the terminal shows again. Zero
     /// keeps every agent running.
@@ -1539,6 +1543,7 @@ impl Default for Settings {
             remote: RemoteSettings::default(),
             vpn: VpnSettings::default(),
             check_updates: true,
+            auto_update: true,
             freeze_idle_agents: 15,
             cpu_mode: CpuModes::default(),
             agents_use_bash: true,

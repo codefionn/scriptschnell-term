@@ -80,7 +80,8 @@ impl Workspace {
     pub fn check_updates(&self) {
         let envs = self.agent_environments();
         let center = self.borrow().notifications.clone();
-        center.check(envs, self.redraw_handle());
+        let auto_update = self.borrow().settings.auto_update;
+        center.check(envs, auto_update, self.redraw_handle());
     }
 
     /// Runs the update notification `id` offers.
@@ -531,6 +532,10 @@ pub fn text(tr: &Strings, topic: &Topic) -> (String, String) {
             error.clone(),
         ),
         Topic::AppUpdate { version } => ((tr.app_update)(version), tr.app_update_body.to_owned()),
+        Topic::AppRelease { version } => (
+            (tr.app_update)(version),
+            (tr.app_release_body)(&crate::notifications::app_release_page(version)),
+        ),
         Topic::AppUpdated { version } => {
             ((tr.app_updated)(version), tr.app_updated_body.to_owned())
         }

@@ -90,6 +90,7 @@ stays hidden there. Windows sandboxes cannot hide it, so there it is read-only.
   "remote": { "serve": false, "listen": "0.0.0.0:7722", "fused": [] },
   "vpn": { "nebula_config": "/etc/nebula/config.yml" },
   "check_updates": true,
+  "auto_update": true,
   "freeze_idle_agents": 15,
   "cpu_mode": { "local": "balanced", "remote": "off", "efficiency_cores": true },
   "agents_use_bash": true,
@@ -863,14 +864,20 @@ not on `PATH` runs Git's `usr\bin\sh.exe` or `usr\bin\bash.exe`.
   the package manager that installed it. Results show under the bell in the bottom right corner of
   the sidebar, next to recent status bar notices. Update reinstalls the integration, or
   runs `npm install -g <package>@latest` or `mise upgrade <tool>` (`--bump` for a pinned
-  version). On Windows the check also asks the update channel
-  (`https://update.scriptschnell.codefionn.eu/scriptschnell-term`) for a newer
-  scriptschnell-term. Update downloads it, installs it only when the release manifest's
-  signature and every file's SHA3-256 hash check out, and replaces the files next to
-  `scriptschnell-term.exe`; the new version runs after a restart. A copy installed
-  with `cargo install` skips this check; update it with `cargo install` again. Turn it off to stop
-  the checks; the bell then shows only notices, and its Check for updates button still
-  checks once.
+  version). The check also looks for a newer scriptschnell-term release. It asks the
+  mirror `https://releases.codefionn.eu/scriptschnell-term` first and the GitHub releases
+  of `codefionn/scriptschnell-term` when the mirror fails. A release counts only when its
+  manifest's signature checks out against the release key built into the app. The
+  Windows installer's copy and an AppImage install it; any other copy, such as one from a
+  package manager or `cargo install`, only gets a notification with the release page.
+  Installing downloads every file, checks each against its SHA3-256 hash in the manifest,
+  and only then replaces the files next to `scriptschnell-term.exe` or the AppImage file;
+  the new version runs after a restart. A build without a release key, such as a local
+  `cargo build`, never asks. Turn `check_updates` off to stop the checks; the bell then
+  shows only notices, and its Check for updates button still checks once.
+- `auto_update`: on by default. A check that finds a newer release installs it at once
+  and the bell says so. Off, the bell shows the release with an Update button. It changes
+  nothing for copies that only get notified.
 
 ## state.json
 

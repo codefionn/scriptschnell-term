@@ -7,7 +7,7 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 use clap::{Parser, Subcommand};
-use cmdterm_update::{FileEntry, MANIFEST, Manifest, SIGNATURE, SigningKey, VerifyingKey};
+use cmdterm_update::{FileEntry, Manifest, SIGNATURE_SUFFIX, SigningKey, VerifyingKey};
 
 /// The variable `sign` reads the secret key from.
 const KEY_VARIABLE: &str = "SCRIPTSCHNELL_RELEASE_SIGNING_KEY";
@@ -23,22 +23,28 @@ struct Cli {
 enum Command {
     /// Writes a new secret key to OUT and its public key to OUT.pub.
     Keygen { out: PathBuf },
-    /// Hashes every file in <PLATFORM_DIR>/<VERSION>/ and writes the signed
-    /// manifest.json and manifest.json.sig into PLATFORM_DIR. Reads the
-    /// secret key from SCRIPTSCHNELL_RELEASE_SIGNING_KEY.
+    /// Hashes every file in FILES_DIR (the files as installed, such as
+    /// scriptschnell-term.exe), copies each into OUT as a release asset
+    /// named <PLATFORM>-<name>, and writes the signed
+    /// manifest-<PLATFORM>.json and its .sig into OUT. Reads the secret key
+    /// from SCRIPTSCHNELL_RELEASE_SIGNING_KEY.
     Sign {
         #[arg(long)]
         version: String,
         #[arg(long)]
         platform: String,
-        platform_dir: PathBuf,
+        #[arg(long)]
+        out: PathBuf,
+        files_dir: PathBuf,
     },
-    /// Checks the manifest in PLATFORM_DIR against PUBLIC_KEY and every file
-    /// it lists against its hash.
+    /// Checks manifest-<PLATFORM>.json in ASSETS_DIR against PUBLIC_KEY and
+    /// every asset it lists against its hash.
     Verify {
         #[arg(long)]
         public_key: String,
-        platform_dir: PathBuf,
+        #[arg(long)]
+        platform: String,
+        assets_dir: PathBuf,
     },
 }
 
@@ -48,12 +54,14 @@ fn main() -> ExitCode {
         Command::Sign {
             version,
             platform,
-            platform_dir,
-        } => sign(&version, &platform, &platform_dir),
+            out,
+            files_dir,
+        } => sign(&version, &platform, &files_dir, &out),
         Command::Verify {
             public_key,
-            platform_dir,
-        } => verify(&public_key, &platform_dir),
+            platform,
+            assets_dir,
+        } => verify(&public_key, &platform, &assets_dir),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -82,23 +90,27 @@ fn keygen(out: &Path) -> Result<(), String> {
     Ok(())
 }
 
-fn sign(version: &str, platform: &str, platform_dir: &Path) -> Result<(), String> {
+fn sign(version: &str, platform: &str, files_dir: &Path, out: &Path) -> Result<(), String> {
     let secret = std::env::var(KEY_VARIABLE).map_err(|_| format!("{KEY_VARIABLE} is not set"))?;
     let key = SigningKey::from_secret(&secret).ok_or("the signing key is invalid")?;
-    let release_dir = platform_dir.join(version);
-    let mut names: Vec<String> = std::fs::read_dir(&release_dir)
-        .map_err(|e| format!("{}: {e}", release_dir.display()))?
+    let mut names: Vec<String> = std::fs::read_dir(files_dir)
+        .map_err(|e| format!("{}: {e}", files_dir.display()))?
         .filter_map(Result::ok)
         .filter(|entry| entry.file_type().is_ok_and(|t| t.is_file()))
         .filter_map(|entry| entry.file_name().into_string().ok())
         .collect();
     names.sort();
+    std::fs::create_dir_all(out).map_err(|e| format!("{}: {e}", out.display()))?;
     let mut files = Vec::with_capacity(names.len());
     for name in names {
-        let file = std::fs::File::open(release_dir.join(&name)).map_err(|e| e.to_string())?;
-        let (sha3_256, size) = cmdterm_update::hash(file, io::sink()).map_err(|e| e.to_string())?;
+        let asset = cmdterm_update::file_asset(platform, &name);
+        let source = std::fs::File::open(files_dir.join(&name)).map_err(|e| e.to_string())?;
+        let target = out.join(&asset);
+        let copy =
+            std::fs::File::create(&target).map_err(|e| format!("{}: {e}", target.display()))?;
+        let (sha3_256, size) = cmdterm_update::hash(source, copy).map_err(|e| e.to_string())?;
         files.push(FileEntry {
-            path: format!("{version}/{name}"),
+            path: asset,
             name,
             size,
             sha3_256,
@@ -111,9 +123,12 @@ fn sign(version: &str, platform: &str, platform_dir: &Path) -> Result<(), String
     };
     let mut json = serde_json::to_vec_pretty(&manifest).map_err(|e| e.to_string())?;
     json.push(b'\n');
+    // Checks names, paths and the version as the app will.
     let signature = cmdterm_update::sign(&key, &json);
-    std::fs::write(platform_dir.join(MANIFEST), &json).map_err(|e| e.to_string())?;
-    std::fs::write(platform_dir.join(SIGNATURE), signature).map_err(|e| e.to_string())?;
+    cmdterm_update::verify(&key.public(), &json, &signature).map_err(|e| e.to_string())?;
+    let manifest_path = out.join(cmdterm_update::manifest_asset(platform));
+    std::fs::write(&manifest_path, &json).map_err(|e| e.to_string())?;
+    std::fs::write(signature_path(&manifest_path), signature).map_err(|e| e.to_string())?;
     println!(
         "signed {} files of {platform} {version}",
         manifest.files.len()
@@ -121,14 +136,25 @@ fn sign(version: &str, platform: &str, platform_dir: &Path) -> Result<(), String
     Ok(())
 }
 
-fn verify(public_key: &str, platform_dir: &Path) -> Result<(), String> {
+fn signature_path(manifest: &Path) -> PathBuf {
+    let mut path = manifest.as_os_str().to_owned();
+    path.push(SIGNATURE_SUFFIX);
+    path.into()
+}
+
+fn verify(public_key: &str, platform: &str, assets_dir: &Path) -> Result<(), String> {
     let key = VerifyingKey::parse(public_key).ok_or("the public key is invalid")?;
-    let json = std::fs::read(platform_dir.join(MANIFEST)).map_err(|e| e.to_string())?;
+    let manifest_path = assets_dir.join(cmdterm_update::manifest_asset(platform));
+    let json =
+        std::fs::read(&manifest_path).map_err(|e| format!("{}: {e}", manifest_path.display()))?;
     let signature =
-        std::fs::read_to_string(platform_dir.join(SIGNATURE)).map_err(|e| e.to_string())?;
+        std::fs::read_to_string(signature_path(&manifest_path)).map_err(|e| e.to_string())?;
     let manifest = cmdterm_update::verify(&key, &json, &signature).map_err(|e| e.to_string())?;
+    if manifest.platform != platform {
+        return Err(format!("the manifest is for {}", manifest.platform));
+    }
     for file in &manifest.files {
-        let path = platform_dir.join(&file.path);
+        let path = assets_dir.join(&file.path);
         let body = std::fs::File::open(&path).map_err(|e| format!("{}: {e}", path.display()))?;
         let (hex, size) = cmdterm_update::hash(body, io::sink()).map_err(|e| e.to_string())?;
         if hex != file.sha3_256 || size != file.size {

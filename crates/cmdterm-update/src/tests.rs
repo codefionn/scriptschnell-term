@@ -68,20 +68,37 @@ fn serve(files: HashMap<String, Vec<u8>>) -> String {
     format!("{base}/channel")
 }
 
-/// A channel whose platform directory holds `manifest`, signed by `signer`,
-/// and `bodies`.
-fn channel(manifest: &Manifest, signer: &SigningKey, bodies: &[(&str, &[u8])]) -> Channel {
+/// The files of a release source that holds `manifest`, signed by
+/// `signer`, and `bodies` (asset name to body), below `channel/`.
+fn release_files(
+    manifest: &Manifest,
+    signer: &SigningKey,
+    bodies: &[(&str, &[u8])],
+) -> HashMap<String, Vec<u8>> {
     let json = serde_json::to_vec(manifest).unwrap();
     let mut files = HashMap::new();
     files.insert(
-        "channel/test-platform/manifest.json.sig".to_owned(),
+        "channel/latest/download/manifest-test-platform.json.sig".to_owned(),
         sign(signer, &json).into_bytes(),
     );
-    files.insert("channel/test-platform/manifest.json".to_owned(), json);
+    files.insert(
+        "channel/latest/download/manifest-test-platform.json".to_owned(),
+        json,
+    );
     for (path, body) in bodies {
-        files.insert(format!("channel/test-platform/{path}"), body.to_vec());
+        files.insert(
+            format!("channel/download/v{}/{path}", manifest.version),
+            body.to_vec(),
+        );
     }
-    Channel::new(&serve(files), "test-platform", key().public(), None)
+    files
+}
+
+/// A channel with one source that holds `manifest`, signed by `signer`,
+/// and `bodies`.
+fn channel(manifest: &Manifest, signer: &SigningKey, bodies: &[(&str, &[u8])]) -> Channel {
+    let source = serve(release_files(manifest, signer, bodies));
+    Channel::new(&[source], "test-platform", key().public(), None)
 }
 
 #[test]
@@ -91,16 +108,16 @@ fn a_signed_newer_release_installs_and_moves_the_old_file_aside() {
     let release = manifest(
         "0.2.0",
         vec![
-            entry("app.exe", "0.2.0/app.exe", b"new app"),
-            entry("helper.exe", "0.2.0/helper.exe", b"new helper"),
+            entry("app.exe", "test-platform-app.exe", b"new app"),
+            entry("helper.exe", "test-platform-helper.exe", b"new helper"),
         ],
     );
     let channel = channel(
         &release,
         &key(),
         &[
-            ("0.2.0/app.exe", b"new app"),
-            ("0.2.0/helper.exe", b"new helper"),
+            ("test-platform-app.exe", b"new app"),
+            ("test-platform-helper.exe", b"new helper"),
         ],
     );
     assert_eq!(channel.check("0.2.0").unwrap(), None);
@@ -131,16 +148,16 @@ fn a_file_that_does_not_match_its_hash_changes_nothing() {
     let release = manifest(
         "0.2.0",
         vec![
-            entry("app.exe", "0.2.0/app.exe", b"new app"),
-            entry("helper.exe", "0.2.0/helper.exe", b"new helper"),
+            entry("app.exe", "test-platform-app.exe", b"new app"),
+            entry("helper.exe", "test-platform-helper.exe", b"new helper"),
         ],
     );
     let channel = channel(
         &release,
         &key(),
         &[
-            ("0.2.0/app.exe", b"new app"),
-            ("0.2.0/helper.exe", b"evil helper"),
+            ("test-platform-app.exe", b"new app"),
+            ("test-platform-helper.exe", b"evil helper"),
         ],
     );
     let error = channel.install(&release, dir.path()).unwrap_err();
@@ -158,7 +175,10 @@ fn a_file_that_does_not_match_its_hash_changes_nothing() {
 
 #[test]
 fn manifests_need_the_release_key_and_the_right_platform() {
-    let release = manifest("0.2.0", vec![entry("app.exe", "0.2.0/app.exe", b"x")]);
+    let release = manifest(
+        "0.2.0",
+        vec![entry("app.exe", "test-platform-app.exe", b"x")],
+    );
     let forged = channel(&release, &SigningKey::from_seed(&[6; 64]), &[]);
     assert!(matches!(forged.latest(), Err(Error::Signature)));
 
@@ -244,4 +264,178 @@ fn cargo_installs_are_recognized() {
         !installed_by_cargo_in(&other, home.path()),
         "not in the record"
     );
+}
+
+#[test]
+fn the_mirror_comes_first_and_github_takes_over_when_it_fails() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("app.exe"), b"old").unwrap();
+    let release = manifest(
+        "0.3.0",
+        vec![entry("app.exe", "test-platform-app.exe", b"new app")],
+    );
+    // A mirror that lost the file and one that serves a forged manifest.
+    let mut lost = release_files(&release, &key(), &[]);
+    lost.remove("channel/download/v0.3.0/test-platform-app.exe");
+    let lost = serve(lost);
+    let forged = serve(release_files(
+        &release,
+        &SigningKey::from_seed(&[7; 64]),
+        &[("test-platform-app.exe", b"evil")],
+    ));
+    let good = serve(release_files(
+        &release,
+        &key(),
+        &[("test-platform-app.exe", b"new app")],
+    ));
+
+    let channel = Channel::new(
+        &[forged.clone(), good.clone()],
+        "test-platform",
+        key().public(),
+        None,
+    );
+    assert_eq!(channel.check("0.2.0").unwrap(), Some(release.clone()));
+
+    let channel = Channel::new(&[lost, good], "test-platform", key().public(), None);
+    let found = channel.check("0.2.0").unwrap().unwrap();
+    channel.install(&found, dir.path()).unwrap();
+    assert_eq!(
+        std::fs::read(dir.path().join("app.exe")).unwrap(),
+        b"new app"
+    );
+
+    let only_forged = Channel::new(&[forged], "test-platform", key().public(), None);
+    assert!(matches!(only_forged.latest(), Err(Error::Signature)));
+}
+
+#[test]
+#[cfg(unix)]
+fn an_appimage_release_replaces_the_appimage_and_keeps_it_executable() {
+    use std::os::unix::fs::PermissionsExt as _;
+    let dir = tempfile::tempdir().unwrap();
+    let appimage = dir.path().join("my-term.AppImage");
+    std::fs::write(&appimage, b"old").unwrap();
+    std::fs::set_permissions(&appimage, std::fs::Permissions::from_mode(0o750)).unwrap();
+    let release = manifest(
+        "0.2.0",
+        vec![entry(
+            "scriptschnell-term.AppImage",
+            "test-platform-scriptschnell-term.AppImage",
+            b"new image",
+        )],
+    );
+    let channel = channel(
+        &release,
+        &key(),
+        &[("test-platform-scriptschnell-term.AppImage", b"new image")],
+    );
+    channel
+        .install_to(&release, &Target::AppImage(appimage.clone()))
+        .unwrap();
+    assert_eq!(std::fs::read(&appimage).unwrap(), b"new image");
+    let mode = std::fs::metadata(&appimage).unwrap().permissions().mode();
+    assert_eq!(mode & 0o777, 0o750);
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+
+    let two = manifest(
+        "0.2.0",
+        vec![
+            entry("a.AppImage", "a", b"x"),
+            entry("b.AppImage", "b", b"x"),
+        ],
+    );
+    assert!(matches!(
+        channel.install_appimage(&two, &appimage),
+        Err(Error::Manifest(_))
+    ));
+}
+
+#[test]
+fn a_broken_appimage_download_leaves_the_appimage_alone() {
+    let dir = tempfile::tempdir().unwrap();
+    let appimage = dir.path().join("my-term.AppImage");
+    std::fs::write(&appimage, b"old").unwrap();
+    let release = manifest(
+        "0.2.0",
+        vec![entry(
+            "x.AppImage",
+            "test-platform-x.AppImage",
+            b"new image",
+        )],
+    );
+    let channel = channel(
+        &release,
+        &key(),
+        &[("test-platform-x.AppImage", b"bad image")],
+    );
+    assert!(channel.install_appimage(&release, &appimage).is_err());
+    assert_eq!(std::fs::read(&appimage).unwrap(), b"old");
+    assert_eq!(std::fs::read_dir(dir.path()).unwrap().count(), 1);
+}
+
+#[test]
+fn the_installation_decides_how_a_release_arrives() {
+    let dir = tempfile::tempdir().unwrap();
+    let exe = dir.path().join("scriptschnell-term.exe");
+    std::fs::write(&exe, b"").unwrap();
+    let appimage = dir.path().join("term.AppImage");
+    std::fs::write(&appimage, b"").unwrap();
+    assert_eq!(
+        target_for(&exe, true, None, None),
+        Target::Replace(dir.path().to_owned())
+    );
+    assert_eq!(
+        target_for(&exe, false, Some(appimage.clone()), None),
+        Target::AppImage(appimage)
+    );
+    assert_eq!(target_for(&exe, false, None, None), Target::Notify);
+    assert_eq!(
+        target_for(&exe, false, Some("relative.AppImage".into()), None),
+        Target::Notify
+    );
+    assert_eq!(
+        target_for(&exe, false, Some(dir.path().join("gone.AppImage")), None),
+        Target::Notify
+    );
+}
+
+#[test]
+fn sources_and_assets_follow_the_github_layout() {
+    assert_eq!(
+        sources("codefionn/scriptschnell-term"),
+        [
+            "https://releases.codefionn.eu/scriptschnell-term",
+            "https://github.com/codefionn/scriptschnell-term/releases",
+        ]
+    );
+    assert_eq!(
+        release_page("codefionn/scriptschnell-term", "0.2.0"),
+        "https://github.com/codefionn/scriptschnell-term/releases/tag/v0.2.0"
+    );
+    assert_eq!(manifest_asset("linux-x86_64"), "manifest-linux-x86_64.json");
+    assert_eq!(
+        file_asset("windows-x86_64", "cmdterm-sandbox.exe"),
+        "windows-x86_64-cmdterm-sandbox.exe"
+    );
+    assert!(valid_repo("codefionn/scriptschnell-term"));
+    for bad in ["", "a", "a/b/c", "../b", "a/..", "a/b c", "a/b?x"] {
+        assert!(!valid_repo(bad), "{bad}");
+    }
+}
+
+#[test]
+fn versions_must_be_usable_in_a_tag() {
+    for version in ["", "0.2.0/../x", "0.2 0", "0.2.0?"] {
+        let release = manifest(version, vec![entry("app.exe", "app.exe", b"x")]);
+        let json = serde_json::to_vec(&release).unwrap();
+        let signature = sign(&key(), &json);
+        assert!(
+            matches!(
+                verify(&key().public(), &json, &signature),
+                Err(Error::Manifest(_))
+            ),
+            "{version}"
+        );
+    }
 }

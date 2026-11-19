@@ -1,6 +1,6 @@
 # Checks every push and pull request. A `v*` tag also builds the release:
 # an AppImage for Linux and a per-user Windows installer, signs the update
-# manifests, uploads them to the update channel and creates a GitHub release.
+# manifests and publishes everything as a GitHub release.
 #
 # The workspace depends on the sibling checkouts ../schnellui and ../oximond,
 # so every job checks out all three side by side:
@@ -9,12 +9,14 @@
 #     $GITHUB_WORKSPACE/schnellui
 #     $GITHUB_WORKSPACE/oximond
 #
-# --- Update channel ---------------------------------------------------------
-# https://update.scriptschnell.codefionn.eu/scriptschnell-term/<platform>/
-#     manifest.json, manifest.json.sig   the newest release, signed
-#     <version>/<files>                  every release's files
-# Windows builds check the channel and replace their own files after the
-# signature and every file's SHA3-256 check out (crates/cmdterm-update).
+# --- Releases ---------------------------------------------------------------
+# https://github.com/<repo>/releases/latest/download/manifest-<platform>.json
+#     and .json.sig: the newest release, signed
+# https://github.com/<repo>/releases/download/v<version>/<platform>-<file>
+# https://releases.codefionn.eu/scriptschnell-term/ mirrors the same paths; the
+# server pulls them (../infra-infrazeug). Windows installs and AppImages
+# replace their own files after the signature and every file's SHA3-256 check
+# out; other copies only notify (crates/cmdterm-update).
 #
 # --- Repository variables (Settings > Secrets and variables > Variables) ----
 #   SCRIPTSCHNELL_RELEASE_KEY   public release key line, built into the app
@@ -22,9 +24,6 @@
 #
 # --- Secrets ----------------------------------------------------------------
 #   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file)
-#   UPDATE_RSYNC_URL    rsync URL of the channel directory, such as
-#                       rsync://user@codefionn.eu/module/scriptschnell-term
-#   RSYNC_PASSWORD      password of that rsync module
 #   SIBLING_TOKEN       optional: read access to codefionn/schnellui and
 #                       codefionn/oximond when they are private
 
@@ -156,6 +155,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SCRIPTSCHNELL_RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
+      SCRIPTSCHNELL_RELEASE_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -190,15 +190,17 @@ jobs:
             https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage
           chmod +x "$RUNNER_TEMP/appimagetool"
 
+      # The updater renames a downloaded AppImage over the running one, so its
+      # name carries no version: it stays right after an update.
       - name: Pack the AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
         run: |
           set -euo pipefail
-          out="$GITHUB_WORKSPACE/dist/linux-x86_64/$VERSION"
+          out="$GITHUB_WORKSPACE/dist/linux-x86_64"
           mkdir -p "$out"
           APPIMAGETOOL="$RUNNER_TEMP/appimagetool" packaging/linux/build-appimage.sh \
-            target/release "$VERSION" "$out/scriptschnell-term-$VERSION-x86_64.AppImage"
+            target/release "$VERSION" "$out/scriptschnell-term.AppImage"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -216,6 +218,7 @@ jobs:
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SCRIPTSCHNELL_RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
+      SCRIPTSCHNELL_RELEASE_REPO: ${{ github.repository }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -244,12 +247,12 @@ jobs:
       - name: Build
         run: cargo build --release --locked --bin scriptschnell-term --bin cmdterm-sandbox
 
-      # The version directory holds exactly the files the updater installs
-      # next to scriptschnell-term.exe.
+      # This directory holds exactly the files the updater installs next to
+      # scriptschnell-term.exe.
       - name: Collect the files
         run: |
           set -euo pipefail
-          out="$GITHUB_WORKSPACE/dist/windows-x86_64/$VERSION"
+          out="$GITHUB_WORKSPACE/dist/windows-x86_64"
           mkdir -p "$out"
           cp target/release/scriptschnell-term.exe target/release/cmdterm-sandbox.exe "$out/"
 
@@ -270,7 +273,7 @@ jobs:
           # Git Bash would turn the /D options into paths.
           MSYS_NO_PATHCONV=1 "$iscc" \
             "/DVersion=$VERSION" \
-            "/DSourceDir=$(cygpath -w "$GITHUB_WORKSPACE/dist/windows-x86_64/$VERSION")" \
+            "/DSourceDir=$(cygpath -w "$GITHUB_WORKSPACE/dist/windows-x86_64")" \
             "/DOutputDir=$(cygpath -w "$GITHUB_WORKSPACE/dist/downloads")" \
             packaging/windows/scriptschnell-term.iss
 
@@ -320,51 +323,33 @@ jobs:
           name: windows-x86_64
           path: dist
 
-      # `verify` checks the signature with the key the builds carry, so a
-      # signing key that does not match it fails here, not on users' machines.
+      # `sign` copies each platform's files into dist/assets under their asset
+      # names. `verify` checks the signature with the key the builds carry, so
+      # a signing key that does not match it fails here, not on users' machines.
       - name: Sign the update manifests
         env:
           SCRIPTSCHNELL_RELEASE_SIGNING_KEY: ${{ secrets.SCRIPTSCHNELL_RELEASE_SIGNING_KEY }}
           RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
         run: |
           set -euo pipefail
+          assets="$GITHUB_WORKSPACE/dist/assets"
           for platform in windows-x86_64 linux-x86_64; do
-            target/release/cmdterm-release sign \
-              --version "$VERSION" --platform "$platform" "$GITHUB_WORKSPACE/dist/$platform"
+            target/release/cmdterm-release sign --version "$VERSION" --platform "$platform" \
+              --out "$assets" "$GITHUB_WORKSPACE/dist/$platform"
             target/release/cmdterm-release verify \
-              --public-key "$RELEASE_KEY" "$GITHUB_WORKSPACE/dist/$platform"
+              --public-key "$RELEASE_KEY" --platform "$platform" "$assets"
           done
+          cp "$GITHUB_WORKSPACE"/dist/downloads/*-setup.exe "$assets/"
 
-      # Files first, manifests last, so a client never sees a manifest whose
-      # files are not there yet.
-      - name: Upload to the update channel
-        env:
-          UPDATE_RSYNC_URL: ${{ secrets.UPDATE_RSYNC_URL }}
-          RSYNC_PASSWORD: ${{ secrets.RSYNC_PASSWORD }}
-        working-directory: dist
-        run: |
-          set -euo pipefail
-          if [ -z "${UPDATE_RSYNC_URL:-}" ] || [ -z "${RSYNC_PASSWORD:-}" ]; then
-            echo "::error::set the UPDATE_RSYNC_URL and RSYNC_PASSWORD secrets"
-            exit 1
-          fi
-          rsync -rv --exclude 'manifest.json*' \
-            windows-x86_64 linux-x86_64 downloads "$UPDATE_RSYNC_URL/"
-          rsync -rv --include '*/' --include 'manifest.json*' --exclude '*' \
-            windows-x86_64 linux-x86_64 "$UPDATE_RSYNC_URL/"
-
+      # A draft first: `releases/latest` and the mirror only see the release
+      # once every asset is there, so nobody gets a manifest without its files.
       - name: Create the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        working-directory: dist
+        working-directory: dist/assets
         run: |
           set -euo pipefail
-          for platform in windows-x86_64 linux-x86_64; do
-            cp "$platform/manifest.json" "manifest-$platform.json"
-            cp "$platform/manifest.json.sig" "manifest-$platform.json.sig"
-          done
-          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" --generate-notes \
-            linux-x86_64/"$VERSION"/*.AppImage \
-            downloads/*-setup.exe \
-            manifest-*.json manifest-*.json.sig
+          gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
+            --generate-notes --draft ./*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
