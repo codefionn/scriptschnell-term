@@ -365,6 +365,12 @@ pub struct Strings {
 
     // Actions, as the settings list, palette and tooltips name them.
     pub command_palette: &'static str,
+    /// The buttons at the right end of the tab strip, while the app draws
+    /// the window's title bar.
+    pub minimize_window: &'static str,
+    pub maximize_window: &'static str,
+    pub restore_window: &'static str,
+    pub close_window: &'static str,
     /// The keys of the command palette, under its list.
     pub palette_keys_hint: &'static str,
     /// After the palette's keys: the key that moves focus between the
@@ -853,6 +859,8 @@ pub struct Strings {
     /// Palette rows that change what the rail names worktrees after.
     pub title_worktrees_by_branch: &'static str,
     pub title_worktrees_by_agent: &'static str,
+    pub use_system_title_bar: &'static str,
+    pub use_app_title_bar: &'static str,
     /// Palette rows that turn Jujutsu on or off for every project that
     /// does not choose for itself.
     pub jj_on: &'static str,
@@ -1690,6 +1698,10 @@ pub static EN: Strings = Strings {
     language: "Language",
 
     command_palette: "Command palette",
+    minimize_window: "Minimize",
+    maximize_window: "Maximize",
+    restore_window: "Restore",
+    close_window: "Close window",
     palette_keys_hint: "↑↓ choose · Enter runs · Esc closes",
     palette_areas_hint: |keys| format!("{keys} moves between areas"),
     palette_empty_keys_hint: "Esc closes",
@@ -2230,6 +2242,8 @@ pub static EN: Strings = Strings {
     search_no_match: "No worktree matches",
     title_worktrees_by_branch: "Name worktrees by branch",
     title_worktrees_by_agent: "Name worktrees by last agent session",
+    use_system_title_bar: "Use the system's title bar",
+    use_app_title_bar: "Draw the title bar in the tab strip",
     jj_on: "Use jj for jj repositories",
     cpu_mode_local: |mode| format!("CPU for terminals on this machine: {mode}"),
     cpu_mode_remote: |mode| format!("CPU for terminals on other machines: {mode}"),
@@ -2883,6 +2897,10 @@ pub static DE: Strings = Strings {
     language: "Sprache",
 
     command_palette: "Befehlspalette",
+    minimize_window: "Minimieren",
+    maximize_window: "Maximieren",
+    restore_window: "Wiederherstellen",
+    close_window: "Fenster schließen",
     palette_keys_hint: "↑↓ wählen · Enter führt aus · Esc schließt",
     palette_areas_hint: |keys| format!("{keys} wechselt den Bereich"),
     palette_empty_keys_hint: "Esc schließt",
@@ -3444,6 +3462,8 @@ pub static DE: Strings = Strings {
     search_no_match: "Kein Worktree passt",
     title_worktrees_by_branch: "Worktrees nach Branch benennen",
     title_worktrees_by_agent: "Worktrees nach letzter Agent-Sitzung benennen",
+    use_system_title_bar: "Titelleiste des Systems verwenden",
+    use_app_title_bar: "Titelleiste in der Tab-Leiste zeichnen",
     jj_on: "jj für jj-Repositorys verwenden",
     cpu_mode_local: |mode| format!("CPU für Terminals auf diesem Rechner: {mode}"),
     cpu_mode_remote: |mode| format!("CPU für Terminals auf anderen Rechnern: {mode}"),

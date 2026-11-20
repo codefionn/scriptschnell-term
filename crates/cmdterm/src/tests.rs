@@ -701,6 +701,25 @@ fn typing_a_settings_page_name_opens_that_page() {
 }
 
 #[test]
+fn the_tab_strip_carries_the_window_buttons_while_the_app_draws_the_title_bar() {
+    use schnellui::a11y::Role;
+    let dir = tempfile::tempdir().unwrap();
+    let (ws, mut app) = palette_fixture(dir.path());
+    for name in ["Minimize", "Maximize", "Close window"] {
+        assert!(app.find_widget(Role::Button, Some(name)).is_some(), "{name}");
+    }
+    ws.set_window_frame(crate::state::WindowFrame::System);
+    app = crate::build_app(&ws, VIEWPORT);
+    app.frame();
+    assert!(app.find_widget(Role::Button, Some("Minimize")).is_none());
+    assert!(app.find_widget(Role::Button, Some("Command palette")).is_some());
+    let settings = SettingsStore::new(dir.path().join("cfg/settings.json"))
+        .load()
+        .unwrap();
+    assert_eq!(settings.window_frame, crate::state::WindowFrame::System);
+}
+
+#[test]
 fn the_command_button_opens_the_palette_with_key_hints() {
     use schnellui::a11y::Role;
     let dir = tempfile::tempdir().unwrap();

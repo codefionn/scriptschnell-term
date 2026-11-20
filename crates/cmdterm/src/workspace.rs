@@ -3658,6 +3658,40 @@ impl Workspace {
         self.save_settings();
     }
 
+    /// Changes who draws the window's title bar. The window follows on its
+    /// next redraw; the tab strip gains or loses the window's buttons.
+    pub fn set_window_frame(&self, frame: crate::state::WindowFrame) {
+        {
+            let mut inner = self.0.borrow_mut();
+            if inner.settings.window_frame == frame {
+                return;
+            }
+            inner.settings.window_frame = frame;
+            inner.dirty.tabs = true;
+            inner.dirty.palette_list = true;
+        }
+        self.save_settings();
+    }
+
+    /// Whether the app draws the window's title bar, in the tab strip.
+    pub fn draws_title_bar(&self) -> bool {
+        self.0.borrow().settings.window_frame == crate::state::WindowFrame::App
+    }
+
+    /// Whether the window is maximized, as the window host last saw it.
+    pub fn window_maximized(&self) -> bool {
+        self.redraw_handle()
+            .get()
+            .is_some_and(schnellui::RedrawSignal::window_maximized)
+    }
+
+    /// Asks the window to minimize, maximize or close.
+    pub fn request_window(&self, request: schnellui::WindowRequest) {
+        if let Some(signal) = self.redraw_handle().get() {
+            signal.request_window(request);
+        }
+    }
+
     /// Switches the CPU mode of the terminals at `place`, also of those that
     /// run.
     pub fn set_cpu_mode(&self, place: crate::cpu::Place, mode: crate::state::CpuMode) {

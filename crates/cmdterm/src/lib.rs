@@ -806,6 +806,12 @@ fn build_app(ws: &Workspace, viewport: Size) -> App {
     let navigation = ws.clone();
     app.register_navigation_handler(move |step| navigation.navigate_settings(step));
 
+    // The window opens without the system frame unless the settings ask for
+    // it; the tab strip then carries its buttons, and its empty part moves it.
+    let frame = ws.clone();
+    app.set_window_decorations_provider(move || !frame.draws_title_bar());
+    app.set_window_move_area(|p| p.y < ui::TAB_HEIGHT);
+
     let title = ws.clone();
     app.set_window_title_provider(move || {
         let inner = title.borrow();

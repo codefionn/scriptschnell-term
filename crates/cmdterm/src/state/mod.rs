@@ -829,6 +829,8 @@ pub struct Settings {
     pub debug_browser: DebugBrowserSettings,
     /// What the rail names a worktree after.
     pub worktree_titles: WorktreeTitles,
+    /// Who draws the window's title bar and its buttons.
+    pub window_frame: WindowFrame,
     /// Read a repository that has a Jujutsu workspace with `jj`, even when
     /// git shares its directory. Projects can say otherwise
     /// ([`Project::jj`]).
@@ -901,6 +903,19 @@ pub enum WorktreeTitles {
     Agent,
     /// Its branch, or its revision when detached.
     Branch,
+}
+
+/// Who draws the window's title bar.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "lowercase")]
+pub enum WindowFrame {
+    /// The window opens without the system's frame. The tab strip carries
+    /// the minimize, maximize and close buttons, its empty part moves the
+    /// window, and the window's edges resize it.
+    #[default]
+    App,
+    /// The window system draws the title bar and the border.
+    System,
 }
 
 /// The debug browser's settings.
@@ -1552,6 +1567,7 @@ impl Default for Settings {
             agent_control: AgentControl::Host,
             debug_browser: DebugBrowserSettings::default(),
             worktree_titles: WorktreeTitles::Agent,
+            window_frame: WindowFrame::App,
             jj: false,
             shell: None,
             shells: Vec::new(),

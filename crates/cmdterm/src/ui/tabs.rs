@@ -7,7 +7,9 @@
 //! written, and underlined while shown, in that wait's attention color. The
 //! `+` after the last tab opens the palette's
 //! list of panels to open; the command button at the right end opens the
-//! whole palette.
+//! whole palette. While the app draws the window's title bar, the window's
+//! minimize, maximize and close buttons end the strip, and a press on its
+//! empty part moves the window.
 
 use crate::term::Attention;
 use schnellui::layout::EdgeInsets;
@@ -26,6 +28,8 @@ use crate::workspace::{LivePanel, Workspace};
 const ADD_SIZE: f32 = 24.0;
 /// Side of the square command button at the right end.
 const COMMAND_SIZE: f32 = 26.0;
+/// Width of each of the window's buttons at the strip's right end.
+const WINDOW_BUTTON: f32 = 40.0;
 /// Below this strip width the command button shows only its magnifier.
 const COMPACT_COMMANDS: f32 = 800.0;
 /// Where a tab's icon starts, from the tab's left edge.
@@ -373,9 +377,18 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
         .borrow()
         .keymap
         .hint(tr.show_sidebar, &crate::keymap::Action::ToggleSidebar);
+    // The window's buttons, while the app draws the title bar.
+    let controls = window_controls(ws);
+    let controls_width = if ws.draws_title_bar() {
+        WINDOW_BUTTON * 3.0
+    } else {
+        0.0
+    };
     // What the strip leaves for tabs: the command button, the `+`, the
-    // button that shows a hidden rail and their margins.
+    // button that shows a hidden rail, the window's buttons and their
+    // margins.
     let room = width
+        - controls_width
         - command_width
         - 16.0
         - ADD_SIZE
@@ -832,94 +845,100 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
                 ))
                 .child(
                     Row::new()
-                        .width(width)
-                        .justify(Justify::SpaceBetween)
                         .align(Align::Center)
                         .child(
-                            strip.child(
-                                Pad::insets(EdgeInsets::symmetric(4.0, 0.0)).child(
-                                    DropTip::new(tr.drop_new_tab).child(
-                                        Button::new(tr.new_panel)
-                                            .display("+")
-                                            .appearance(ButtonAppearance::Ghost)
-                                            .width(ADD_SIZE)
-                                            .height(ADD_SIZE)
-                                            .text_size(16.0)
-                                            .disabled(!has_worktree)
-                                            .tooltip(tr.new_panel_tip)
-                                            .on_click(move || add.open_new_panel_from_add())
-                                            // A pane dragged by its title onto
-                                            // it becomes a tab of its own.
-                                            .on_drop({
-                                                let drop = ws.clone();
-                                                move || drop.drop_pane_on_new_tab()
-                                            })
-                                            .accepts_drop({
-                                                let ws = ws.clone();
-                                                move || ws.dragging_pane()
-                                            })
-                                            .with_ref(new_panel_ref),
+                            Row::new()
+                                .width(width - controls_width)
+                                .justify(Justify::SpaceBetween)
+                                .align(Align::Center)
+                                .child(
+                                    strip.child(
+                                        Pad::insets(EdgeInsets::symmetric(4.0, 0.0)).child(
+                                            DropTip::new(tr.drop_new_tab).child(
+                                                Button::new(tr.new_panel)
+                                                    .display("+")
+                                                    .appearance(ButtonAppearance::Ghost)
+                                                    .width(ADD_SIZE)
+                                                    .height(ADD_SIZE)
+                                                    .text_size(16.0)
+                                                    .disabled(!has_worktree)
+                                                    .tooltip(tr.new_panel_tip)
+                                                    .on_click(move || add.open_new_panel_from_add())
+                                                    // A pane dragged by its title onto
+                                                    // it becomes a tab of its own.
+                                                    .on_drop({
+                                                        let drop = ws.clone();
+                                                        move || drop.drop_pane_on_new_tab()
+                                                    })
+                                                    .accepts_drop({
+                                                        let ws = ws.clone();
+                                                        move || ws.dragging_pane()
+                                                    })
+                                                    .with_ref(new_panel_ref),
+                                            ),
+                                        ),
                                     ),
-                                ),
-                            ),
-                        )
-                        .child(
-                            Pad::insets(EdgeInsets {
-                                top: 0.0,
-                                right: 8.0,
-                                bottom: 0.0,
-                                left: 8.0,
-                            })
-                            .child(
-                                Stack::new()
-                                    .size(command_width, COMMAND_SIZE)
-                                    // A framed field at rest, like a search
-                                    // box, so it reads as a control before
-                                    // the pointer finds it.
+                                )
+                                .child(
+                                    Pad::insets(EdgeInsets {
+                                        top: 0.0,
+                                        right: 8.0,
+                                        bottom: 0.0,
+                                        left: 8.0,
+                                    })
                                     .child(
-                                        schnellui::widgets::Panel::new()
-                                            .width(command_width)
-                                            .height(COMMAND_SIZE)
-                                            .surface(scheme.raised)
-                                            .outline(scheme.line)
-                                            .radius(6.0),
-                                    )
-                                    .child(
-                                        // A magnifier: ⌘ means a Mac key, and the
-                                        // palette is where commands are searched.
-                                        // Its keys sit beside it, so the button
-                                        // also teaches the shortcut.
-                                        Pad::insets(EdgeInsets {
-                                            left: if compact {
-                                                (COMMAND_SIZE - 18.0) / 2.0
-                                            } else {
-                                                6.0
-                                            },
-                                            top: (COMMAND_SIZE - 18.0) / 2.0,
-                                            ..EdgeInsets::default()
-                                        })
-                                        .child({
-                                            let row =
-                                                Row::new().gap(6.0).align(Align::Center).child(
-                                                    MdIcon::outlined(
-                                                        "search",
-                                                        outlined::ICON_SEARCH,
-                                                    )
-                                                    .size(18.0)
-                                                    .color(scheme.muted),
-                                                );
-                                            if compact {
-                                                row
-                                            } else {
-                                                row.child(Text::new(tr.commands).size(12.5))
-                                                    // On a keycap pill, as the
-                                                    // palette's rows show keys.
-                                                    .child({
-                                                        let chip = palette_keys.chars().count()
-                                                            as f32
-                                                            * 6.5
-                                                            + 8.0;
-                                                        Stack::new()
+                                        Stack::new()
+                                            .size(command_width, COMMAND_SIZE)
+                                            // A framed field at rest, like a search
+                                            // box, so it reads as a control before
+                                            // the pointer finds it.
+                                            .child(
+                                                schnellui::widgets::Panel::new()
+                                                    .width(command_width)
+                                                    .height(COMMAND_SIZE)
+                                                    .surface(scheme.raised)
+                                                    .outline(scheme.line)
+                                                    .radius(6.0),
+                                            )
+                                            .child(
+                                                // A magnifier: ⌘ means a Mac key, and the
+                                                // palette is where commands are searched.
+                                                // Its keys sit beside it, so the button
+                                                // also teaches the shortcut.
+                                                Pad::insets(EdgeInsets {
+                                                    left: if compact {
+                                                        (COMMAND_SIZE - 18.0) / 2.0
+                                                    } else {
+                                                        6.0
+                                                    },
+                                                    top: (COMMAND_SIZE - 18.0) / 2.0,
+                                                    ..EdgeInsets::default()
+                                                })
+                                                .child({
+                                                    let row = Row::new()
+                                                        .gap(6.0)
+                                                        .align(Align::Center)
+                                                        .child(
+                                                            MdIcon::outlined(
+                                                                "search",
+                                                                outlined::ICON_SEARCH,
+                                                            )
+                                                            .size(18.0)
+                                                            .color(scheme.muted),
+                                                        );
+                                                    if compact {
+                                                        row
+                                                    } else {
+                                                        row.child(Text::new(tr.commands).size(12.5))
+                                                            // On a keycap pill, as the
+                                                            // palette's rows show keys.
+                                                            .child({
+                                                                let chip =
+                                                                    palette_keys.chars().count()
+                                                                        as f32
+                                                                        * 6.5
+                                                                        + 8.0;
+                                                                Stack::new()
                                                             .size(chip, 18.0)
                                                             .align(Align::Center)
                                                             .justify(Justify::Center)
@@ -940,28 +959,92 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
                                                                 scheme.theme(),
                                                                 Text::new(palette_keys).size(12.0),
                                                             ))
-                                                    })
-                                            }
-                                        }),
-                                    )
-                                    // On top, so it takes the pointer; the icon only paints.
-                                    .child(
-                                        Button::new(tr.command_palette)
-                                            .icon_only()
-                                            .appearance(ButtonAppearance::Ghost)
-                                            .width(command_width)
-                                            .height(COMMAND_SIZE)
-                                            // A tooltip only when compact: the
-                                            // wide button already shows its
-                                            // name and keys.
-                                            .tooltip(command_tooltip)
-                                            .on_click(move || palette.open_palette(None)),
+                                                            })
+                                                    }
+                                                }),
+                                            )
+                                            // On top, so it takes the pointer; the icon only paints.
+                                            .child(
+                                                Button::new(tr.command_palette)
+                                                    .icon_only()
+                                                    .appearance(ButtonAppearance::Ghost)
+                                                    .width(command_width)
+                                                    .height(COMMAND_SIZE)
+                                                    // A tooltip only when compact: the
+                                                    // wide button already shows its
+                                                    // name and keys.
+                                                    .tooltip(command_tooltip)
+                                                    .on_click(move || palette.open_palette(None)),
+                                            ),
                                     ),
-                            ),
-                        ),
+                                ),
+                        )
+                        .child(controls),
                 ),
         )
         .child(Fill::new(width, 1.0, scheme.line))
+}
+
+/// Minimize, maximize or restore, and close, at the strip's right end while
+/// the app draws the window's title bar (`window_frame` is `app`). Empty
+/// while the system draws it.
+fn window_controls(ws: &Workspace) -> Row {
+    use schnellui::WindowRequest;
+    let row = Row::new().align(Align::Center);
+    if !ws.draws_title_bar() {
+        return row;
+    }
+    let scheme = ws.borrow().scheme;
+    let tr = ws.tr();
+    let (resize_name, resize_icon, resize_svg) = if ws.window_maximized() {
+        (tr.restore_window, "filter_none", outlined::ICON_FILTER_NONE)
+    } else {
+        (
+            tr.maximize_window,
+            "crop_square",
+            outlined::ICON_CROP_SQUARE,
+        )
+    };
+    [
+        (
+            tr.minimize_window,
+            "remove",
+            outlined::ICON_REMOVE,
+            WindowRequest::Minimize,
+        ),
+        (
+            resize_name,
+            resize_icon,
+            resize_svg,
+            WindowRequest::ToggleMaximize,
+        ),
+        (
+            tr.close_window,
+            "close",
+            outlined::ICON_CLOSE,
+            WindowRequest::Close,
+        ),
+    ]
+    .into_iter()
+    .fold(row, |row, (name, icon, svg, request)| {
+        let window = ws.clone();
+        row.child(
+            Stack::new()
+                .size(WINDOW_BUTTON, TAB_HEIGHT - 1.0)
+                .align(Align::Center)
+                .justify(Justify::Center)
+                .child(MdIcon::outlined(icon, svg).size(18.0).color(scheme.muted))
+                // On top, so it takes the pointer; the icon only paints.
+                .child(
+                    Button::new(name)
+                        .icon_only()
+                        .appearance(ButtonAppearance::Ghost)
+                        .width(WINDOW_BUTTON)
+                        .height(TAB_HEIGHT - 1.0)
+                        .on_click(move || window.request_window(request)),
+                ),
+        )
+    })
 }
 
 /// The menu a tab opens under the pointer: what the palette does to the

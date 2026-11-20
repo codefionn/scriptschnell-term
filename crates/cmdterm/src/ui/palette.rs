@@ -14,7 +14,7 @@
 
 use std::path::{Path, PathBuf};
 
-use crate::state::{Runtime, SplitAxis, WorktreeTitles};
+use crate::state::{Runtime, SplitAxis, WindowFrame, WorktreeTitles};
 use cmdterm_env::{Environment, RemoteTarget, VmTarget};
 use schnellui::layout::EdgeInsets;
 use schnellui::scene::{Color, Point, Size};
@@ -340,6 +340,8 @@ pub enum Action {
     ToggleSidebar,
     /// Changes what the rail names worktrees after.
     WorktreeTitles(WorktreeTitles),
+    /// Changes who draws the window's title bar.
+    WindowFrame(WindowFrame),
     /// Switches the CPU mode of the terminals at a place.
     CpuMode(crate::cpu::Place, crate::state::CpuMode),
     /// Turns Jujutsu on or off for every project without its own choice.
@@ -590,6 +592,13 @@ pub fn entries(inner: &Inner) -> Vec<Entry> {
             tr.title_worktrees_by_agent,
             Action::WorktreeTitles(WorktreeTitles::Agent),
         ),
+    });
+    out.push(match inner.settings.window_frame {
+        WindowFrame::App => plain(
+            tr.use_system_title_bar,
+            Action::WindowFrame(WindowFrame::System),
+        ),
+        WindowFrame::System => plain(tr.use_app_title_bar, Action::WindowFrame(WindowFrame::App)),
     });
     // The modes each place is not in.
     for (place, label) in [
@@ -1246,6 +1255,7 @@ impl Workspace {
             Action::FocusBack => self.focus_chrome_back(),
             Action::ToggleSidebar => self.toggle_sidebar(),
             Action::WorktreeTitles(titles) => self.set_worktree_titles(titles),
+            Action::WindowFrame(frame) => self.set_window_frame(frame),
             Action::CpuMode(place, mode) => self.set_cpu_mode(place, mode),
             Action::Jj(on) => self.set_jj(on),
             Action::ProjectJj { project, on } => self.set_project_jj(project, on),

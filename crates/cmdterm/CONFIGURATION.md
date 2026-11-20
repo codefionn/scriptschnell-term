@@ -61,6 +61,7 @@ stays hidden there. Windows sandboxes cannot hide it, so there it is read-only.
   "color_scheme": "system",
   "language": "system",
   "worktree_titles": "agent",
+  "window_frame": "app",
   "jj": false,
   "keymap": "cmdterm",
   "keybindings": { "ctrl+b |": "split_side_by_side", "ctrl+b %": null },
@@ -113,6 +114,12 @@ stays hidden there. Windows sandboxes cannot hide it, so there it is read-only.
   Titles count from the first state an agent's hooks report (Settings, Agents) or the
   agent reports itself (OSC 7501) until its session ends, so a shell's title never
   replaces the agent's. Each worktree keeps its last 8 titles in `state.json`.
+- `window_frame`: who draws the window's title bar. `app`, the default, opens the window
+  without the system's frame: the tab strip ends in Minimize, Maximize (Restore while
+  maximized) and Close buttons, a press on its empty part moves the window, a double press
+  there maximizes it, and a 4 px band along the window's edges resizes it. `system` lets
+  the window system draw the title bar and the border. The palette switches between them,
+  and the window follows at once.
 
 ### Jujutsu
 
