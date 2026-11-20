@@ -422,7 +422,7 @@ mod tests {
         let tr = &crate::i18n::EN;
         assert_eq!(
             modes.describe(CpuMode::Quiet, tr),
-            "quiet (keeps 1 core free, uses at most 25% of the cores, hidden agents at nice 19)"
+            "quiet (keeps 1 core free, uses at most 25% CPU, background agents at nice 19)"
         );
         assert_eq!(modes.describe(CpuMode::Off, tr), "off (no limit)");
         // Untouched modes stay out of settings.json.

@@ -1582,7 +1582,7 @@ fn a_terminal_that_fails_to_start_says_why() {
         ]),
         None,
     );
-    let notice = "terminal exited right after it started (code 3): \
+    let notice = "terminal exited immediately (code 3): \
                   execvp missing-program: No such file";
     wait_until(|| {
         ws.poll();
@@ -2786,7 +2786,7 @@ fn the_worktree_plus_button_adds_a_detached_or_branched_worktree_from_that_row()
     // A name with a slash says why under the field; Enter keeps it open.
     let mut app = crate::build_app(&ws, VIEWPORT);
     app.frame();
-    assert!(app.a11y_json().contains("A folder name: no /"));
+    assert!(app.a11y_json().contains("Folder names cannot contain /"));
     ws.palette_enter();
     assert!(ws.palette_is_open());
 }
@@ -3034,13 +3034,13 @@ fn a_waiting_agent_marks_its_worktree_until_the_user_answers() {
         app = crate::build_app(&ws, VIEWPORT);
         app.frame();
         app.a11y_json()
-            .contains("An agent waits for permission (Bash wants to run)")
+            .contains("An agent is waiting for approval (Bash wants to run)")
     });
     let json = app.a11y_json();
     assert!(json.contains("● agent"), "the tab is marked too: {json}");
     assert!(
-        json.contains("An agent waits for permission (1 worktrees)")
-            || json.contains("\"An agent waits for permission\""),
+        json.contains("An agent is waiting for approval (1 worktrees)")
+            || json.contains("\"An agent is waiting for approval\""),
         "the project row says so too: {json}"
     );
 
@@ -3051,7 +3051,7 @@ fn a_waiting_agent_marks_its_worktree_until_the_user_answers() {
         ws.poll();
         app = crate::build_app(&ws, VIEWPORT);
         app.frame();
-        !app.a11y_json().contains("An agent waits for permission")
+        !app.a11y_json().contains("An agent is waiting for approval")
     });
 }
 
@@ -3126,7 +3126,7 @@ fn an_agent_session_names_its_worktree_and_the_rail_search_finds_it() {
     app.frame();
     let json = app.a11y_json();
     assert!(
-        json.contains("No worktree matches") && !json.contains(title),
+        json.contains("No matching worktree") && !json.contains(title),
         "{json}"
     );
     ws.clear_rail_search();
@@ -4058,7 +4058,7 @@ fn the_debug_browser_panel_reports_a_browser_that_does_not_start() {
     ws.poll();
     let app = crate::build_app(&ws, VIEWPORT);
     let a11y = app.a11y_json();
-    assert!(a11y.contains("The debug browser did not start"), "{a11y}");
+    assert!(a11y.contains("Debug browser failed to start"), "{a11y}");
     assert!(a11y.contains("no-chrome"), "{a11y}");
     assert!(
         app.find_widget(schnellui::a11y::Role::Button, Some("Try again"))
@@ -5633,13 +5633,13 @@ fn list_settings_add_and_remove_one_entry_at_a_time() {
     ws.add_list_entry("lists", "files");
     assert_eq!(files(&ws).len(), 2);
     let json = extension_page_json(&ws, "lists");
-    assert!(json.contains(".gitconfig is in the list already"), "{json}");
+    assert!(json.contains(".gitconfig is already in the list"), "{json}");
 
     ws.remove_list_entry("lists", "files", 0);
     assert_eq!(files(&ws), [".config/a,b"]);
     let json = extension_page_json(&ws, "lists");
     assert!(!json.contains("Remove .gitconfig from Files"), "{json}");
-    assert!(!json.contains("in the list already"), "{json}");
+    assert!(!json.contains("already in the list"), "{json}");
 }
 
 fn accounts_page_json(ws: &Workspace) -> String {
@@ -5698,7 +5698,7 @@ fn forge_accounts_are_added_and_removed_on_the_accounts_page() {
     // A lone account never signed in has nothing to remove.
     assert!(!json.contains("Remove account git.example.com"), "{json}");
     assert!(
-        json.contains("New Hub account (Such as git.example.com/team)"),
+        json.contains("New Hub account (e.g. git.example.com/team)"),
         "{json}"
     );
     assert!(json.contains("A host or host/owner."), "{json}");
@@ -5710,7 +5710,7 @@ fn forge_accounts_are_added_and_removed_on_the_accounts_page() {
     ws.set_forge_account_draft("hub.hub", "not a host!");
     ws.add_forge_account("hub.hub");
     let json = accounts_page_json(&ws);
-    assert!(json.contains("not a host! is not a host"), "{json}");
+    assert!(json.contains("not a host! must be a host or host/path"), "{json}");
 
     ws.set_forge_account_draft("hub.hub", " Git.Example.com/Team/ ");
     ws.add_forge_account("hub.hub");
@@ -5815,7 +5815,7 @@ fn a_refused_sign_in_shows_why_and_keeps_the_app_running() {
     ws.poll();
     let notices: Vec<String> = ws.borrow().notices.iter().map(|n| n.text.clone()).collect();
     assert!(
-        !notices.iter().any(|n| n.contains("carried on")),
+        !notices.iter().any(|n| n.contains("An extension task failed")),
         "{notices:?}"
     );
     let json = accounts_page_json(&ws);
@@ -5842,7 +5842,7 @@ fn account_actions_end_in_a_toast_in_the_settings_header() {
 
     ws.set_forge_account_draft("hub.hub", "not a host!");
     ws.add_forge_account("hub.hub");
-    assert!(matches!(ws.toast_for_test(), Some((true, text)) if text.contains("is not a host")));
+    assert!(matches!(ws.toast_for_test(), Some((true, text)) if text.contains("must be a host")));
 
     ws.fail_forge_sign_in_for_test("hub.hub", "git.example.com", "HTTP 401");
     ws.poll();
@@ -5939,7 +5939,7 @@ fn forge_sign_ins_keep_the_account_and_scope_the_token() {
     app.frame();
     assert!(
         app.a11y_json()
-            .contains("Open the sign-in for git.example.com")
+            .contains("Open sign-in for git.example.com")
     );
     ws.toggle_account_form("hub.hub/git.example.com");
     app = crate::build_app(&ws, VIEWPORT);

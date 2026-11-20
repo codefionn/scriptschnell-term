@@ -12,11 +12,11 @@ first; the extension uses that login and that deployment.
 
 ## Settings
 
-- Wait for the startup script: `auto` follows the template, `yes` waits until the
-  workspace's startup script finished, `no` connects as soon as the agent does.
+- Wait for startup script: `auto` follows the template, `yes` waits until the
+  workspace's startup script finishes, `no` connects as soon as the agent is ready.
 - Start stopped workspaces: on by default. A stopped workspace starts when the app
   first runs something in it, which can take a while the first time.
-- Forward the SSH agent: off by default. On, programs in the workspace use the keys of
+- Forward SSH agent: off by default. When on, programs in the workspace use the keys of
   this machine's SSH agent, such as for `git push`.
 
 ## Limits

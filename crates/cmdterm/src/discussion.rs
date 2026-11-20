@@ -1409,9 +1409,9 @@ deleted file mode 100644
         let page = rendered.markdown();
         assert!(page.contains("`a.rs` line 4"), "{page}");
         assert!(page.contains("Moved from line 2"), "{page}");
-        assert!(page.contains("Line 3 was changed"), "{page}");
+        assert!(page.contains("Line 3 was modified"), "{page}");
         assert!(page.contains(">    4  let x = 1;"), "{page}");
-        assert!(page.contains("Found by its text, was line 2"), "{page}");
+        assert!(page.contains("Matched by content (formerly line 2)"), "{page}");
         // The amend is in the reflog, and range-diff names the rewrite.
         assert!(page.contains("amend"), "{page}");
         assert!(page.contains("rewritten"), "{page}");

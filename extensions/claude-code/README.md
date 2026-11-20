@@ -13,7 +13,7 @@ environment's `~/.claude`: `settings.json`, `CLAUDE.md`, `agents`, `commands`, `
 The palette command "Claude Code: set up this environment" (`claude-code.setup`) does the
 same for the active worktree on demand.
 
-Your login is not copied unless you turn on "Copy the login". Copying it gives everything
+Your login is not copied unless you turn on "Copy login credentials". Copying it gives everything
 that runs in the environment your Claude account. Without it, run `claude` once inside
 and log in there.
 
@@ -24,8 +24,8 @@ They are saved under `extension_settings.claude-code` in `settings.json`.
 
 | Key | Type | Default | Meaning |
 | --- | --- | --- | --- |
-| `kinds` | list | `devcontainer`, `vm`, `remote` | Environment kinds to set up when they come up; `ssh` is the fourth |
-| `copy` | list | `settings.json`, `CLAUDE.md`, `agents`, `commands`, `skills`, `hooks`, `output-styles`, `plugins` | Entries of `~/.claude` to copy |
+| `kinds` | list | `devcontainer`, `vm`, `remote` | Environment types to set up when they start; `ssh` is the fourth |
+| `copy` | list | `settings.json`, `CLAUDE.md`, `agents`, `commands`, `skills`, `hooks`, `output-styles`, `plugins` | Files in `~/.claude` to copy |
 | `credentials` | bool | false | Also copy `~/.claude/.credentials.json` |
 | `install` | bool | true | Run the official install script where `claude` is missing |
 

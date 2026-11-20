@@ -1165,7 +1165,7 @@ mod tests {
         assert_eq!(
             lines("```mermaid\npie\n  \"a\" : 1\n```\n", 80),
             [
-                "Mermaid diagram the viewer cannot draw: pie diagrams are not supported",
+                "Unsupported Mermaid diagram: pie diagrams are not supported",
                 " pie",
                 "   \"a\" : 1",
             ]

@@ -86,7 +86,7 @@ function renderLogin(root, route) {
     const saved = loadUser();
     if (saved && saved.name) user.value = saved.name;
     const form = h('form', { class: 'form' },
-      h('label', { for: 'login-user' }, 'User name'), user,
+      h('label', { for: 'login-user' }, 'Username'), user,
       h('label', { for: 'login-pass' }, 'Password'), pass,
       submit,
     );
@@ -100,7 +100,7 @@ function renderLogin(root, route) {
         } catch (err) {
           pass.value = '';
           if (err instanceof ApiError && err.status === 401) {
-            msg.append(notice('Wrong user name or password.'));
+            msg.append(notice('Invalid username or password.'));
           } else if (err instanceof ApiError && err.status === 429) {
             lockOut(submit, Number(err.body.retry_after) || 60);
           } else {

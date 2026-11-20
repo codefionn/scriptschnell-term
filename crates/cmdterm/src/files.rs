@@ -2518,7 +2518,7 @@ mod tests {
         };
         assert_eq!(document.line(0), "# Title");
         assert!(
-            view.header.ends_with("press v for the rendered view"),
+            view.header.ends_with("press v for rendered view"),
             "{}",
             view.header
         );

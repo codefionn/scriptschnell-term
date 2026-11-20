@@ -25,7 +25,7 @@ On the extension's page of the settings (Ctrl+,):
 
 - List: `pro` (the default), `light`, `multi`, `pro.plus`, `ultimate`, `tif` (threat
   intelligence only) or `off`.
-- Download again after (days): 7 by default.
+- Refresh interval (days): 7 by default.
 - More lists: `https://` URLs of further lists. Plain domains, hosts files
   (`0.0.0.0 ads.example`) and Adblock domain rules (`||ads.example^`) work. The
   extension may download from the hosts of these URLs, besides raw.githubusercontent.com

@@ -1,18 +1,18 @@
 title = "ASP.NET dev certificate"
-description = "This machine's ASP.NET Core dev certificate in devcontainers. Kestrel there serves it and both sides trust it."
+description = "Shares this machine's ASP.NET Core dev certificate with devcontainers so Kestrel can serve it and both sides trust it."
 enabled = false
 permissions = ["filesystem", "process", "copy", "run", "trust"]
 
 [[settings]]
 key = "trust_host"
-title = "Trust the certificate on this machine"
-description = "Runs dotnet dev-certs https --trust here, so browsers on this machine accept the container's HTTPS. Windows and macOS ask once."
+title = "Trust certificate on this machine"
+description = "Runs dotnet dev-certs https --trust here so browsers on this machine accept the container's HTTPS. Windows and macOS prompt once."
 type = "bool"
 default = true
 
 [[settings]]
 key = "trust_container"
-title = "Trust the certificate in the devcontainer"
-description = "Adds it to the container's system trust store, so HttpClient, curl and other programs there accept it. Needs root or passwordless sudo in the container."
+title = "Trust certificate in devcontainer"
+description = "Adds the certificate to the container's system trust store so HttpClient, curl, and other tools accept it. Requires root or passwordless sudo in the container."
 type = "bool"
 default = true

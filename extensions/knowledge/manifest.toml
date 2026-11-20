@@ -1,18 +1,18 @@
 title = "Knowledge"
-description = "Collections of Markdown documents with titles, tags and metadata, as tools for agents."
+description = "Exposes collections of Markdown documents with titles, tags, and metadata as tools for agents."
 permissions = ["agents", "storage", "project_storage"]
 
 [[settings]]
 key = "search_limit"
 title = "Search results"
-description = "How many documents knowledge_search returns when the agent does not say."
+description = "Default number of documents returned by knowledge_search."
 type = "integer"
 default = 10
 
 [[settings]]
 key = "scope"
 title = "Where documents live"
-description = "app: one set of collections every project shares. project: each project has its own, and agents see those of their terminal's project."
+description = "app: one shared set of collections across all projects. project: separate collections per project, visible only to agents in that project."
 type = "choice"
 choices = ["app", "project"]
 default = "app"

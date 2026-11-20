@@ -1,15 +1,15 @@
 title = "Toolchains"
-description = "Toolchains and global tools in sandboxed terminals. Covers rustup, nvm, fnm, volta, npx, pnpm, bun, deno, pyenv, uv, go, dotnet tools, mise, asdf and sdkman."
+description = "Supports language toolchains and global tools in sandboxed terminals, including rustup, nvm, fnm, volta, npx, pnpm, bun, deno, pyenv, uv, go, dotnet tools, mise, asdf, and sdkman."
 permissions = ["env", "sandbox"]
 
 [[settings]]
 key = "off"
-title = "Turned off"
-description = "Tools whose directories stay read-only and whose hosts are not allowed, by name: rustup, cargo, nvm, fnm, volta, npm, pnpm, yarn, bun, deno, pyenv, uv, pipx, go, dotnet, mise, asdf, sdkman, rbenv, gem."
+title = "Disabled tools"
+description = "Tools whose directories stay read-only and whose hosts are not allowed: rustup, cargo, nvm, fnm, volta, npm, pnpm, yarn, bun, deno, pyenv, uv, pipx, go, dotnet, mise, asdf, sdkman, rbenv, gem."
 type = "list"
 
 [[settings]]
 key = "writable"
-title = "More writable paths"
-description = "Further directories sandboxes may write, such as a tool home this extension does not know. Paths may start with ~/."
+title = "Additional writable paths"
+description = "Extra directories sandboxes may write to, such as a tool home directory not listed above. Paths may start with ~/."
 type = "list"

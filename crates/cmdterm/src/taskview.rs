@@ -1370,9 +1370,9 @@ mod tests {
             })
             .collect();
         let has = |part: &str| text.iter().any(|line| line.contains(part));
-        assert!(has("app · main|local · shown"), "{text:#?}");
+        assert!(has("app · main|local · active"), "{text:#?}");
         assert!(
-            has("frozen|terminal|claude|tab 1 · claude waits for a prompt · open for 10m"),
+            has("frozen|terminal|claude|tab 1 · claude waiting for a prompt · open for 10m"),
             "{text:#?}"
         );
         assert!(

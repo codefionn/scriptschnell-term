@@ -104,7 +104,7 @@ export function renderMachines(root) {
       remove.addEventListener('click', async () => {
         editing.add(m.id);
         const ok = await confirmInline(remove, {
-          message: `Remove ${m.name}? Its key is refused from then on.`,
+          message: `Remove ${m.name}? Its key will no longer be accepted.`,
           confirm: 'Remove',
         });
         editing.delete(m.id);
@@ -338,7 +338,7 @@ export function renderMachine(root, route) {
       newBtn.hidden = true;
     }
 
-    projNote.textContent = projectsLive ? '' : 'What the machine reported when it was last online.';
+    projNote.textContent = projectsLive ? '' : 'Last reported while this machine was online.';
     projNote.hidden = projectsLive || !projects.length;
     clear(projList);
     if (!projects.length) projList.append(h('li', { class: 'empty' }, 'No projects.'));
@@ -361,7 +361,7 @@ export function renderMachine(root, route) {
       projList.append(li);
     }
 
-    sessNote.textContent = sessionsLive ? '' : 'What the machine reported when it was last online.';
+    sessNote.textContent = sessionsLive ? '' : 'Last reported while this machine was online.';
     sessNote.hidden = sessionsLive || !sessions.length;
     clear(sessList);
     if (!sessions.length) sessList.append(h('li', { class: 'empty' }, 'No sessions.'));
@@ -388,7 +388,7 @@ export function renderMachine(root, route) {
       const end = h('button', { type: 'button', class: 'danger-quiet', 'aria-label': `End ${s.name}` }, 'End');
       end.addEventListener('click', async () => {
         busySessions.add(s.name);
-        const ok = await confirmInline(end, { message: `End ${s.name}? Its shell is stopped.`, confirm: 'End session' });
+        const ok = await confirmInline(end, { message: `End ${s.name}? This will stop its shell.`, confirm: 'End session' });
         busySessions.delete(s.name);
         if (!ok) return;
         try {

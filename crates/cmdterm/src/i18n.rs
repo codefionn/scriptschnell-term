@@ -1325,10 +1325,10 @@ fn cpu_detail_en(free: u32, percent: u32, nice: u8) -> String {
         n => parts.push(format!("keeps {n} cores free")),
     }
     if percent < 100 {
-        parts.push(format!("uses at most {percent}% of the cores"));
+        parts.push(format!("uses at most {percent}% CPU"));
     }
     if nice > 0 {
-        parts.push(format!("hidden agents at nice {nice}"));
+        parts.push(format!("background agents at nice {nice}"));
     }
     if parts.is_empty() {
         return "no limit".to_owned();
@@ -1344,13 +1344,13 @@ fn cpu_detail_de(free: u32, percent: u32, nice: u8) -> String {
         n => parts.push(format!("lässt {n} Kerne frei")),
     }
     if percent < 100 {
-        parts.push(format!("nutzt höchstens {percent} % der Kerne"));
+        parts.push(format!("nutzt höchstens {percent} % CPU"));
     }
     if nice > 0 {
-        parts.push(format!("verborgene Agenten mit nice {nice}"));
+        parts.push(format!("Agenten im Hintergrund mit nice {nice}"));
     }
     if parts.is_empty() {
-        return "keine Grenze".to_owned();
+        return "kein Limit".to_owned();
     }
     parts.join(", ")
 }
@@ -1364,7 +1364,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         SettingsSection::Shells => "Default shell | powershell cmd wsl",
         SettingsSection::Language => "Language | english german deutsch",
         SettingsSection::Extensions => {
-            "Extension permissions, Requests it holds back, Reload extensions | lua plugins guards ask block allow"
+            "Extension permissions, Guarded requests, Reload extensions | lua plugins guards ask block allow"
         }
         SettingsSection::Accounts => {
             "Forge accounts, Sign in | github gitlab forgejo gitea bitbucket azure devops token"
@@ -1383,7 +1383,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         SettingsSection::Sandboxing => {
             "Run terminals in a sandbox, Devcontainer engine, Network, Allowed hosts only, Inspect HTTPS, Container engines, Sidecar engine, Restart terminals | proxy certificate docker podman passthrough"
         }
-        SettingsSection::SandboxFiles => "Writable paths, Hidden paths | files folders",
+        SettingsSection::SandboxFiles => "Additional writable paths, Hidden paths | files folders",
         SettingsSection::SandboxHosts => "Allowed hosts, Common hosts | domains allowlist proxy",
     }
 }
@@ -1401,7 +1401,7 @@ fn keywords_de(section: SettingsSection) -> &'static str {
         SettingsSection::Shells => "Standard-Shell | powershell cmd wsl",
         SettingsSection::Language => "Sprache | englisch deutsch english",
         SettingsSection::Extensions => {
-            "Berechtigungen, Zurückgehaltene Anfragen, Erweiterungen neu laden | lua plugins guards fragen blockieren erlauben"
+            "Berechtigungen, Geschützte Anfragen, Erweiterungen neu laden | lua plugins guards fragen blockieren erlauben"
         }
         SettingsSection::Accounts => {
             "Forge-Konten, Anmelden | github gitlab forgejo gitea bitbucket azure devops token"
@@ -1410,7 +1410,7 @@ fn keywords_de(section: SettingsSection) -> &'static str {
             "Registry-Logins, Cargo, Forge CLIs, Git über HTTPS, npm, NuGet, PyPI | zugangsdaten tokens"
         }
         SettingsSection::Agents => {
-            "Agenten-Integrationen, Hooks aktualisieren, Steuer-Socket, CPU | claude codex gemini antigravity agy installieren Prozessor Kerne nice Grenze"
+            "Agenten-Integrationen, Hooks aktualisieren, Steuer-Socket, CPU | claude codex gemini antigravity agy installieren Prozessor Kerne nice Limit"
         }
         SettingsSection::Remote => {
             "Schlüssel-Fingerabdruck, Andere Maschinen verbinden lassen, Erlaubte Schlüssel, Maschinen, mit denen du dich verbindest | ssh server port koppeln"
@@ -1420,7 +1420,7 @@ fn keywords_de(section: SettingsSection) -> &'static str {
         SettingsSection::Sandboxing => {
             "Terminals in einer Sandbox starten, Devcontainer-Engine, Netzwerk, Nur erlaubte Hosts, HTTPS prüfen, Container-Engines, Sidecar-Engine, Terminals neu starten | proxy zertifikat docker podman durchreichen"
         }
-        SettingsSection::SandboxFiles => "Beschreibbare Pfade, Versteckte Pfade | dateien ordner",
+        SettingsSection::SandboxFiles => "Zusätzliche beschreibbare Pfade, Verborgene Pfade | dateien ordner",
         SettingsSection::SandboxHosts => "Erlaubte Hosts, Häufige Hosts | domains allowlist proxy",
     }
 }
@@ -1445,7 +1445,7 @@ pub static EN: Strings = Strings {
     notice_title: "Notice",
     integration_outdated: |agent, env| format!("{agent} integration on {env} is outdated"),
     integrations_outdated: |count| format!("{count} agent integrations are outdated"),
-    integration_outdated_body: "An older scriptschnell-term installed the hooks, or they were edited since. Update installs the current hooks and skill.",
+    integration_outdated_body: "These hooks were installed by an older version of scriptschnell-term or edited since. Updating installs the current hooks and skills.",
     agent_update: |agent, latest| format!("{agent} {latest} is available"),
     agent_update_body: |current, env, manager, command| {
         format!("{current} is installed on {env} with {manager}. Update runs {command}.")
@@ -1453,10 +1453,10 @@ pub static EN: Strings = Strings {
     agent_updated: |agent, env| format!("{agent} on {env} is up to date"),
     agent_update_failed: |agent, env| format!("Updating {agent} on {env} failed"),
     app_update: |version| format!("scriptschnell-term {version} is available"),
-    app_update_body: "Update downloads it, checks it against the signed release manifest and replaces the installed files.",
+    app_update_body: "Downloads the release, verifies it against the signed manifest, and replaces the installed files.",
     app_release_body: |url| {
         format!(
-            "Your package manager or cargo installed this copy, so update it there, or download the release from {url}."
+            "This copy was installed via a package manager or cargo. Update it there, or download the release from {url}."
         )
     },
     app_updated: |version| format!("scriptschnell-term {version} is installed"),
@@ -1480,14 +1480,14 @@ pub static EN: Strings = Strings {
     section_shells: "Shells",
     default_shell: "Default shell",
     default_shell_system: "System default (%COMSPEC%)",
-    shells_note: "New terminals start the default shell. Open terminals keep theirs.",
-    shells_listed: "Shells the new panel list offers after New shell",
+    shells_note: "New terminals use the default shell. Open terminals are not affected.",
+    shells_listed: "Shells shown in the New panel menu after New shell",
     git_bash_found: |path| {
         format!(
-            "Agents find Git Bash at {path}: every terminal gets it as CLAUDE_CODE_GIT_BASH_PATH, which Claude Code needs."
+            "Git Bash found at {path}. Every terminal sets CLAUDE_CODE_GIT_BASH_PATH to this path for Claude Code."
         )
     },
-    git_bash_missing: "Git Bash is not installed. Claude Code needs it on Windows: install Git for Windows and restart the app.",
+    git_bash_missing: "Git Bash is not installed. Claude Code requires it on Windows; install Git for Windows and restart the app.",
     new_shell_named: |shell| format!("New shell: {shell}"),
     bundled_font: "Bundled (Liberation Mono)",
     font_preview: "Preview",
@@ -1499,20 +1499,20 @@ pub static EN: Strings = Strings {
     size: "Terminal font size",
     system: "System",
     scheme_in_use: "In use",
-    follows_desktop: |name| format!("Follows the desktop (currently {name})"),
+    follows_desktop: |name| format!("Follows system theme (currently {name})"),
     system_language: |name| format!("System ({name})"),
     dark: "dark",
     light: "light",
     from_extension: |name| format!("extension {name}"),
-    from_user: "Changed by you, in settings.json",
+    from_user: "Customized in settings.json",
     bindings: "Bindings",
     binding_list: "Binding list",
-    bindings_hint: "Click a binding and press its new key. Key sequences and removed bindings go in \"keybindings\" in settings.json.",
-    binding_taken: |keys, action| format!("{keys} was bound to {action}, which has no key now"),
+    bindings_hint: "Click a binding and press a new shortcut. Key sequences and unbound actions can be set under \"keybindings\" in settings.json.",
+    binding_taken: |keys, action| format!("{keys} was reassigned from {action} (now unbound)"),
     reset_binding: "Reset",
     binding_unset: "Unbound",
     reset_binding_for: |action| format!("Reset the keys of {action}"),
-    press_keys: "Press the new key, Escape cancels",
+    press_keys: "Press a new shortcut (Esc to cancel)",
     recording_was: |title, keys| format!("{title} (currently {keys})"),
     preset_description: |preset| preset.description,
     off: "Off",
@@ -1533,9 +1533,9 @@ pub static EN: Strings = Strings {
     settings_no_match: |query| format!("No setting matches \"{query}\". Esc clears the search."),
     settings_keywords: keywords_en,
     loaded_from: |dir| format!("Loaded from {dir}"),
-    reload_note: "Reload after editing extension files. Turning an extension on or off reloads them all.",
+    reload_note: "Reload after editing extension files. Enabling or disabling an extension reloads all extensions.",
     needs_permissions: |list| format!("Needs permission: {list}"),
-    permissions_switch_note: "Each switch turns one permission on or off.",
+    permissions_switch_note: "Toggle individual permissions below.",
     grant: "Grant all",
     revoke: "Revoke all",
     grant_for: |name| format!("Grant {name} its permissions"),
@@ -1543,20 +1543,20 @@ pub static EN: Strings = Strings {
     permission_for: |name, permission| format!("the {permission} permission for {name}"),
     permission_sensitive: |name| format!("{name} · sensitive"),
     permission_note: |name| match name {
-        "terminal" => "Opens terminals and types into them",
+        "terminal" => "Opens terminals and sends input to them",
         "browser" => "Opens browser panels",
-        "worktree" => "Switches the shown worktree",
+        "worktree" => "Switches the active worktree",
         "copy" => "Copies files into devcontainers, VMs and remote machines",
         "run" => "Runs commands in a worktree's environment",
         "trust" => "Adds certificates to an environment's trust store",
-        "sandbox" => "Changes what sandboxes may reach and see",
+        "sandbox" => "Changes sandbox network and file access",
         "secrets" => "Reads and stores secrets in this machine's keyring",
-        "guards" => "Holds back sandbox requests, such as pushes, until you allow them",
+        "guards" => "Intercepts sandbox requests, such as pushes, until you approve them",
         "network" => "Sends HTTP requests and downloads blocklists",
-        "agents" => "Gives agents tools and adds coding agents",
-        "environments" => "Adds locations whose commands run through a program on this machine",
-        "storage" => "Keeps its own data for the whole app",
-        "project_storage" => "Keeps its own data per project",
+        "agents" => "Registers agent tools and custom coding agents",
+        "environments" => "Adds custom environments whose commands run through a local program",
+        "storage" => "Stores extension data globally across the app",
+        "project_storage" => "Stores extension data per project",
         "filesystem" => "Reads and writes files outside its own folder",
         "process" => "Starts programs on this machine",
         "env" => "Reads this machine's environment variables",
@@ -1564,22 +1564,22 @@ pub static EN: Strings = Strings {
     },
     builtin_page: "Built-in rules",
     builtin_subtitle: "always on",
-    builtin_description: "Built-in rules for what sandboxes may do outside. They apply with or without extensions.",
+    builtin_description: "Built-in rules controlling external actions from sandboxes. They apply even without extensions.",
     extension_page: "Extension page",
-    no_description: "Its manifest has no description.",
+    no_description: "No description provided.",
     extension_enabled: "Enabled",
     permissions_heading: "Permissions",
-    no_permissions: "Needs no permissions.",
+    no_permissions: "No permissions required.",
     settings_heading: "Settings",
-    ext_guards_heading: "Requests it holds back",
+    ext_guards_heading: "Guarded requests",
     list_empty: "No entries",
     list_new_entry_for: |title| format!("New entry for {title}"),
     list_add_to: |title| format!("Add to {title}"),
     list_remove: "Remove",
     list_remove_from: |entry, title| format!("Remove {entry} from {title}"),
-    list_duplicate: |entry| format!("{entry} is in the list already"),
-    guards_heading: "What sandboxes may do outside",
-    guards_note: "Ask shows each request first. Requests nobody answers are blocked after two minutes.",
+    list_duplicate: |entry| format!("{entry} is already in the list"),
+    guards_heading: "External sandbox actions",
+    guards_note: "Ask prompts you before allowing each request. Unanswered requests are blocked after two minutes.",
     guard_ask: "Ask",
     guard_block: "Block",
     guard_allow: "Allow",
@@ -1588,19 +1588,19 @@ pub static EN: Strings = Strings {
     every_host: "every host",
     approval_dialog: "Sandbox request",
     approval_question: |title| format!("A sandbox wants to {title}"),
-    approval_note: "The answer holds for this host for one minute.",
+    approval_note: "Your choice applies to this host for one minute.",
     approval_project: |name| format!("From project {name}"),
     approval_always: "Always allow in this project",
     always_heading: "Always allowed",
-    always_note: "What a project allowed for good in the dialogs: sandbox requests, and agents creating worktrees and starting agents.",
+    always_note: "Actions permanently allowed for a project in approval dialogs, including sandbox requests and agents creating worktrees or starting other agents.",
     always_entry: |title, host| format!("{title}: {host}"),
     always_remove: "Remove",
-    change_requests_heading: "What sandboxes may do to pull and merge requests",
-    change_requests_note: "These modes apply to every forge extension, such as github and gitlab. A mode picked on an extension's page wins over them.",
+    change_requests_heading: "Pull and merge request permissions",
+    change_requests_note: "These defaults apply to all forge extensions, such as GitHub and GitLab. Settings on an individual extension's page take precedence.",
     change_request_create: "Open a pull or merge request",
-    change_request_comment: "Comment on or review one",
-    change_request_merge: "Merge or complete one",
-    change_request_subtitle: |_| "Applies to every forge extension".to_owned(),
+    change_request_comment: "Comment on or review a pull or merge request",
+    change_request_merge: "Merge or complete a pull or merge request",
+    change_request_subtitle: |_| "Applies to all forge extensions".to_owned(),
     approval_sends: |detail| format!("Sends: {detail}"),
     keyring_request: |action, label| match action {
         "read" => format!("read \"{label}\""),
@@ -1608,12 +1608,12 @@ pub static EN: Strings = Strings {
         "delete" => format!("delete \"{label}\""),
         _ => format!("create a secret in \"{label}\""),
     },
-    keyring_note: "The answer holds for this secret for one minute.",
-    keyring_scope: "the keyring of this session",
+    keyring_note: "Your choice applies to this secret for one minute.",
+    keyring_scope: "this session's keyring",
     agent_settings_request: |agent, file| format!("{agent} changes {file}:"),
     agent_settings_removed: |key| format!("{key}: removed"),
     agent_settings_more: |n| format!("and {n} more keys"),
-    agent_settings_note: "Until you allow it, the change stays in the sandbox's copy. The answer holds for this file for one minute.",
+    agent_settings_note: "Until allowed, the change stays inside the sandbox. Your choice applies to this file for one minute.",
     agent_settings_scope: "settings agents change in sandboxes",
     approval_allow: "Allow",
     approval_block: "Block",
@@ -1621,17 +1621,17 @@ pub static EN: Strings = Strings {
     control_install: |name| format!("An agent wants to install the extension {name}"),
     control_change: |name| format!("An agent wants to change the extension {name}"),
     control_source: |place, machine, kind| {
-        format!("From a terminal of {place} on {machine} ({kind})")
+        format!("From a terminal in {place} on {machine} ({kind})")
     },
     control_file_added: |path, lines| format!("{path}: new, {lines} lines"),
     control_file_changed: |path, lines| format!("{path}: replaced, now {lines} lines"),
     control_file_removed: |path| format!("{path}: removed"),
     control_more_files: |n| format!("and {n} more files"),
     control_permissions: |list| {
-        format!("Its manifest asks for: {list}. You grant them on the Extensions page.")
+        format!("Requested permissions: {list}. You can grant them on the Extensions page.")
     },
-    control_no_permissions: "Its manifest asks for no permissions.",
-    control_shipped: "It ships with the app. Files you let it change stop being updated.",
+    control_no_permissions: "No permissions requested.",
+    control_shipped: "This is a built-in extension. Modified files will no longer be updated automatically.",
     control_note: "Extensions run in the app, outside every sandbox. Allow only code you have read.",
     control_deny: "Deny",
     control_applied: |name| format!("An agent changed the extension {name}"),
@@ -1642,7 +1642,7 @@ pub static EN: Strings = Strings {
     control_setting_set: |path, before, after| format!("{path}: {before} → {after}"),
     control_setting_add: |path, items| format!("{path}: add {items}"),
     control_setting_remove: |path, items| format!("{path}: remove {items}"),
-    control_settings_note: "Allow writes settings.json now. You can undo it in the settings (Ctrl+,).",
+    control_settings_note: "Allowing writes settings.json immediately. You can revert this in Settings (Ctrl+,).",
     control_settings_applied: "An agent changed the settings",
     control_launch_dialog: "Start agents",
     control_new_worktree: |branch, project| {
@@ -1656,7 +1656,7 @@ pub static EN: Strings = Strings {
     control_worktree_from_main: "starting at the main worktree's revision",
     control_start_agent: |command| format!("and start {command} there"),
     control_type_prompt: |prompt| format!("then type its first prompt: {prompt}"),
-    control_launch_note: "The agents start in new terminals of that worktree, in its host, sandbox or devcontainer.",
+    control_launch_note: "Agents start in new terminals for that worktree, using its configured environment (host, sandbox, or devcontainer).",
     control_allow_session: "Allow in this session",
     always_launches: "Create worktrees and start agents",
     reload_extensions: "Reload extensions",
@@ -1669,14 +1669,14 @@ pub static EN: Strings = Strings {
     agent_button: |action, agent| format!("{action} {agent} integration"),
     agent_list: "Agent list",
     agents_note: [
-        "Installed agents report when they work, finish or wait for",
-        "input or approval; the sidebar marks their worktree.",
+        "Installed agents report when they are working, finished, or waiting",
+        "for input or approval; the sidebar highlights their worktree.",
     ],
     agents_skill: [
-        "They also get two skills that point them to the settings, extension",
-        "and sandbox docs.",
+        "They also receive two skills covering the settings, extension,",
+        "and sandbox documentation.",
     ],
-    hooks_run: "Hooks report what an agent is doing through a small script the app installs and keeps current.",
+    hooks_run: "Hooks report agent activity via a small script that scriptschnell-term installs and keeps up to date.",
     check_agents: "Check agents again",
     agents_update_all: |count| format!("Update all ({count})"),
     agents_installed: "Agent integrations",
@@ -1684,17 +1684,17 @@ pub static EN: Strings = Strings {
         format!("{count} agents have outdated hooks. Updating installs the current hook script.")
     },
     agent_control: "Control socket",
-    agent_control_on: "On wherever agents run, sandboxes included",
-    agent_control_local: "On for this machine and its sandboxes",
-    agent_control_host: "On, for terminals outside sandboxes",
+    agent_control_on: "Enabled everywhere, including sandboxes",
+    agent_control_local: "Enabled for this machine and its sandboxes",
+    agent_control_host: "Enabled outside sandboxes only",
     agent_control_off: "Off",
-    agent_control_note: "Agents ask through it to change extensions and settings or start worktrees; you allow each request.",
+    agent_control_note: "Lets agents request changes to extensions, settings, or worktrees. Each request requires your approval.",
     checking: "Checking…",
     not_installed: "Not installed",
     on_outdated: "On, hooks outdated",
     note_trust_hooks: "Codex asks to trust new hooks before it runs them.",
     note_enable_hooks: "Turn on hooks in ~/.codex/config.toml: [features] hooks = true",
-    note_next_session: "Takes effect in sessions started from now on.",
+    note_next_session: "Takes effect in new sessions.",
     language: "Language",
 
     command_palette: "Command palette",
@@ -1702,10 +1702,10 @@ pub static EN: Strings = Strings {
     maximize_window: "Maximize",
     restore_window: "Restore",
     close_window: "Close window",
-    palette_keys_hint: "↑↓ choose · Enter runs · Esc closes",
-    palette_areas_hint: |keys| format!("{keys} moves between areas"),
-    palette_empty_keys_hint: "Esc closes",
-    palette_input_keys_hint: "Enter confirms · Esc goes back",
+    palette_keys_hint: "↑↓ navigate · Enter run · Esc close",
+    palette_areas_hint: |keys| format!("{keys} switch areas"),
+    palette_empty_keys_hint: "Esc close",
+    palette_input_keys_hint: "Enter confirm · Esc back",
     palette_create: "Create",
     palette_clone: "Clone",
     palette_more: |from, to, total, below| {
@@ -1721,9 +1721,9 @@ pub static EN: Strings = Strings {
     close_panel_named: |pane, title| format!("Close pane {pane}: {title}"),
     move_pane: |pane| format!("Drag to move pane {pane}"),
     pane_menu: |pane| format!("Pane {pane} menu"),
-    drag_tab_hint: "Edge splits, between tabs reorders. Esc cancels",
-    drag_shown_tab_hint: "Between tabs reorders. Esc cancels",
-    drag_pane_hint: "Edge splits, middle swaps, tab or + moves. Esc cancels",
+    drag_tab_hint: "Drop on an edge to split, or between tabs to reorder (Esc to cancel)",
+    drag_shown_tab_hint: "Drop between tabs to reorder (Esc to cancel)",
+    drag_pane_hint: "Drop on an edge to split, center to swap, or tab/+ to move (Esc to cancel)",
     zone_left: "Split left",
     zone_right: "Split right",
     zone_top: "Split above",
@@ -1744,9 +1744,9 @@ pub static EN: Strings = Strings {
     shrink_pane: "Shrink pane",
     next_tab: "Next tab",
     previous_tab: "Previous tab",
-    toggle_sidebar: "Hide or show the sidebar",
-    hide_sidebar: "Hide the sidebar",
-    show_sidebar: "Show the sidebar",
+    toggle_sidebar: "Toggle sidebar",
+    hide_sidebar: "Hide sidebar",
+    show_sidebar: "Show sidebar",
     tab_n: |n| format!("Tab {n}"),
     focus_pane_n: |n| format!("Focus pane {n}"),
     send_text: |text| format!("Send {text}"),
@@ -1776,14 +1776,14 @@ pub static EN: Strings = Strings {
     input: "input",
     approve: "approve",
     busy_description: "An agent is working",
-    done_description: "An agent finished and waits for the next prompt",
+    done_description: "An agent finished and is waiting for the next prompt",
     input_description: "Waiting for input",
-    approve_description: "An agent waits for permission",
+    approve_description: "An agent is waiting for approval",
 
     new_shell: "New shell",
     start_agent: |agent| format!("Start {agent}"),
     new_panel: "New panel",
-    new_panel_tip: "New panel. Drop a pane here to give it a tab of its own",
+    new_panel_tip: "New panel. Drop a pane here to open it in a new tab",
     browse_files: "Browse files",
     files: "Files",
     files_count: |n| {
@@ -1803,42 +1803,42 @@ pub static EN: Strings = Strings {
     files_truncated: "first 16 MiB",
     files_loading: "Loading…",
     files_empty: "No files",
-    files_pick: "Pick a file on the left. Enter opens it.",
+    files_pick: "Select a file on the left and press Enter to open it.",
     files_binary: |size| format!("Binary file, {size} bytes"),
     files_unreadable: |error| format!("Could not read the file: {error}"),
     files_unrendered: |error| format!("Could not render the file: {error}"),
-    files_mermaid_unsupported: |reason| format!("Mermaid diagram the viewer cannot draw: {reason}"),
+    files_mermaid_unsupported: |reason| format!("Unsupported Mermaid diagram: {reason}"),
     files_pixels: |width, height| format!("{width} × {height} px"),
     files_page: |page, pages| format!("page {page} of {pages}"),
-    files_show_source: "press v for the source",
-    files_show_rendered: "press v for the rendered view",
+    files_show_source: "press v for source",
+    files_show_rendered: "press v for rendered view",
     explore_history: "History",
     explore_list_commits: "Commits",
     explore_list_files: "Files",
     explore_review: "Review",
     explore_open_history: "Explore history",
-    status_open_history: "Show the history of this branch",
-    status_open_files: "Browse the files of this worktree",
-    status_open_machines: "Open the machine settings",
+    status_open_history: "Show branch history",
+    status_open_files: "Browse worktree files",
+    status_open_machines: "Open machine settings",
     explore_open_review: "Review changes",
     explore_review_against: "Review changes against a branch",
-    explore_pick: "Pick an entry on the left. v switches between history, review and the change request.",
+    explore_pick: "Select an entry on the left. Press v to switch between history, review, and change request.",
     explore_no_commits: "No commits yet",
-    explore_sideways: "← → for the rest of long lines",
+    explore_sideways: "← → to scroll long lines",
     explore_no_changes: |base| format!("No changes against {base}."),
-    explore_no_base: "No base branch found. Press b to name one.",
+    explore_no_base: "No base branch found. Press b to choose one.",
     explore_no_changes_hint: |base| {
         format!(
-            "Commits and uncommitted edits that are not on {base} show up here. Press b to review against another branch."
+            "Commits and uncommitted changes not on {base} appear here. Press b to compare against another branch."
         )
     },
-    explore_failed: |error| format!("Could not read the history: {error}"),
+    explore_failed: |error| format!("Could not read history: {error}"),
     explore_unrelated: |base| {
         format!(
-            "This branch shares no commits with {base}, so there is nothing to compare. Press b to review against another branch."
+            "This branch shares no commit history with {base}, so there is nothing to compare. Press b to compare against another branch."
         )
     },
-    explore_review_failed: |error| format!("Could not compare the changes: {error}"),
+    explore_review_failed: |error| format!("Could not compare changes: {error}"),
     explore_against: |base| format!("against {base}"),
     explore_from: |commit| format!("from {commit}"),
     explore_commits: |n| {
@@ -1857,31 +1857,31 @@ pub static EN: Strings = Strings {
     stop_exposing_port: |port| format!("Stop exposing port {port}"),
     port_exposed: |port, host| format!("Port {port} is open on this machine at 127.0.0.1:{host}"),
     port_expose_failed: |port, error| format!("Could not expose port {port}: {error}"),
-    debug_browser_failed: "The debug browser did not start",
+    debug_browser_failed: "Debug browser failed to start",
     debug_browser_retry: "Try again",
     debug_browser_alt: "Page in the debug browser",
     monitor: "Monitor",
-    monitor_note: "This machine, measured every second",
+    monitor_note: "This machine, updated every second",
     monitor_open: "Monitor machine",
     monitor_waiting: "Measuring…",
-    monitor_no_proc: "This machine has no /proc. The monitor reads Linux's /proc files.",
-    monitor_failed: |error| format!("Could not read the machine's load: {error}"),
+    monitor_no_proc: "System monitor requires Linux /proc, which is not available on this machine.",
+    monitor_failed: |error| format!("Could not read system metrics: {error}"),
     monitor_cpu: "CPU",
     monitor_memory: "Memory",
     monitor_swap: "Swap",
     monitor_network: "Network",
     monitor_disk: "Disk",
     monitor_cpu_history: "CPU history",
-    monitor_net_history: "Net history",
+    monitor_net_history: "Network history",
     monitor_net_down: "↓ in",
     monitor_net_up: "↑ out",
     monitor_peak: "peak",
     monitor_now: "now",
-    monitor_collecting: "Collecting history, one sample a second…",
+    monitor_collecting: "Collecting history (one sample per second)…",
     copy_command: "Copy install command",
     copy_command_hint: "Copies the install command. Paste it into a terminal.",
-    copy_install_for: |agent| format!("Copy the command that installs {agent}"),
-    command_copied: "Copied the command",
+    copy_install_for: |agent| format!("Copy install command for {agent}"),
+    command_copied: "Command copied",
     agent_install_with: |command| format!("Not installed · {command}"),
     agent_turn_on: "Turn on",
     tab_with_panes: |title, panes| format!("{title} · {panes} panes"),
@@ -1901,7 +1901,7 @@ pub static EN: Strings = Strings {
     palette_group_layout: "Tabs and panes",
     palette_group_app: "App",
     palette_group_worktrees: "Worktrees",
-    palette_group_runtime: "Where it runs",
+    palette_group_runtime: "Runtime",
     palette_group_extensions: "Extensions",
     tasks_col_state: "State",
     tasks_col_kind: "Kind",
@@ -1918,7 +1918,7 @@ pub static EN: Strings = Strings {
     monitor_tasks: "tasks",
     monitor_running: "running",
     tasks: "Tasks",
-    tasks_note: "Panels, extension tasks and threads of this app",
+    tasks_note: "Open panels, extension tasks, and app threads",
     tasks_refresh: "Reload",
     tasks_open: "Show tasks",
     tasks_summary: |s| {
@@ -1946,15 +1946,15 @@ pub static EN: Strings = Strings {
     },
     tasks_panels: "Panels",
     tasks_extension: "Extension tasks",
-    tasks_threads: "Threads of this app",
+    tasks_threads: "App threads",
     tasks_none: "None.",
-    tasks_no_threads: "This system has no /proc/self/task to list threads from.",
+    tasks_no_threads: "Thread listing requires /proc/self/task, which is not available on this system.",
     tasks_idle_threads: |count| match count {
         1 => "1 idle thread".to_owned(),
         _ => format!("{count} idle threads"),
     },
-    tasks_shown_worktree: "shown",
-    tasks_shown: "shown",
+    tasks_shown_worktree: "active",
+    tasks_shown: "visible",
     tasks_hidden: "in background",
     tasks_frozen: "frozen",
     tasks_thawing: "resuming",
@@ -1981,10 +1981,10 @@ pub static EN: Strings = Strings {
         use crate::term::Attention;
         match state {
             Attention::None => "",
-            Attention::Busy => "works",
-            Attention::Done => "waits for a prompt",
-            Attention::Input => "asks something",
-            Attention::Permission => "waits for approval",
+            Attention::Busy => "working",
+            Attention::Done => "waiting for a prompt",
+            Attention::Input => "waiting for input",
+            Attention::Permission => "waiting for approval",
         }
     },
     tasks_place: |tab, pane| match pane {
@@ -1997,29 +1997,29 @@ pub static EN: Strings = Strings {
     tasks_every: |every| format!("every {every}"),
     tasks_last: |since| format!("last run {since} ago"),
     tasks_next: |left| format!("next in {left}"),
-    tasks_never: "never ran",
+    tasks_never: "never run",
     pane_n: |n| format!("Pane {n}"),
     press: |keys| format!("Press {keys}"),
     open_a_project: "Open a project",
     open_the_palette: "Open the command palette",
     then_open_project: |first| format!("{first} and choose Open project."),
     no_panels: "No panels",
-    no_panels_message: |how| format!("This worktree has no panels. {how} for a shell."),
-    use_new_shell: "Use the + button after the tabs",
+    no_panels_message: |how| format!("This worktree has no panels. {how} to open a shell."),
+    use_new_shell: "Click the + button next to the tabs",
     no_project: "No project selected",
-    select_project: "Select a project in the rail.",
+    select_project: "Select a project in the sidebar.",
     status_bar: "Status bar",
 
     prompt_project: "Path, host:/path, ssh://, tailscale:// or a repository URL",
     prompt_clone_folder: "Folder to clone into",
-    prompt_review_base: "Base branch or revision; empty uses the project's reference branch",
+    prompt_review_base: "Base branch or revision (leave empty for project default)",
     clone_from: |url| format!("Clone {url} to"),
     clone_here: "This machine",
-    clone_here_devcontainer: "This machine, in its devcontainer",
+    clone_here_devcontainer: "This machine (devcontainer)",
     clone_in_vm: |name| format!("VM {name} on this machine"),
     clone_on: |address| format!("Remote machine {address}"),
-    clone_devcontainer_on: |address| format!("Remote machine {address}, in its devcontainer"),
-    clone_vm_on: |address| format!("A VM on remote machine {address}"),
+    clone_devcontainer_on: |address| format!("Remote machine {address} (devcontainer)"),
+    clone_vm_on: |address| format!("VM on remote machine {address}"),
     clone_vm_name: "VM name",
     prompt_branch: "Branch name",
     prompt_worktree: "Worktree name",
@@ -2035,7 +2035,7 @@ pub static EN: Strings = Strings {
     forget_project: |name| format!("Forget project {name}"),
     open_temporary_ask: "Open project temporarily…",
     global_session_ask: "New global session…",
-    prompt_global_session: "Folder, host: or ssh://host/path; empty is this machine's home",
+    prompt_global_session: "Folder, host:, or ssh://host/path (leave empty for home directory)",
     global_session: "Global session",
     temporary: "temporary",
     keep_session: |name| format!("Keep session {name}"),
@@ -2048,7 +2048,7 @@ pub static EN: Strings = Strings {
     agents_earlier: |count| format!("Earlier sessions ({count})"),
     agents_none: "No agent sessions yet",
     agents_none_finished: "No finished agents",
-    agents_none_hint: "Agents you start in a worktree show up here, with what they wait for.",
+    agents_none_hint: "Agents started in a worktree appear here along with their current status.",
     agents_start: "Start an agent…",
     change_open: "open",
     change_merged: "merged",
@@ -2057,7 +2057,7 @@ pub static EN: Strings = Strings {
     forge_signed_in_as: |user| format!("Signed in as {user}"),
     forge_signed_in: "Signed in",
     forge_signed_out: "Not signed in",
-    forge_signing_in: "Checking the token…",
+    forge_signing_in: "Verifying token…",
     forge_from_env: |var| format!("Token from {var}"),
     forge_failed: |error| format!("Sign-in failed: {error}"),
     forge_create_token: "Create token",
@@ -2069,20 +2069,18 @@ pub static EN: Strings = Strings {
     forge_sign_out: "Sign out",
     forge_sign_out_for: |host| format!("Sign out of {host}"),
     forge_token_missing: "Paste a token first",
-    extension_request_failed: |error| {
-        format!("scriptschnell-term failed at work an extension started, and carried on: {error}")
-    },
+    extension_request_failed: |error| format!("An extension task failed: {error}"),
     forge_new_account_for: |forge| format!("New {forge} account"),
     forge_add_account: "Add account",
     forge_add_account_open: "+ Other host…",
     forge_other_host: "Add an account on another host…",
-    forge_open_add_for: |forge| format!("Open the form for a new {forge} account"),
+    forge_open_add_for: |forge| format!("Add another {forge} account"),
     forge_sign_in_open: "Sign in…",
-    forge_open_sign_in_for: |host| format!("Open the sign-in for {host}"),
+    forge_open_sign_in_for: |host| format!("Open sign-in for {host}"),
     forge_add_account_for: |forge| format!("Add {forge} account"),
     forge_remove_account_for: |account| format!("Remove account {account}"),
     forge_not_an_account: |entry| {
-        format!("{entry} is not a host or a host and a path, such as example.com/team")
+        format!("{entry} must be a host or host/path, such as example.com/team")
     },
     toast_done: "Done",
     toast_failed: "Failed",
@@ -2107,7 +2105,7 @@ pub static EN: Strings = Strings {
     toast_saved: "Saved",
     toast_image_ready: |name| format!("The {name} image is ready"),
     toast_image_failed: |name, error| format!("The {name} image failed: {error}"),
-    toast_disk_deleted: |name| format!("Deleted the disk of {name}"),
+    toast_disk_deleted: |name| format!("Deleted disk for {name}"),
     toast_agent_installed: |agent, env| format!("Installed the {agent} integration on {env}"),
     toast_agent_removed: |agent, env| format!("Removed the {agent} integration from {env}"),
     toast_agent_failed: |agent, env, error| format!("{agent} on {env}: {error}"),
@@ -2115,16 +2113,16 @@ pub static EN: Strings = Strings {
     toast_path_added: |path| format!("Added {path}"),
     toast_project_base: |base| match base {
         Some(base) => format!("Reviews compare against {base}"),
-        None => "Reviews find the base branch again".to_owned(),
+        None => "Reviews will auto-detect the base branch".to_owned(),
     },
     section_accounts: "Accounts",
     accounts_forges: "Forges",
     forge_used_by: |forge, project| format!("{forge} · used by {project}"),
-    accounts_forges_note: "The Agents tab asks these forges whether the branches of finished agents have change requests and whether they are merged. Each account has its own token, kept in the system's secret storage. The extension may send requests to an account's host and its subdomains.",
-    accounts_no_forges: "No forge extension is on. Turn on GitHub, GitLab, Forgejo, Gitea, Bitbucket or Azure DevOps on the Extensions page.",
-    accounts_example: |example| format!("Such as {example}"),
+    accounts_forges_note: "The Agents tab checks these forges to see if finished agent branches have change requests and whether they are merged. Each account stores its token in the system keyring. The extension can send requests to each account's host and subdomains.",
+    accounts_no_forges: "No forge extension is enabled. Enable GitHub, GitLab, Forgejo, Gitea, Bitbucket, or Azure DevOps on the Extensions page.",
+    accounts_example: |example| format!("e.g. {example}"),
     accounts_logins: "Registry logins",
-    accounts_logins_note: "These extensions pass your logins into sandboxes with fake tokens. The proxy puts the real one into requests to the host it belongs to. Change a login in its file or variable; a sandbox picks it up when it starts.",
+    accounts_logins_note: "These extensions pass placeholder tokens into sandboxes, and the proxy substitutes real credentials for matching hosts. Update credentials in their source file or environment variable; new sandboxes pick them up on start.",
     logins_file: |path| format!("Reads file {path}"),
     logins_variable: |name| format!("Reads variable {name}"),
     logins_other: |source| format!("Reads {source}"),
@@ -2132,26 +2130,25 @@ pub static EN: Strings = Strings {
     logins_extension: "Settings ›",
     logins_for: |hosts| format!("Logins for {hosts}"),
     logins_none: "No logins found",
-    logins_no_sources: "No turned-on extension passes registry logins into sandboxes.",
-    logins_off: "Off. Turn it on on the Extensions page.",
+    logins_no_sources: "No enabled extension passes registry logins into sandboxes.",
+    logins_off: "Disabled. Enable it on the Extensions page.",
     open_accounts: "Open Accounts",
-    ext_accounts_moved: "Its accounts and sign-ins are on the Accounts page.",
+    ext_accounts_moved: "Manage accounts and sign-ins on the Accounts page.",
     ext_hosts_heading: "Hosts",
-    ext_hosts_note: "Its requests and blocklist downloads reach only these hosts, the hosts of its accounts and the hosts its settings list.",
-    ext_hosts_none: "No hosts of its own.",
+    ext_hosts_note: "Network requests and blocklist downloads are limited to these hosts, configured account hosts, and hosts listed in settings.",
+    ext_hosts_none: "No additional hosts.",
     not_a_host: |entry| format!("{entry} is not a host name or *.domain"),
     not_a_url: |entry| format!("{entry} is not an https:// URL"),
     discussion_open: |title| format!("Discussion of {title}"),
-    discussion_loading: "Loading the discussion…",
+    discussion_loading: "Loading discussion…",
     discussion_waiting: "Waiting for the repository and its change request…",
     discussion_no_change: "This branch has no change request.",
-    discussion_unsupported: "No turned-on extension shows change requests for this repository's forge. Settings > Extensions lists the forge extensions (GitHub, GitLab, Forgejo, Gitea, Bitbucket, Azure DevOps); turn on the one for its host, then sign in under Accounts.",
-    discussion_failed: |error| format!("The forge did not answer: {error}"),
+    discussion_unsupported: "No enabled extension supports change requests for this repository's forge. Enable the matching forge extension under Settings › Extensions (GitHub, GitLab, Forgejo, Gitea, Bitbucket, Azure DevOps), then sign in under Accounts.",
+    discussion_failed: |error| format!("Could not reach the forge: {error}"),
     git_dir_replaced: |path| {
         format!(
-            "{path}/.git no longer leads to the repository the project was added with. \
-             A sandbox may have replaced it. The app ignores it, but git in host \
-             terminals reads it."
+            "{path}/.git no longer points to the original repository (a sandbox may have replaced it). \
+             scriptschnell-term ignores it, but git in host terminals will still read it."
         )
     },
     discussion_by: |author| format!("by {author}"),
@@ -2178,29 +2175,29 @@ pub static EN: Strings = Strings {
     },
     discussion_changed: |old, since| {
         if since.is_empty() {
-            format!("Line {old} was changed; this is what replaced it.")
+            format!("Line {old} was modified; showing the updated line.")
         } else {
-            format!("Line {old} was changed since `{since}`; this is what replaced it.")
+            format!("Line {old} was modified since `{since}`; showing the updated line.")
         }
     },
     discussion_found: |old| {
-        format!("Found by its text, was line {old}. Its commit is not in this repository.")
+        format!("Matched by content (formerly line {old}); its original commit is not in this repository.")
     },
     discussion_file_gone: |since| {
         if since.is_empty() {
-            "The file is gone.".to_owned()
+            "File was deleted.".to_owned()
         } else {
-            format!("The file is gone since `{since}`.")
+            format!("File deleted since `{since}`.")
         }
     },
     discussion_line_gone: |old, since| {
         if since.is_empty() {
-            format!("Line {old} is gone.")
+            format!("Line {old} was removed.")
         } else {
-            format!("Line {old} is gone since `{since}`.")
+            format!("Line {old} removed since `{since}`.")
         }
     },
-    discussion_removed: |old| format!("On removed line {old} of the base."),
+    discussion_removed: |old| format!("On removed base line {old}."),
     discussion_resolved: "resolved",
     discussion_outdated: "outdated on the forge",
     explore_change: "Change request",
@@ -2229,8 +2226,8 @@ pub static EN: Strings = Strings {
     change_pipeline: "Pipeline",
     change_sections: "Change request sections",
     change_reload: "Reload",
-    change_open_extensions: "Open the extensions settings",
-    change_open_on_forge: "Open on the forge",
+    change_open_extensions: "Open extension settings",
+    change_open_on_forge: "Open on forge",
     change_open_link: "Open",
     change_open_check: |name| format!("Open {name}"),
     change_description: "Description",
@@ -2239,7 +2236,7 @@ pub static EN: Strings = Strings {
     search_worktrees: "Search worktrees",
     focus_tabs: "Move focus: tab strip, status bar, sidebar, panel",
     focus_back: "Move focus back: sidebar, status bar, tab strip, panel",
-    search_no_match: "No worktree matches",
+    search_no_match: "No matching worktree",
     title_worktrees_by_branch: "Name worktrees by branch",
     title_worktrees_by_agent: "Name worktrees by last agent session",
     use_system_title_bar: "Use the system's title bar",
@@ -2255,7 +2252,7 @@ pub static EN: Strings = Strings {
     cpu_status_hint: |status, next| format!("{status}, click to switch to {next}"),
     cpu_status_tip: |mode, next| format!("CPU mode: {mode}. Click for {next}."),
     cpu_heading: "CPU",
-    cpu_note: "How much CPU the app's terminals may use together on a machine, so it stays usable while agents build. Agents in hidden terminals also get a lower priority. A change reaches terminals that already run. The cpu_mode setting in settings.json changes what balanced and quiet do.",
+    cpu_note: "Limits total CPU usage across terminals on a machine so it stays responsive during builds. Agents in background terminals also run at lower priority. Changes apply immediately to running terminals. Customize balanced and quiet limits via cpu_mode in settings.json.",
     cpu_local: "This machine, its sandboxes, devcontainers and VMs",
     cpu_remote: "Other machines: SSH hosts and remote machines",
     jj_off: "Stop using jj for jj repositories",
@@ -2270,8 +2267,8 @@ pub static EN: Strings = Strings {
     creates_next_to: |repo| {
         format!("Creates {repo}-<name> next to {repo}. Tab moves to the branch field.")
     },
-    no_matching_command: "No command or worktree matches",
-    no_matching_panel: "No panel matches",
+    no_matching_command: "No matching command or worktree",
+    no_matching_panel: "No matching panel",
 
     state_not_loaded: |error| format!("state not loaded: {error}"),
     settings_not_loaded: |error| format!("settings not loaded: {error}"),
@@ -2280,35 +2277,34 @@ pub static EN: Strings = Strings {
     not_a_path: |input| format!("not a path: {input}"),
     repository_not_loaded: "repository not loaded yet",
     bad_worktree_name: |name| format!("bad worktree name {name:?}"),
-    bad_branch_name: "Branch names take no spaces or ~ ^ : ? * [ \\ ..",
-    bad_folder_name: "A folder name: no / or \\, not . or ..",
+    bad_branch_name: "Branch names cannot contain spaces or ~ ^ : ? * [ \\ ..",
+    bad_folder_name: "Folder names cannot contain / or \\, and cannot be . or ..",
     max_panes: |max| format!("a tab shows at most {max} panes"),
     blocklist_failed: |id, error| format!("blocklist {id}: download failed: {error}"),
     warning: |message| format!("warning: {message}"),
     error: |message| format!("error: {message}"),
     no_worktree_at: |path| format!("no worktree at {path}"),
-    view_unknown: |view| format!("no extension offers the view {view}"),
+    view_unknown: |view| format!("no extension provides the view {view}"),
     view_gone: |view| {
         format!(
-            "{view} has nothing to show here anymore. Its extension may be off, or what it showed was deleted."
+            "{view} is no longer available. Its extension may be disabled, or the item was deleted."
         )
     },
     terminal_failed: |error| format!("terminal failed: {error}"),
     sandbox_rules_dropped: |groups| {
-        format!("sandbox-exec turned down some sandbox rules; sandboxes run without: {groups}")
+        format!("sandbox-exec rejected some sandbox rules; sandboxes are running without: {groups}")
     },
     sandbox_shell_replaced: |shell, with| {
         format!(
-            "{shell} cannot run in the Windows sandbox, which keeps it from the memory \
-             Git's MSYS programs share; sandboxed terminals start {with} instead"
+            "{shell} cannot run in the Windows sandbox because it blocks Git's MSYS shared memory; using {with} instead"
         )
     },
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "signal".to_owned(), |code| format!("code {code}"));
         if output.is_empty() {
-            format!("terminal exited right after it started ({status})")
+            format!("terminal exited immediately ({status})")
         } else {
-            format!("terminal exited right after it started ({status}): {output}")
+            format!("terminal exited immediately ({status}): {output}")
         }
     },
     paste_image_failed: |error| format!("Could not paste the image: {error}"),
@@ -2319,8 +2315,8 @@ pub static EN: Strings = Strings {
     runtime_devcontainer: "devcontainer",
     runtime_sandbox: "sandbox",
     runtime_sandbox_open: "sandbox · weakened",
-    runtime_sandbox_open_hint: "Containers started here run outside the sandbox. Click to open the Sandboxing settings.",
-    open_sandboxing: "Open the sandbox settings",
+    runtime_sandbox_open_hint: "Containers started here run outside the sandbox. Click to open Sandboxing settings.",
+    open_sandboxing: "Open sandbox settings",
     runtime_starting: "devcontainer starting",
     no_devcontainer: "this worktree has no devcontainer.json",
     env_not_ready: "the worktree's environment is not ready yet",
@@ -2342,28 +2338,28 @@ pub static EN: Strings = Strings {
     serve_machine: "Let other machines connect",
     when_machines_connect: "Access for connecting machines",
     pairing_steps: "To pair two machines, copy your key and allow it on the other machine, then add that machine under \"Machines you connect to\". For access the other way, do the same there.",
-    serve_on: |address| format!("When on, other machines reach this one at {address}"),
+    serve_on: |address| format!("When enabled, other machines can connect at {address}"),
     serving_on: |address| format!("Serving on {address}"),
-    any_address: |port| format!("port {port} of every network address"),
+    any_address: |port| format!("port {port} on all network interfaces"),
     serve_failed: |error| format!("could not serve this machine: {error}"),
     offer_host: "Offer this machine's shell",
-    offer_host_note: "Default for each key. Off: VMs only",
-    offer_host_no_vms: "Keep it on until VMs are set up",
+    offer_host_note: "Default for new keys. When off, clients can only access VMs.",
+    offer_host_no_vms: "Keep enabled until VMs are set up.",
     share_projects: "Share this machine's projects",
-    share_projects_note: "Default for each key. Clients show them in their sidebar",
-    web_links_vm_only: "Linked web servers get VMs only",
-    web_links_vm_only_note: "When on, a linked web server reaches the VMs only, not this machine's shell",
+    share_projects_note: "Default for new keys. Connected clients display shared projects in their sidebar.",
+    web_links_vm_only: "Restrict linked web servers to VMs only",
+    web_links_vm_only_note: "When enabled, linked web servers can access VMs only, not this machine's shell.",
     allowed_keys: "Keys allowed to connect",
     settings_results: "PAGES THAT MATCH",
-    allowed_keys_not_serving: "This machine takes no connections until Let other machines connect is on.",
-    no_allowed_keys: "No keys yet. On the other machine, click Copy key here and paste what it copies.",
+    allowed_keys_not_serving: "Enable \"Let other machines connect\" to accept incoming connections.",
+    no_allowed_keys: "No keys yet. On the other machine, click Copy key and paste it below.",
     key_to_allow: "Public key to allow",
     vms_only: "VMs only",
-    vms_only_note: "\"Allow VMs only\" lets the key reach the virtual machines, not this machine's shell.",
+    vms_only_note: "\"Allow VMs only\" grants access to virtual machines without access to this machine's shell.",
     allow: "Allow shell and VMs",
     allow_vms_only: "Allow VMs only",
-    paste_key_first: "Paste the other machine's key above to turn on the Allow buttons.",
-    not_a_key: "not a cmdterm public key line",
+    paste_key_first: "Paste the other machine's public key above to enable the Allow buttons.",
+    not_a_key: "not a valid cmdterm public key",
     remove_named: |name| format!("Remove {name}"),
     show_named: |name| format!("Show {name}"),
     hide_named: |name| format!("Hide {name}"),
@@ -2375,7 +2371,7 @@ pub static EN: Strings = Strings {
     key_defaults_named: |name| format!("Use defaults for {name}"),
     key_own_settings: "Own settings",
     known_machines: "Machines you connect to",
-    no_known_machines: "None trusted yet",
+    no_known_machines: "No trusted machines yet",
     machine_address: "Machine address, host or host:port",
     add_machine: "Add machine",
     add: "Add",
@@ -2384,8 +2380,8 @@ pub static EN: Strings = Strings {
     forget: "Forget",
     forget_named: |name| format!("Forget {name}"),
     fuse_named: |name| format!("Show projects of {name}"),
-    fused_unreachable: "Not reachable, trying again",
-    fetching_key: |address| format!("Fetching the key of {address}"),
+    fused_unreachable: "Unreachable, retrying…",
+    fetching_key: |address| format!("Fetching key from {address}…"),
     compare_key: |address| {
         format!("{address} has this key. Compare it with cmdterm-remote keygen on that machine.")
     },
@@ -2397,7 +2393,7 @@ pub static EN: Strings = Strings {
     already_trusted: |address| format!("{address} is already trusted"),
     key_changed: |address| {
         format!(
-            "The key of {address} changed. Someone may be intercepting. Forget it only if the server got a new key on purpose."
+            "The key for {address} has changed. Someone may be intercepting the connection. Only forget the old key if the server's key was intentionally regenerated."
         )
     },
     connect_failed: |error| format!("Could not connect: {error}"),
@@ -2426,16 +2422,16 @@ pub static EN: Strings = Strings {
     ssh_named: |peer| format!("Open a project on {peer} over SSH"),
     remote: "Remote",
     remote_named: |peer| format!("Open a project on {peer} as a remote machine"),
-    vpn_nebula_note: "Nebula has no peer list. Shown are its lighthouses, static_host_map and /etc/hosts entries in its network.",
-    vpn_note: "SSH opens a project at the peer's VPN address. Remote needs scriptschnell-term serving there and its key trusted here. In the palette, tailscale://box/~/src, netbird://box/~/src and nebula://box/~/src name a peer directly.",
+    vpn_nebula_note: "Nebula has no peer list. Showing its lighthouses, static_host_map, and matching /etc/hosts entries.",
+    vpn_note: "SSH opens a project over the peer's VPN address. Remote requires scriptschnell-term to be serving on that peer with its key trusted here. In the command palette, use tailscale://box/~/src, netbird://box/~/src, or nebula://box/~/src to target a peer directly.",
     config_not_saved: |error| format!("not saved: {error}"),
     no_kvm: "/dev/kvm is not available, so VMs cannot run here",
     local_vms: "Your VMs",
-    no_local_vms: "None yet. Open one by name below.",
+    no_local_vms: "No VMs yet. Enter a name below to open one.",
     running: "running",
     stopped: "stopped",
     reset: "Reset",
-    reset_note: "Delete the VM's disk. It starts from the image next time.",
+    reset_note: "Deletes the VM's disk so it starts fresh from the base image next time.",
     delete_disk_of: |name| format!("Reset {name}"),
     vm_name: "New VM name",
     open_vm: "Open a project in this VM",
@@ -2465,21 +2461,21 @@ pub static EN: Strings = Strings {
     vm_settings_saved: "VM settings saved",
     not_a_number: |value| format!("not a number: {value}"),
     vm_notes: &[
-        "For images you made yourself. An empty field removes its setting.",
-        "Running VMs keep the old settings until they stop.",
+        "For custom images. Leave a field empty to use the default.",
+        "Running VMs keep their current settings until they stop.",
     ],
     ready_made_vms: "Ready-made VMs",
     image_ready: |summary| format!("Ready. {summary}"),
     set_up: "Set up",
     start_set_up: "Start",
-    set_up_explained: "Downloads Firecracker and a kernel, then builds the image with the container engine. Press Start to begin, or Cancel.",
+    set_up_explained: "Downloads Firecracker and a kernel, then builds the image using your container engine. Click Start to begin, or Cancel.",
     set_up_image: |title| format!("Set up {title}"),
     rebuild: "Rebuild",
     rebuild_image: |title| format!("Rebuild {title}"),
     preparing: "Starting",
     install_first: |tools| format!("Install {tools} to set up images."),
     vms_have_network: "VMs reach the internet through pasta, without root.",
-    vms_without_network: "VMs have no network. Install passt (pasta) to give them one.",
+    vms_without_network: "VMs have no network access. Install passt (pasta) to enable networking.",
     vm_name_note: "A VM named ubuntu or ubuntu-something starts from the Ubuntu image.",
     advanced_settings: "Advanced settings",
     this_worktree: "Terminals of this worktree",
@@ -2490,26 +2486,26 @@ pub static EN: Strings = Strings {
     automatic: "Automatic: docker if installed, else podman",
     section_sandbox: "Sandbox",
     sandbox_network: "Network",
-    sandbox_network_note: "Sandboxed terminals may use the network",
+    sandbox_network_note: "Allow sandboxed terminals to access the network",
     sandbox_restrict: "Allowed hosts only",
-    sandbox_restrict_note: "Sandboxed terminals reach only the allowed hosts (Sandboxing, then Hosts), through a proxy set in HTTP_PROXY and HTTPS_PROXY",
+    sandbox_restrict_note: "Limit sandboxed terminals to allowed hosts (Sandboxing › Hosts) via HTTP_PROXY and HTTPS_PROXY",
     sandbox_host_network: "Host network",
-    sandbox_host_network_note: "Off, a sandbox has its own loopback: servers in it bind no ports on this machine, and only HTTP and HTTPS leave through the proxy. On, it shares this machine's network and ports.",
-    sandbox_host_network_unscoped: "This kernel lacks Landlock ABI 6 (Linux 6.12), so sandboxes with the host network reach this machine's abstract Unix sockets. Through X11's, their programs can type into your windows. Turn off Host network or update the kernel.",
+    sandbox_host_network_note: "When off, sandboxes use an isolated loopback: servers cannot bind host ports, and only HTTP and HTTPS leave through the proxy. When on, sandboxes share this machine's network and ports.",
+    sandbox_host_network_unscoped: "This kernel lacks Landlock ABI 6 (Linux 6.12), so sandboxes using the host network can reach abstract Unix sockets (including X11, allowing programs to send input to your windows). Disable Host network or update your kernel.",
     sandbox_allowed_hosts: "Allowed hosts",
-    sandbox_hosts_inactive: "The sandbox uses this list only while its network is on and limited to allowed hosts. Turn both on under Sandboxing.",
+    sandbox_hosts_inactive: "This list only applies when Network and Allowed hosts only are both enabled under Sandboxing.",
     sandbox_intercept_tls: "Inspect HTTPS",
     sandbox_intercept_tls_note: "The proxy decrypts HTTPS with its own CA, which sandboxes trust. HTTPS to a host with an invalid certificate fails inside the sandbox.",
     sandbox_engines: "Container engines",
-    sandbox_engines_note: "This weakens the sandbox. Sandboxed terminals use docker, podman, containerd, buildkit and WSL interop directly. Containers they start run outside the sandbox, with the engine's access to files and network.",
+    sandbox_engines_note: "This weakens the sandbox. Sandboxed terminals directly access docker, podman, containerd, buildkit, and WSL interop. Any containers they start run outside the sandbox with the engine's full file and network access.",
     engines_passthrough: "Direct passthrough (weakens the sandbox)",
     engines_sidecar: "Sidecar per project",
     engines_off: "Off",
     engines_use_sidecar: "Use a sidecar engine",
     engines_turn_off: "Turn engine access off",
     engines_keep: "Keep direct passthrough",
-    engines_fixes_note: "A sidecar keeps containers working with an engine that sees only the project. Off means sandboxes cannot start containers.",
-    sandbox_sidecar_note: "Each project gets its own engine in a container, shared by the sandboxes of its worktrees. It sees the worktrees, its own storage and the host's registry certificates, but no other files. Its network is not limited to the allowed hosts. Linux only.",
+    engines_fixes_note: "A sidecar keeps containers working inside an isolated engine that only sees the project. Turning access off prevents sandboxes from starting containers.",
+    sandbox_sidecar_note: "Each project gets an isolated container engine shared by its worktree sandboxes. It can access only the worktrees, its own storage, and the host's registry certificates. Its network is not restricted to allowed hosts. Linux only.",
     sidecar_engine: "Sidecar engine",
     sidecar_podman: "podman in podman",
     sidecar_docker: "docker in docker",
@@ -2518,36 +2514,36 @@ pub static EN: Strings = Strings {
     sandbox_host: "Find or add a host, *.example.com for subdomains",
     sandbox_host_none: |host| format!("No allowed host matches \"{host}\"."),
     count_of: |shown, all| format!("{shown} of {all} match"),
-    sandbox_host_bare: "Filtering. To add a host, type it in full, such as example.com.",
+    sandbox_host_bare: "Filtering list. Type a full hostname (such as example.com) to add it.",
     add_host: "Add host",
     choose_hosts: "Choose common hosts",
     choose_hosts_open: "+ Choose common hosts…",
     host_setup_dialog: "Allowed hosts for sandboxes",
     host_setup_intro: "Sandboxed terminals reach only the hosts you allow, and the proxy inspects their HTTPS. Pick what your work needs.",
-    host_setup_note: "Change this later under Settings, Sandboxing, Hosts, where you can also add single hosts.",
+    host_setup_note: "You can change this later under Settings › Sandboxing › Hosts, or add individual hosts there.",
     host_setup_done: "Done",
     setup_dialog: "Set up scriptschnell-term",
     setup_step: |at, of| format!("Step {at} of {of}"),
     setup_back: "Back",
     setup_next: "Next",
     setup_appearance: "Language, keyboard and colors",
-    setup_appearance_intro: "Changes show at once. Settings (Ctrl+,) has all of this later.",
+    setup_appearance_intro: "Changes take effect immediately. You can adjust these anytime in Settings (Ctrl+,).",
     setup_runtime: "Where terminals run",
-    setup_runtime_intro: "Worktrees you open from now on start their terminals here.",
+    setup_runtime_intro: "Choose the default environment for terminals in newly opened worktrees.",
     setup_runtime_note: "To change it for one worktree, open Settings › Sandboxing.",
-    setup_sandbox_note: "Writes only the worktree and reaches hosts through a filtering proxy.",
-    setup_devcontainer_note: "Uses the worktree's devcontainer.json, or the sandbox without one.",
-    setup_host_note: "Runs as you, with full access to this machine.",
+    setup_sandbox_note: "Restricts writes to the worktree and filters network access through a proxy.",
+    setup_devcontainer_note: "Uses the worktree's devcontainer.json if present, otherwise falls back to the sandbox.",
+    setup_host_note: "Runs directly on this machine with your full user permissions.",
     setup_recommended: "Recommended",
     setup_agents: "Coding agents",
-    setup_agents_intro: "Checked agents get hooks that tell scriptschnell-term when they wait for you, plus a skill that explains the app to them. Unchecking removes both.",
+    setup_agents_intro: "Selected agents receive hooks to report their status to scriptschnell-term, plus a skill explaining how to work with the app. Unchecking removes both.",
     settings_group_app: "GENERAL",
     settings_group_integrations: "INTEGRATIONS",
     settings_group_machines: "MACHINES",
     settings_group_sandbox: "SANDBOX",
     reset_settings: "Reset all settings",
     reset_settings_confirm: "Click again to reset",
-    reset_settings_hint: "Puts every setting back to its default and opens the first-start setup",
+    reset_settings_hint: "Restores all settings to their defaults and reopens the initial setup",
     hosts_added_by_you: "Added by you or an extension",
     host_removed: |host| format!("Removed {host}"),
     undo: "Undo",
@@ -2570,36 +2566,36 @@ pub static EN: Strings = Strings {
         "linux" => "Linux packages: Debian, Ubuntu, Alpine",
         _ => "Other hosts",
     },
-    bad_host: "Hosts are names or addresses, optionally starting with *.",
-    sandbox_writable: "Writable besides the worktree",
+    bad_host: "Enter a hostname or IP address, optionally starting with *.",
+    sandbox_writable: "Additional writable paths",
     sandbox_hidden: "Hidden from the sandbox",
     sandbox_path: "Path, ~/ allowed",
     add_writable: "Add as writable",
     add_hidden: "Add as hidden",
-    sandbox_note: "Changes apply to terminals started afterwards.",
+    sandbox_note: "Changes apply to newly started terminals.",
     restart_terminals: "Restart this worktree's terminals",
-    restart_terminals_hint: "Ends the programs in them and starts them again with the current settings",
-    sandbox_windows_note: "On Windows the sandbox only limits writes. Hidden paths stay readable and the network stays on.",
+    restart_terminals_hint: "Stops running programs and restarts terminals with the current settings",
+    sandbox_windows_note: "On Windows, the sandbox only restricts writes. Hidden paths remain readable and network access remains enabled.",
     section_project: "Project",
     project_settings: "Project settings",
     settings_page: |page| format!("Settings › {page}"),
     project_none: "Open a project to change its settings.",
     project_jj: "Use Jujutsu",
-    project_jj_note: "Where the project has a jj repository",
-    project_launches: "Agents open worktrees without asking",
-    project_launches_note: "They create worktrees and start agents in them",
+    project_jj_note: "When the project contains a jj repository",
+    project_launches: "Allow agents to open worktrees without asking",
+    project_launches_note: "Lets agents create worktrees and start new agent sessions automatically",
     project_base: "Reference branch",
-    project_base_hint: "Empty uses origin/HEAD, main, master or trunk",
-    project_base_note: "The branch or revision reviews compare against when you name none. Leave it empty to use origin/HEAD, else main, master or trunk; Mercurial uses default and jj trunk().",
+    project_base_hint: "Leave empty to auto-detect (origin/HEAD, main, master, or trunk)",
+    project_base_note: "Default branch or revision for code reviews. Leave empty to auto-detect (origin/HEAD, main, master, or trunk; default for Mercurial; trunk() for jj).",
     project_base_set: "Set",
     project_folders: "Sandbox folders",
-    project_folders_note: "Folders on the project's machine that its sandboxed terminals may use besides the worktree. A read-only folder may lie in a hidden path and shows through it. A folder that contains a hidden path or the app's own files is skipped. Changes apply to terminals started afterwards.",
+    project_folders_note: "Additional folders on this project's machine accessible to sandboxed terminals. A read-only folder inside a hidden path will still be visible. Folders containing a hidden path or app files are skipped. Changes apply to newly started terminals.",
     project_writable: "Writable",
     project_readable: "Read-only",
     no_project_folders: "None yet",
     add_readable: "Add as read-only",
     project_remote_note: "This project is on another machine. Only absolute paths apply there.",
-    project_not_sandboxed: "This worktree's terminals do not run in a sandbox, so these folders do not apply to them.",
+    project_not_sandboxed: "This worktree is not using a sandbox, so these folder rules do not apply.",
 };
 
 pub static DE: Strings = Strings {
@@ -2622,7 +2618,7 @@ pub static DE: Strings = Strings {
     notice_title: "Hinweis",
     integration_outdated: |agent, env| format!("{agent}-Integration auf {env} ist veraltet"),
     integrations_outdated: |count| format!("{count} Agent-Integrationen sind veraltet"),
-    integration_outdated_body: "Eine ältere Version von scriptschnell-term hat die Hooks installiert, oder sie wurden seitdem geändert. Aktualisieren installiert die aktuellen Hooks und den Skill.",
+    integration_outdated_body: "Diese Hooks wurden von einer älteren Version von scriptschnell-term installiert oder seitdem geändert. Aktualisieren installiert die aktuellen Hooks und Skills.",
     agent_update: |agent, latest| format!("{agent} {latest} ist verfügbar"),
     agent_update_body: |current, env, manager, command| {
         format!(
@@ -2631,18 +2627,18 @@ pub static DE: Strings = Strings {
     },
     agent_updated: |agent, env| format!("{agent} auf {env} ist aktuell"),
     agent_update_failed: |agent, env| {
-        format!("{agent} auf {env} zu aktualisieren ist fehlgeschlagen")
+        format!("Aktualisierung von {agent} auf {env} fehlgeschlagen")
     },
     app_update: |version| format!("scriptschnell-term {version} ist verfügbar"),
-    app_update_body: "Aktualisieren lädt die Version herunter, prüft sie gegen das signierte Release-Manifest und ersetzt die installierten Dateien.",
+    app_update_body: "Lädt die neue Version herunter, prüft sie anhand des signierten Release-Manifests und ersetzt die installierten Dateien.",
     app_release_body: |url| {
         format!(
-            "Diese Kopie hat ein Paketmanager oder cargo installiert. Aktualisiere sie dort oder lade das Release von {url} herunter."
+            "Diese Installation stammt aus einem Paketmanager oder cargo. Aktualisiere sie dort oder lade das Release von {url} herunter."
         )
     },
     app_updated: |version| format!("scriptschnell-term {version} ist installiert"),
-    app_updated_body: "Starte scriptschnell-term neu, um sie zu verwenden.",
-    app_update_failed: "scriptschnell-term zu aktualisieren ist fehlgeschlagen",
+    app_updated_body: "Starte scriptschnell-term neu, um das Update zu verwenden.",
+    app_update_failed: "Aktualisierung von scriptschnell-term fehlgeschlagen",
     just_now: "gerade eben",
     minutes_ago: |n| format!("vor {n} Min."),
     hours_ago: |n| format!("vor {n} Std."),
@@ -2661,14 +2657,14 @@ pub static DE: Strings = Strings {
     section_shells: "Shells",
     default_shell: "Standard-Shell",
     default_shell_system: "Systemstandard (%COMSPEC%)",
-    shells_note: "Neue Terminals starten die Standard-Shell. Offene Terminals behalten ihre.",
-    shells_listed: "Shells, die die Liste für neue Panels nach Neue Shell anbietet",
+    shells_note: "Neue Terminals verwenden die Standard-Shell. Bereits offene Terminals bleiben unverändert.",
+    shells_listed: "Shells im Menü „Neues Panel“ nach „Neue Shell“",
     git_bash_found: |path| {
         format!(
-            "Agents finden Git Bash unter {path}: Jedes Terminal bekommt es als CLAUDE_CODE_GIT_BASH_PATH, das Claude Code braucht."
+            "Git Bash unter {path} gefunden. Jedes Terminal setzt CLAUDE_CODE_GIT_BASH_PATH für Claude Code auf diesen Pfad."
         )
     },
-    git_bash_missing: "Git Bash ist nicht installiert. Claude Code braucht es unter Windows: Installiere Git for Windows und starte die App neu.",
+    git_bash_missing: "Git Bash ist nicht installiert. Claude Code benötigt es unter Windows; installiere Git for Windows und starte die App neu.",
     new_shell_named: |shell| format!("Neue Shell: {shell}"),
     bundled_font: "Mitgeliefert (Liberation Mono)",
     font_preview: "Vorschau",
@@ -2680,28 +2676,28 @@ pub static DE: Strings = Strings {
     size: "Schriftgröße im Terminal",
     system: "System",
     scheme_in_use: "Aktiv",
-    follows_desktop: |name| format!("Folgt dem Desktop (derzeit {name})"),
+    follows_desktop: |name| format!("Folgt dem Systemdesign (derzeit {name})"),
     system_language: |name| format!("System ({name})"),
     dark: "dunkel",
     light: "hell",
     from_extension: |name| format!("Erweiterung {name}"),
-    from_user: "Von dir geändert, in settings.json",
+    from_user: "Angepasst in settings.json",
     bindings: "Belegungen",
     binding_list: "Liste der Belegungen",
-    bindings_hint: "Eine Belegung anklicken und die neue Taste drücken. Tastenfolgen und entfernte Belegungen gehören in \"keybindings\" in settings.json.",
+    bindings_hint: "Eine Belegung anklicken und eine neue Tastenkombination drücken. Tastenfolgen und aufgehobene Belegungen lassen sich unter \"keybindings\" in settings.json festlegen.",
     binding_taken: |keys, action| {
-        format!("{keys} war mit {action} belegt, das jetzt keine Taste hat")
+        format!("{keys} wurde von {action} übernommen (jetzt nicht belegt)")
     },
     reset_binding: "Zurücksetzen",
     binding_unset: "Nicht belegt",
     reset_binding_for: |action| format!("Tasten von {action} zurücksetzen"),
-    press_keys: "Neue Taste drücken, Escape bricht ab",
+    press_keys: "Neue Tastenkombination drücken (Esc zum Abbrechen)",
     recording_was: |title, keys| format!("{title} (derzeit {keys})"),
     preset_description: |preset| match preset.id {
-        "cmdterm" => "Nutzt Ctrl+Shift, damit jede Ctrl+Buchstabe-Taste die Shell erreicht",
+        "cmdterm" => "Nutzt Ctrl+Shift, damit alle Ctrl+Buchstabe-Kürzel die Shell erreichen",
         "tmux" => "Ctrl+B, dann eine Taste. Zweimal Ctrl+B schickt Ctrl+B an die Shell",
         "vscode" => {
-            "Die Tasten des integrierten Terminals: Ctrl+Shift+` öffnet ein Terminal, Ctrl+Shift+5 teilt"
+            "Tastenkürzel des integrierten VS-Code-Terminals: Ctrl+Shift+` öffnet ein Terminal, Ctrl+Shift+5 teilt"
         }
         "cursor" => "Die Tasten von VS Code, dazu Ctrl+Shift+J für die Einstellungen",
         "windows-terminal" => {
@@ -2730,9 +2726,9 @@ pub static DE: Strings = Strings {
     },
     settings_keywords: keywords_de,
     loaded_from: |dir| format!("Geladen aus {dir}"),
-    reload_note: "Nach Änderungen an Erweiterungsdateien neu laden. Ein- oder Ausschalten einer Erweiterung lädt alle neu.",
+    reload_note: "Nach Änderungen an Erweiterungsdateien neu laden. Das Aktivieren oder Deaktivieren einer Erweiterung lädt alle neu.",
     needs_permissions: |list| format!("Braucht Berechtigung: {list}"),
-    permissions_switch_note: "Jeder Schalter schaltet eine Berechtigung ein oder aus.",
+    permissions_switch_note: "Einzelne Berechtigungen lassen sich unten ein- oder ausschalten.",
     grant: "Alle erteilen",
     revoke: "Alle entziehen",
     grant_for: |name| format!("{name} die Berechtigungen erteilen"),
@@ -2740,20 +2736,20 @@ pub static DE: Strings = Strings {
     permission_for: |name, permission| format!("die {permission}-Berechtigung für {name}"),
     permission_sensitive: |name| format!("{name} · sensibel"),
     permission_note: |name| match name {
-        "terminal" => "Öffnet Terminals und tippt in sie",
+        "terminal" => "Öffnet Terminals und sendet Eingaben an sie",
         "browser" => "Öffnet Browser-Bereiche",
-        "worktree" => "Wechselt den gezeigten Worktree",
+        "worktree" => "Wechselt den aktiven Worktree",
         "copy" => "Kopiert Dateien in Devcontainer, VMs und entfernte Maschinen",
         "run" => "Führt Befehle in der Umgebung eines Worktrees aus",
         "trust" => "Fügt Zertifikate zum Vertrauensspeicher einer Umgebung hinzu",
-        "sandbox" => "Ändert, was Sandboxes erreichen und sehen",
+        "sandbox" => "Ändert den Netzwerk- und Dateizugriff von Sandboxes",
         "secrets" => "Liest und speichert Geheimnisse im Schlüsselbund dieser Maschine",
-        "guards" => "Hält Anfragen aus Sandboxes, etwa Pushes, zurück, bis du sie erlaubst",
+        "guards" => "Fängt Sandbox-Anfragen wie Pushes ab, bis du sie freigibst",
         "network" => "Sendet HTTP-Anfragen und lädt Sperrlisten herunter",
-        "agents" => "Gibt Agenten Werkzeuge und fügt Coding-Agenten hinzu",
-        "environments" => "Fügt Orte hinzu, deren Befehle über ein Programm dieser Maschine laufen",
-        "storage" => "Speichert eigene Daten für die ganze App",
-        "project_storage" => "Speichert eigene Daten je Projekt",
+        "agents" => "Registriert Agenten-Werkzeuge und eigene Coding-Agenten",
+        "environments" => "Fügt eigene Umgebungen hinzu, deren Befehle über ein lokales Programm laufen",
+        "storage" => "Speichert Erweiterungsdaten global in der App",
+        "project_storage" => "Speichert Erweiterungsdaten pro Projekt",
         "filesystem" => "Liest und schreibt Dateien außerhalb des eigenen Ordners",
         "process" => "Startet Programme auf dieser Maschine",
         "env" => "Liest die Umgebungsvariablen dieser Maschine",
@@ -2761,22 +2757,22 @@ pub static DE: Strings = Strings {
     },
     builtin_page: "Eingebaute Regeln",
     builtin_subtitle: "immer aktiv",
-    builtin_description: "Eingebaute Regeln dafür, was Sandboxes nach außen dürfen. Sie gelten mit und ohne Erweiterungen.",
+    builtin_description: "Eingebaute Regeln für externe Aktionen aus Sandboxes. Sie gelten auch ohne Erweiterungen.",
     extension_page: "Erweiterungsseite",
-    no_description: "Das Manifest hat keine Beschreibung.",
+    no_description: "Keine Beschreibung vorhanden.",
     extension_enabled: "Aktiviert",
     permissions_heading: "Berechtigungen",
-    no_permissions: "Braucht keine Berechtigungen.",
+    no_permissions: "Keine Berechtigungen erforderlich.",
     settings_heading: "Einstellungen",
-    ext_guards_heading: "Anfragen, die sie zurückhält",
+    ext_guards_heading: "Geschützte Anfragen",
     list_empty: "Keine Einträge",
     list_new_entry_for: |title| format!("Neuer Eintrag für {title}"),
     list_add_to: |title| format!("Zu {title} hinzufügen"),
     list_remove: "Entfernen",
     list_remove_from: |entry, title| format!("{entry} aus {title} entfernen"),
-    list_duplicate: |entry| format!("{entry} steht schon in der Liste"),
-    guards_heading: "Was Sandboxes nach außen dürfen",
-    guards_note: "Fragen zeigt jede Anfrage vorher an. Unbeantwortete Anfragen werden nach zwei Minuten blockiert.",
+    list_duplicate: |entry| format!("{entry} ist bereits in der Liste"),
+    guards_heading: "Externe Sandbox-Aktionen",
+    guards_note: "Fragen bittet vor jeder Anfrage um Freigabe. Unbeantwortete Anfragen werden nach zwei Minuten blockiert.",
     guard_ask: "Fragen",
     guard_block: "Blockieren",
     guard_allow: "Erlauben",
@@ -2785,19 +2781,19 @@ pub static DE: Strings = Strings {
     every_host: "alle Hosts",
     approval_dialog: "Anfrage aus der Sandbox",
     approval_question: |title| format!("Eine Sandbox möchte: {title}"),
-    approval_note: "Die Antwort gilt eine Minute lang für diesen Host.",
+    approval_note: "Deine Wahl gilt eine Minute lang für diesen Host.",
     approval_project: |name| format!("Aus dem Projekt {name}"),
     approval_always: "In diesem Projekt immer erlauben",
     always_heading: "Immer erlaubt",
-    always_note: "Was ein Projekt in den Dialogen dauerhaft erlaubt hat: Anfragen aus Sandboxen, und Agenten, die Worktrees anlegen und Agenten starten.",
+    always_note: "Aktionen, die in Dialogen dauerhaft für ein Projekt erlaubt wurden, darunter Sandbox-Anfragen sowie das Anlegen von Worktrees und Starten von Agenten.",
     always_entry: |title, host| format!("{title}: {host}"),
     always_remove: "Entfernen",
-    change_requests_heading: "Was Sandboxes mit Pull- und Merge-Requests tun dürfen",
-    change_requests_note: "Diese Modi gelten für jede Forge-Erweiterung, etwa github und gitlab. Ein Modus auf der Seite einer Erweiterung hat Vorrang.",
+    change_requests_heading: "Berechtigungen für Pull- und Merge-Requests",
+    change_requests_note: "Diese Standardwerte gelten für alle Forge-Erweiterungen, etwa GitHub und GitLab. Einstellungen auf der Seite einer Erweiterung haben Vorrang.",
     change_request_create: "Einen Pull- oder Merge-Request öffnen",
-    change_request_comment: "Einen kommentieren oder reviewen",
-    change_request_merge: "Einen mergen oder abschließen",
-    change_request_subtitle: |_| "Gilt für jede Forge-Erweiterung".to_owned(),
+    change_request_comment: "Einen Pull- oder Merge-Request kommentieren oder reviewen",
+    change_request_merge: "Einen Pull- oder Merge-Request mergen oder abschließen",
+    change_request_subtitle: |_| "Gilt für alle Forge-Erweiterungen".to_owned(),
     approval_sends: |detail| format!("Sendet: {detail}"),
     keyring_request: |action, label| match action {
         "read" => format!("\"{label}\" lesen"),
@@ -2805,30 +2801,30 @@ pub static DE: Strings = Strings {
         "delete" => format!("\"{label}\" löschen"),
         _ => format!("ein Geheimnis in \"{label}\" anlegen"),
     },
-    keyring_note: "Die Antwort gilt eine Minute lang für dieses Geheimnis.",
+    keyring_note: "Deine Wahl gilt eine Minute lang für dieses Geheimnis.",
     keyring_scope: "der Schlüsselbund dieser Sitzung",
     agent_settings_request: |agent, file| format!("{agent} ändert {file}:"),
     agent_settings_removed: |key| format!("{key}: entfernt"),
     agent_settings_more: |n| format!("und {n} weitere Schlüssel"),
-    agent_settings_note: "Bis du sie erlaubst, bleibt die Änderung in der Kopie der Sandbox. Die Antwort gilt eine Minute lang für diese Datei.",
-    agent_settings_scope: "Einstellungen, die Agenten in Sandboxen ändern",
+    agent_settings_note: "Bis zur Freigabe bleibt die Änderung innerhalb der Sandbox. Deine Wahl gilt eine Minute lang für diese Datei.",
+    agent_settings_scope: "Einstellungen, die Agenten in Sandboxes ändern",
     approval_allow: "Erlauben",
     approval_block: "Blockieren",
     control_dialog: "Erweiterung ändern",
     control_install: |name| format!("Ein Agent möchte die Erweiterung {name} installieren"),
     control_change: |name| format!("Ein Agent möchte die Erweiterung {name} ändern"),
     control_source: |place, machine, kind| {
-        format!("Aus einem Terminal von {place} auf {machine} ({kind})")
+        format!("Aus einem Terminal in {place} auf {machine} ({kind})")
     },
     control_file_added: |path, lines| format!("{path}: neu, {lines} Zeilen"),
     control_file_changed: |path, lines| format!("{path}: ersetzt, jetzt {lines} Zeilen"),
     control_file_removed: |path| format!("{path}: entfernt"),
     control_more_files: |n| format!("und {n} weitere Dateien"),
     control_permissions: |list| {
-        format!("Ihr Manifest verlangt: {list}. Du erteilst sie auf der Seite Erweiterungen.")
+        format!("Angeforderte Berechtigungen: {list}. Du kannst sie auf der Seite Erweiterungen erteilen.")
     },
-    control_no_permissions: "Ihr Manifest verlangt keine Berechtigungen.",
-    control_shipped: "Sie wird mit der App ausgeliefert. Geänderte Dateien werden nicht mehr aktualisiert.",
+    control_no_permissions: "Keine Berechtigungen angefordert.",
+    control_shipped: "Dies ist eine mitgelieferte Erweiterung. Geänderte Dateien werden nicht mehr automatisch aktualisiert.",
     control_note: "Erweiterungen laufen in der App, außerhalb jeder Sandbox. Erlaube nur Code, den du gelesen hast.",
     control_deny: "Ablehnen",
     control_applied: |name| format!("Ein Agent hat die Erweiterung {name} geändert"),
@@ -2839,7 +2835,7 @@ pub static DE: Strings = Strings {
     control_setting_set: |path, before, after| format!("{path}: {before} → {after}"),
     control_setting_add: |path, items| format!("{path}: {items} hinzufügen"),
     control_setting_remove: |path, items| format!("{path}: {items} entfernen"),
-    control_settings_note: "Erlauben schreibt settings.json sofort. Rückgängig machen kannst du es in den Einstellungen (Strg+,).",
+    control_settings_note: "Mit „Erlauben“ wird settings.json sofort geschrieben. Du kannst dies in den Einstellungen (Strg+,) rückgängig machen.",
     control_settings_applied: "Ein Agent hat die Einstellungen geändert",
     control_launch_dialog: "Agenten starten",
     control_new_worktree: |branch, project| {
@@ -2853,7 +2849,7 @@ pub static DE: Strings = Strings {
     control_worktree_from_main: "ab der Revision des Haupt-Worktrees",
     control_start_agent: |command| format!("und dort {command} starten"),
     control_type_prompt: |prompt| format!("dann seinen ersten Prompt eingeben: {prompt}"),
-    control_launch_note: "Die Agenten starten in neuen Terminals dieses Worktrees, auf seinem Host, in seiner Sandbox oder seinem Devcontainer.",
+    control_launch_note: "Die Agenten starten in neuen Terminals dieses Worktrees in dessen konfigurierter Umgebung (Host, Sandbox oder Devcontainer).",
     control_allow_session: "In dieser Sitzung erlauben",
     always_launches: "Worktrees anlegen und Agenten starten",
     reload_extensions: "Erweiterungen neu laden",
@@ -2866,14 +2862,14 @@ pub static DE: Strings = Strings {
     agent_button: |action, agent| format!("{agent}-Integration: {action}"),
     agent_list: "Liste der Agenten",
     agents_note: [
-        "Installierte Agenten melden, wenn sie arbeiten, fertig sind",
-        "oder auf Eingabe oder Freigabe warten. Die Leiste markiert es.",
+        "Installierte Agenten melden, wenn sie arbeiten, fertig sind oder auf",
+        "Eingabe oder Freigabe warten; die Seitenleiste markiert den Worktree.",
     ],
     agents_skill: [
-        "Sie bekommen auch zwei Skills, die sie zu Einstellungen, Erweiterungen",
-        "und der Sandbox führen.",
+        "Sie erhalten außerdem zwei Skills mit der Dokumentation zu Einstellungen,",
+        "Erweiterungen und Sandboxes.",
     ],
-    hooks_run: "Die Hooks melden über ein kleines Skript, was ein Agent tut. Die App installiert es und hält es aktuell.",
+    hooks_run: "Hooks melden die Aktivität eines Agenten über ein kleines Skript, das die App installiert und aktuell hält.",
     check_agents: "Agenten erneut prüfen",
     agents_update_all: |count| format!("Alle aktualisieren ({count})"),
     agents_installed: "Agenten-Integrationen",
@@ -2883,17 +2879,17 @@ pub static DE: Strings = Strings {
         )
     },
     agent_control: "Steuer-Socket",
-    agent_control_on: "An, wo Agenten laufen, auch in Sandboxes",
-    agent_control_local: "Auf diesem Rechner und in seinen Sandboxes an",
-    agent_control_host: "An, für Terminals außerhalb von Sandboxes",
+    agent_control_on: "Überall aktiv, auch in Sandboxes",
+    agent_control_local: "Für diesen Rechner und seine Sandboxes aktiv",
+    agent_control_host: "Nur außerhalb von Sandboxes aktiv",
     agent_control_off: "Aus",
-    agent_control_note: "Agenten fragen darüber, Erweiterungen und Einstellungen zu ändern oder Worktrees zu starten; du erlaubst jede Anfrage.",
+    agent_control_note: "Ermöglicht Agenten, Änderungen an Erweiterungen und Einstellungen oder neue Worktrees anzufragen; jede Anfrage erfordert deine Freigabe.",
     checking: "Wird geprüft…",
     not_installed: "Nicht installiert",
     on_outdated: "An, Hooks veraltet",
     note_trust_hooks: "Codex fragt nach, bevor es neue Hooks ausführt.",
     note_enable_hooks: "Hooks in ~/.codex/config.toml einschalten: [features] hooks = true",
-    note_next_session: "Gilt für Sitzungen, die ab jetzt starten.",
+    note_next_session: "Gilt für neue Sitzungen.",
     language: "Sprache",
 
     command_palette: "Befehlspalette",
@@ -2901,10 +2897,10 @@ pub static DE: Strings = Strings {
     maximize_window: "Maximieren",
     restore_window: "Wiederherstellen",
     close_window: "Fenster schließen",
-    palette_keys_hint: "↑↓ wählen · Enter führt aus · Esc schließt",
-    palette_areas_hint: |keys| format!("{keys} wechselt den Bereich"),
-    palette_empty_keys_hint: "Esc schließt",
-    palette_input_keys_hint: "Enter bestätigt · Esc geht zurück",
+    palette_keys_hint: "↑↓ wählen · Enter ausführen · Esc schließen",
+    palette_areas_hint: |keys| format!("{keys} Bereich wechseln"),
+    palette_empty_keys_hint: "Esc schließen",
+    palette_input_keys_hint: "Enter bestätigen · Esc zurück",
     palette_create: "Erstellen",
     palette_clone: "Klonen",
     palette_more: |from, to, total, below| {
@@ -2920,9 +2916,9 @@ pub static DE: Strings = Strings {
     close_panel_named: |pane, title| format!("Bereich {pane} schließen: {title}"),
     move_pane: |pane| format!("Ziehen verschiebt Bereich {pane}"),
     pane_menu: |pane| format!("Menü von Bereich {pane}"),
-    drag_tab_hint: "Rand teilt, zwischen Tabs sortiert um. Esc bricht ab",
-    drag_shown_tab_hint: "Zwischen Tabs sortiert um. Esc bricht ab",
-    drag_pane_hint: "Rand teilt, Mitte tauscht, Tab oder + verschiebt. Esc bricht ab",
+    drag_tab_hint: "Am Rand ablegen zum Teilen, zwischen Tabs zum Umsortieren (Esc bricht ab)",
+    drag_shown_tab_hint: "Zwischen Tabs ablegen zum Umsortieren (Esc bricht ab)",
+    drag_pane_hint: "Am Rand teilen, in der Mitte tauschen, auf Tab oder + verschieben (Esc bricht ab)",
     zone_left: "Links teilen",
     zone_right: "Rechts teilen",
     zone_top: "Oben teilen",
@@ -2943,7 +2939,7 @@ pub static DE: Strings = Strings {
     shrink_pane: "Bereich verkleinern",
     next_tab: "Nächster Tab",
     previous_tab: "Vorheriger Tab",
-    toggle_sidebar: "Seitenleiste aus- oder einblenden",
+    toggle_sidebar: "Seitenleiste ein- oder ausblenden",
     hide_sidebar: "Seitenleiste ausblenden",
     show_sidebar: "Seitenleiste einblenden",
     tab_n: |n| format!("Tab {n}"),
@@ -2982,7 +2978,7 @@ pub static DE: Strings = Strings {
     new_shell: "Neue Shell",
     start_agent: |agent| format!("{agent} starten"),
     new_panel: "Neues Panel",
-    new_panel_tip: "Neues Panel. Einen Bereich hier ablegen gibt ihm einen eigenen Tab",
+    new_panel_tip: "Neues Panel. Einen Bereich hier ablegen, um ihn in einem neuen Tab zu öffnen",
     browse_files: "Dateien durchsuchen",
     files: "Dateien",
     files_count: |n| {
@@ -3002,12 +2998,12 @@ pub static DE: Strings = Strings {
     files_truncated: "erste 16 MiB",
     files_loading: "Wird geladen…",
     files_empty: "Keine Dateien",
-    files_pick: "Links eine Datei wählen. Enter öffnet sie.",
+    files_pick: "Links eine Datei auswählen und mit Enter öffnen.",
     files_binary: |size| format!("Binärdatei, {size} Bytes"),
     files_unreadable: |error| format!("Datei nicht lesbar: {error}"),
     files_unrendered: |error| format!("Datei nicht darstellbar: {error}"),
     files_mermaid_unsupported: |reason| {
-        format!("Mermaid-Diagramm, das die Ansicht nicht zeichnen kann: {reason}")
+        format!("Nicht unterstütztes Mermaid-Diagramm: {reason}")
     },
     files_pixels: |width, height| format!("{width} × {height} px"),
     files_page: |page, pages| format!("Seite {page} von {pages}"),
@@ -3018,25 +3014,25 @@ pub static DE: Strings = Strings {
     explore_list_files: "Dateien",
     explore_review: "Review",
     explore_open_history: "Verlauf ansehen",
-    status_open_history: "Verlauf dieses Branches zeigen",
-    status_open_files: "Dateien dieses Worktrees durchsuchen",
+    status_open_history: "Branch-Verlauf anzeigen",
+    status_open_files: "Worktree-Dateien durchsuchen",
     status_open_machines: "Maschineneinstellungen öffnen",
     explore_open_review: "Änderungen prüfen",
     explore_review_against: "Änderungen gegen einen Branch prüfen",
-    explore_pick: "Links einen Eintrag wählen. v wechselt zwischen Verlauf, Review und Merge-Request.",
+    explore_pick: "Links einen Eintrag auswählen. Mit v zwischen Verlauf, Review und Merge-Request wechseln.",
     explore_no_commits: "Noch keine Commits",
-    explore_sideways: "← → für den Rest langer Zeilen",
+    explore_sideways: "← → zum Scrollen langer Zeilen",
     explore_no_changes: |base| format!("Keine Änderungen gegenüber {base}."),
-    explore_no_base: "Kein Basis-Branch gefunden. Mit b einen angeben.",
+    explore_no_base: "Kein Basis-Branch gefunden. Mit b einen auswählen.",
     explore_no_changes_hint: |base| {
         format!(
-            "Commits und nicht committete Änderungen, die nicht auf {base} sind, erscheinen hier. Mit b gegen einen anderen Branch prüfen."
+            "Commits und nicht committete Änderungen, die nicht auf {base} sind, erscheinen hier. Mit b gegen einen anderen Branch vergleichen."
         )
     },
     explore_failed: |error| format!("Verlauf nicht lesbar: {error}"),
     explore_unrelated: |base| {
         format!(
-            "Dieser Branch hat keine Commits mit {base} gemeinsam, es gibt nichts zu vergleichen. Mit b gegen einen anderen Branch prüfen."
+            "Dieser Branch hat keine gemeinsame Historie mit {base}, es gibt nichts zu vergleichen. Mit b gegen einen anderen Branch vergleichen."
         )
     },
     explore_review_failed: |error| {
@@ -3062,30 +3058,30 @@ pub static DE: Strings = Strings {
         format!("Port {port} ist auf diesem Rechner unter 127.0.0.1:{host} offen")
     },
     port_expose_failed: |port, error| format!("Port {port} ließ sich nicht freigeben: {error}"),
-    debug_browser_failed: "Der Debug-Browser ist nicht gestartet",
+    debug_browser_failed: "Debug-Browser konnte nicht gestartet werden",
     debug_browser_retry: "Erneut versuchen",
     debug_browser_alt: "Seite im Debug-Browser",
     monitor: "Monitor",
-    monitor_note: "Diese Maschine, jede Sekunde gemessen",
+    monitor_note: "Dieser Rechner, jede Sekunde aktualisiert",
     monitor_open: "Rechner überwachen",
     monitor_waiting: "Messe…",
-    monitor_no_proc: "Dieser Rechner hat kein /proc. Der Monitor liest die /proc-Dateien von Linux.",
-    monitor_failed: |error| format!("Die Auslastung des Rechners ist nicht lesbar: {error}"),
+    monitor_no_proc: "Der Monitor benötigt /proc unter Linux, das auf diesem Rechner nicht verfügbar ist.",
+    monitor_failed: |error| format!("Systemauslastung konnte nicht gelesen werden: {error}"),
     monitor_cpu: "CPU",
     monitor_memory: "Speicher",
     monitor_swap: "Swap",
     monitor_network: "Netzwerk",
     monitor_disk: "Datenträger",
     monitor_cpu_history: "CPU-Verlauf",
-    monitor_net_history: "Netzverlauf",
+    monitor_net_history: "Netzwerkverlauf",
     monitor_net_down: "↓ ein",
     monitor_net_up: "↑ aus",
     monitor_peak: "Spitze",
     monitor_now: "jetzt",
-    monitor_collecting: "Verlauf wird gesammelt, ein Messwert pro Sekunde…",
-    copy_command: "Installbefehl kopieren",
+    monitor_collecting: "Verlauf wird erfasst (ein Messwert pro Sekunde)…",
+    copy_command: "Installationsbefehl kopieren",
     copy_command_hint: "Kopiert den Installationsbefehl. In ein Terminal einfügen.",
-    copy_install_for: |agent| format!("Den Befehl kopieren, der {agent} installiert"),
+    copy_install_for: |agent| format!("Installationsbefehl für {agent} kopieren"),
     command_copied: "Befehl kopiert",
     agent_install_with: |command| format!("Nicht installiert · {command}"),
     agent_turn_on: "Einschalten",
@@ -3123,7 +3119,7 @@ pub static DE: Strings = Strings {
     monitor_tasks: "Prozesse",
     monitor_running: "laufend",
     tasks: "Aufgaben",
-    tasks_note: "Panels, Erweiterungsaufgaben und Threads dieser App",
+    tasks_note: "Offene Panels, Erweiterungsaufgaben und App-Threads",
     tasks_refresh: "Neu laden",
     tasks_open: "Aufgaben anzeigen",
     tasks_summary: |s| {
@@ -3147,27 +3143,35 @@ pub static DE: Strings = Strings {
         for (n, word) in [
             (s.frozen, "eingefroren"),
             (s.exited, "beendet"),
-            (s.waiting, "warten auf dich"),
+            (
+                s.waiting,
+                if s.waiting == 1 {
+                    "wartet auf dich"
+                } else {
+                    "warten auf dich"
+                },
+            ),
         ] {
             if n > 0 {
                 out.push_str(&format!(", {n} {word}"));
             }
         }
         if let Some(threads) = s.threads {
-            out.push_str(&format!(" · {threads} Threads"));
+            let label = if threads == 1 { "Thread" } else { "Threads" };
+            out.push_str(&format!(" · {threads} {label}"));
         }
         out
     },
     tasks_panels: "Panels",
     tasks_extension: "Aufgaben der Erweiterungen",
-    tasks_threads: "Threads dieser App",
+    tasks_threads: "App-Threads",
     tasks_none: "Keine.",
-    tasks_no_threads: "Dieses System hat kein /proc/self/task, aus dem sich Threads lesen lassen.",
+    tasks_no_threads: "Die Thread-Liste benötigt /proc/self/task, das auf diesem System nicht verfügbar ist.",
     tasks_idle_threads: |count| match count {
         1 => "1 ruhender Thread".to_owned(),
         _ => format!("{count} ruhende Threads"),
     },
-    tasks_shown_worktree: "angezeigt",
+    tasks_shown_worktree: "aktiv",
     tasks_shown: "sichtbar",
     tasks_hidden: "im Hintergrund",
     tasks_frozen: "eingefroren",
@@ -3197,7 +3201,7 @@ pub static DE: Strings = Strings {
             Attention::None => "",
             Attention::Busy => "arbeitet",
             Attention::Done => "wartet auf einen Prompt",
-            Attention::Input => "fragt etwas",
+            Attention::Input => "wartet auf Eingabe",
             Attention::Permission => "wartet auf Freigabe",
         }
     },
@@ -3219,21 +3223,21 @@ pub static DE: Strings = Strings {
     then_open_project: |first| format!("{first} und Projekt öffnen… wählen."),
     no_panels: "Keine Panels",
     no_panels_message: |how| format!("Dieser Worktree hat keine Panels. Für eine Shell: {how}."),
-    use_new_shell: "Schaltfläche + neben den Tabs nutzen",
+    use_new_shell: "Auf + neben den Tabs klicken",
     no_project: "Kein Projekt ausgewählt",
     select_project: "Ein Projekt in der Seitenleiste auswählen.",
     status_bar: "Statusleiste",
 
     prompt_project: "Pfad, host:/pfad, ssh://, tailscale:// oder eine Repository-URL",
     prompt_clone_folder: "Ordner, in den geklont wird",
-    prompt_review_base: "Basis-Branch oder Revision; leer nimmt den Referenz-Branch des Projekts",
+    prompt_review_base: "Basis-Branch oder Revision (leer für Projektstandard)",
     clone_from: |url| format!("{url} klonen nach"),
     clone_here: "Dieser Rechner",
-    clone_here_devcontainer: "Dieser Rechner, im Devcontainer",
+    clone_here_devcontainer: "Dieser Rechner (Devcontainer)",
     clone_in_vm: |name| format!("VM {name} auf diesem Rechner"),
     clone_on: |address| format!("Entfernter Rechner {address}"),
-    clone_devcontainer_on: |address| format!("Entfernter Rechner {address}, im Devcontainer"),
-    clone_vm_on: |address| format!("Eine VM auf dem entfernten Rechner {address}"),
+    clone_devcontainer_on: |address| format!("Entfernter Rechner {address} (Devcontainer)"),
+    clone_vm_on: |address| format!("VM auf dem entfernten Rechner {address}"),
     clone_vm_name: "Name der VM",
     prompt_branch: "Branch-Name",
     prompt_worktree: "Worktree-Name",
@@ -3249,20 +3253,20 @@ pub static DE: Strings = Strings {
     forget_project: |name| format!("Projekt {name} vergessen"),
     open_temporary_ask: "Projekt vorübergehend öffnen…",
     global_session_ask: "Neue globale Sitzung…",
-    prompt_global_session: "Ordner, host: oder ssh://host/pfad; leer ist das Home dieses Rechners",
+    prompt_global_session: "Ordner, host: oder ssh://host/pfad (leer für Home-Verzeichnis)",
     global_session: "Globale Sitzung",
     temporary: "vorübergehend",
     keep_session: |name| format!("Sitzung {name} behalten"),
     close_session: |name| format!("Sitzung {name} schließen"),
-    agents_tab: "Agents",
-    agents_tab_count: |count| format!("Agents ({count})"),
+    agents_tab: "Agenten",
+    agents_tab_count: |count| format!("Agenten ({count})"),
     agents_finished: "Fertig, nicht gemergt",
-    agents_working: |count| format!("Arbeiten ({count})"),
+    agents_working: |count| format!("Aktiv ({count})"),
     agents_merged: |count| format!("Gemergt ({count})"),
     agents_earlier: |count| format!("Frühere Sitzungen ({count})"),
     agents_none: "Noch keine Agent-Sitzungen",
     agents_none_finished: "Kein Agent ist fertig",
-    agents_none_hint: "Agenten, die du in einem Worktree startest, erscheinen hier, mit dem, worauf sie warten.",
+    agents_none_hint: "Agenten, die du in einem Worktree startest, erscheinen hier mit ihrem aktuellen Status.",
     agents_start: "Agent starten…",
     change_open: "offen",
     change_merged: "gemergt",
@@ -3283,22 +3287,18 @@ pub static DE: Strings = Strings {
     forge_sign_out: "Abmelden",
     forge_sign_out_for: |host| format!("Von {host} abmelden"),
     forge_token_missing: "Erst ein Token einfügen",
-    extension_request_failed: |error| {
-        format!(
-            "scriptschnell-term ist bei Arbeit für eine Erweiterung gescheitert und läuft weiter: {error}"
-        )
-    },
+    extension_request_failed: |error| format!("Eine Erweiterungsaufgabe ist fehlgeschlagen: {error}"),
     forge_new_account_for: |forge| format!("Neues {forge}-Konto"),
     forge_add_account: "Konto hinzufügen",
     forge_add_account_open: "+ Anderer Host…",
     forge_other_host: "Konto auf einem anderen Host hinzufügen…",
-    forge_open_add_for: |forge| format!("Formular für ein neues {forge}-Konto öffnen"),
+    forge_open_add_for: |forge| format!("Weiteres {forge}-Konto hinzufügen"),
     forge_sign_in_open: "Anmelden…",
     forge_open_sign_in_for: |host| format!("Anmeldung für {host} öffnen"),
     forge_add_account_for: |forge| format!("{forge}-Konto hinzufügen"),
     forge_remove_account_for: |account| format!("Konto {account} entfernen"),
     forge_not_an_account: |entry| {
-        format!("{entry} ist kein Host und kein Host mit Pfad wie example.com/team")
+        format!("{entry} muss ein Host oder Host/Pfad sein, z. B. example.com/team")
     },
     toast_done: "Erledigt",
     toast_failed: "Fehlgeschlagen",
@@ -3323,8 +3323,8 @@ pub static DE: Strings = Strings {
     toast_key_removed: "Schlüssel entfernt",
     toast_stopped_serving: "Dieser Rechner ist nicht mehr freigegeben",
     toast_saved: "Gespeichert",
-    toast_image_ready: |name| format!("Das Abbild {name} ist bereit"),
-    toast_image_failed: |name, error| format!("Das Abbild {name} ist fehlgeschlagen: {error}"),
+    toast_image_ready: |name| format!("Das Image {name} ist bereit"),
+    toast_image_failed: |name, error| format!("Das Image {name} ist fehlgeschlagen: {error}"),
     toast_disk_deleted: |name| format!("Festplatte von {name} gelöscht"),
     toast_agent_installed: |agent, env| format!("{agent}-Integration auf {env} installiert"),
     toast_agent_removed: |agent, env| format!("{agent}-Integration von {env} entfernt"),
@@ -3333,16 +3333,16 @@ pub static DE: Strings = Strings {
     toast_path_added: |path| format!("{path} hinzugefügt"),
     toast_project_base: |base| match base {
         Some(base) => format!("Reviews vergleichen mit {base}"),
-        None => "Reviews suchen den Basis-Branch wieder selbst".to_owned(),
+        None => "Reviews erkennen den Basis-Branch wieder automatisch".to_owned(),
     },
     section_accounts: "Konten",
     accounts_forges: "Forges",
     forge_used_by: |forge, project| format!("{forge} · von {project} genutzt"),
-    accounts_forges_note: "Der Agents-Tab fragt diese Forges, ob die Branches fertiger Agents Change Requests haben und ob sie gemergt sind. Jedes Konto hat sein eigenes Token, das im Schlüsselbund des Systems bleibt. Die Erweiterung darf Anfragen an den Host eines Kontos und seine Subdomains schicken.",
-    accounts_no_forges: "Keine Forge-Erweiterung ist an. Schalte GitHub, GitLab, Forgejo, Gitea, Bitbucket oder Azure DevOps auf der Seite Erweiterungen an.",
-    accounts_example: |example| format!("Zum Beispiel {example}"),
+    accounts_forges_note: "Der Agenten-Tab fragt diese Forges ab, ob die Branches fertiger Agenten Change Requests haben und ob sie gemergt sind. Jedes Konto speichert sein Token im Schlüsselbund des Systems. Die Erweiterung darf Anfragen an den Host eines Kontos und seine Subdomains senden.",
+    accounts_no_forges: "Keine Forge-Erweiterung ist aktiviert. Aktiviere GitHub, GitLab, Forgejo, Gitea, Bitbucket oder Azure DevOps auf der Seite Erweiterungen.",
+    accounts_example: |example| format!("z. B. {example}"),
     accounts_logins: "Registry-Anmeldungen",
-    accounts_logins_note: "Diese Erweiterungen geben deine Anmeldungen mit falschen Tokens an Sandboxes weiter. Der Proxy setzt das echte Token in Anfragen an den Host ein, zu dem es gehört. Ändere eine Anmeldung in ihrer Datei oder Variable; eine Sandbox übernimmt sie beim Start.",
+    accounts_logins_note: "Diese Erweiterungen geben Platzhalter-Tokens an Sandboxes weiter, und der Proxy setzt die echten Zugangsdaten für passende Hosts ein. Ändere Zugangsdaten in ihrer Datei oder Umgebungsvariable; neue Sandboxes übernehmen sie beim Start.",
     logins_file: |path| format!("Liest Datei {path}"),
     logins_variable: |name| format!("Liest Variable {name}"),
     logins_other: |source| format!("Liest {source}"),
@@ -3350,26 +3350,26 @@ pub static DE: Strings = Strings {
     logins_extension: "Einstellungen ›",
     logins_for: |hosts| format!("Anmeldungen für {hosts}"),
     logins_none: "Keine Anmeldungen gefunden",
-    logins_no_sources: "Keine eingeschaltete Erweiterung reicht Registry-Anmeldungen in Sandboxen weiter.",
-    logins_off: "Aus. Schalte sie auf der Seite Erweiterungen an.",
+    logins_no_sources: "Keine aktivierte Erweiterung reicht Registry-Anmeldungen an Sandboxes weiter.",
+    logins_off: "Deaktiviert. Auf der Seite Erweiterungen aktivieren.",
     open_accounts: "Konten öffnen",
-    ext_accounts_moved: "Ihre Konten und Anmeldungen stehen auf der Seite Konten.",
+    ext_accounts_moved: "Konten und Anmeldungen lassen sich auf der Seite Konten verwalten.",
     ext_hosts_heading: "Hosts",
-    ext_hosts_note: "Ihre Anfragen und Blocklist-Downloads erreichen nur diese Hosts, die Hosts ihrer Konten und die Hosts, die ihre Einstellungen nennen.",
-    ext_hosts_none: "Keine eigenen Hosts.",
+    ext_hosts_note: "Netzwerkanfragen und Blocklist-Downloads sind auf diese Hosts, konfigurierte Konto-Hosts und in den Einstellungen genannte Hosts beschränkt.",
+    ext_hosts_none: "Keine zusätzlichen Hosts.",
     not_a_host: |entry| format!("{entry} ist kein Hostname und kein *.domain"),
     not_a_url: |entry| format!("{entry} ist keine https://-URL"),
     discussion_open: |title| format!("Diskussion zu {title}"),
     discussion_loading: "Diskussion wird geladen…",
     discussion_waiting: "Warte auf das Repository und seinen Change Request…",
     discussion_no_change: "Dieser Branch hat keinen Change Request.",
-    discussion_unsupported: "Keine eingeschaltete Erweiterung zeigt Change Requests für die Forge dieses Repositorys. Einstellungen > Erweiterungen listet die Forge-Erweiterungen (GitHub, GitLab, Forgejo, Gitea, Bitbucket, Azure DevOps); schalte die für ihren Host ein und melde dich dann unter Konten an.",
-    discussion_failed: |error| format!("Die Forge hat nicht geantwortet: {error}"),
+    discussion_unsupported: "Keine aktivierte Erweiterung unterstützt Change Requests für die Forge dieses Repositorys. Aktiviere die passende Forge-Erweiterung unter Einstellungen › Erweiterungen (GitHub, GitLab, Forgejo, Gitea, Bitbucket, Azure DevOps) und melde dich dann unter Konten an.",
+    discussion_failed: |error| format!("Forge nicht erreichbar: {error}"),
     git_dir_replaced: |path| {
         format!(
-            "{path}/.git führt nicht mehr zum Repository, mit dem das Projekt \
-             hinzugefügt wurde. Eine Sandbox hat es vielleicht ersetzt. Die App \
-             beachtet es nicht, git in Terminals auf dem Host liest es aber."
+            "{path}/.git verweist nicht mehr auf das ursprüngliche Repository (möglicherweise hat \
+             eine Sandbox es ersetzt). scriptschnell-term ignoriert es, aber git in Host-Terminals \
+             liest es weiterhin."
         )
     },
     discussion_by: |author| format!("von {author}"),
@@ -3396,28 +3396,28 @@ pub static DE: Strings = Strings {
     },
     discussion_changed: |old, since| {
         if since.is_empty() {
-            format!("Zeile {old} wurde geändert; das hier hat sie ersetzt.")
+            format!("Zeile {old} wurde geändert; die aktualisierte Zeile wird angezeigt.")
         } else {
-            format!("Zeile {old} wurde seit `{since}` geändert; das hier hat sie ersetzt.")
+            format!("Zeile {old} wurde seit `{since}` geändert; die aktualisierte Zeile wird angezeigt.")
         }
     },
     discussion_found: |old| {
         format!(
-            "Über ihren Text gefunden, war Zeile {old}. Ihr Commit ist nicht in diesem Repository."
+            "Anhand des Inhalts gefunden (zuvor Zeile {old}); der ursprüngliche Commit ist nicht in diesem Repository."
         )
     },
     discussion_file_gone: |since| {
         if since.is_empty() {
-            "Die Datei gibt es nicht mehr.".to_owned()
+            "Datei wurde gelöscht.".to_owned()
         } else {
-            format!("Die Datei gibt es seit `{since}` nicht mehr.")
+            format!("Datei seit `{since}` gelöscht.")
         }
     },
     discussion_line_gone: |old, since| {
         if since.is_empty() {
-            format!("Zeile {old} gibt es nicht mehr.")
+            format!("Zeile {old} wurde entfernt.")
         } else {
-            format!("Zeile {old} gibt es seit `{since}` nicht mehr.")
+            format!("Zeile {old} seit `{since}` entfernt.")
         }
     },
     discussion_removed: |old| format!("Auf der entfernten Zeile {old} der Basis."),
@@ -3441,7 +3441,7 @@ pub static DE: Strings = Strings {
     change_threads: |open, resolved| format!("Threads: {open} offen, {resolved} erledigt"),
     change_reviews: "Reviews",
     change_approved: "genehmigt",
-    change_requested_changes: "möchte Änderungen",
+    change_requested_changes: "Änderungen angefordert",
     change_commented: "kommentiert",
     change_review_pending: "Review angefragt",
     change_draft: "Entwurf",
@@ -3449,7 +3449,7 @@ pub static DE: Strings = Strings {
     change_pipeline: "Pipeline",
     change_sections: "Abschnitte des Merge-Requests",
     change_reload: "Neu laden",
-    change_open_extensions: "Erweiterungen in den Einstellungen öffnen",
+    change_open_extensions: "Erweiterungseinstellungen öffnen",
     change_open_on_forge: "Auf der Forge öffnen",
     change_open_link: "Öffnen",
     change_open_check: |name| format!("{name} öffnen"),
@@ -3459,7 +3459,7 @@ pub static DE: Strings = Strings {
     search_worktrees: "Worktrees durchsuchen",
     focus_tabs: "Fokus wechseln: Tableiste, Statusleiste, Seitenleiste, Bereich",
     focus_back: "Fokus zurück: Seitenleiste, Statusleiste, Tableiste, Bereich",
-    search_no_match: "Kein Worktree passt",
+    search_no_match: "Kein passender Worktree",
     title_worktrees_by_branch: "Worktrees nach Branch benennen",
     title_worktrees_by_agent: "Worktrees nach letzter Agent-Sitzung benennen",
     use_system_title_bar: "Titelleiste des Systems verwenden",
@@ -3475,7 +3475,7 @@ pub static DE: Strings = Strings {
     cpu_status_hint: |status, next| format!("{status}, Klicken wechselt zu {next}"),
     cpu_status_tip: |mode, next| format!("CPU-Modus: {mode}. Klicken für {next}."),
     cpu_heading: "CPU",
-    cpu_note: "Wie viel CPU die Terminals der App auf einem Rechner zusammen nutzen dürfen, damit er benutzbar bleibt, während Agenten bauen. Agenten in verborgenen Terminals bekommen außerdem eine niedrigere Priorität. Eine Änderung erreicht auch laufende Terminals. Die Einstellung cpu_mode in settings.json ändert, was ausgewogen und leise tun.",
+    cpu_note: "Begrenzt die gesamte CPU-Nutzung aller Terminals auf einem Rechner, damit er während Builds benutzbar bleibt. Agenten in Hintergrund-Terminals laufen zudem mit niedrigerer Priorität. Änderungen wirken sofort auf laufende Terminals. Mit cpu_mode in settings.json lassen sich ausgewogen und leise anpassen.",
     cpu_local: "Dieser Rechner, seine Sandboxes, Devcontainer und VMs",
     cpu_remote: "Andere Rechner: SSH-Hosts und entfernte Rechner",
     jj_off: "jj für jj-Repositorys nicht mehr verwenden",
@@ -3490,8 +3490,8 @@ pub static DE: Strings = Strings {
     creates_next_to: |repo| {
         format!("Legt {repo}-<name> neben {repo} an. Tab wechselt zum Branch-Feld.")
     },
-    no_matching_command: "Kein Befehl und kein Worktree passt",
-    no_matching_panel: "Kein Panel passt",
+    no_matching_command: "Kein passender Befehl oder Worktree",
+    no_matching_panel: "Kein passendes Panel",
 
     state_not_loaded: |error| format!("Zustand nicht geladen: {error}"),
     settings_not_loaded: |error| format!("Einstellungen nicht geladen: {error}"),
@@ -3500,8 +3500,8 @@ pub static DE: Strings = Strings {
     not_a_path: |input| format!("kein Pfad: {input}"),
     repository_not_loaded: "Repository noch nicht geladen",
     bad_worktree_name: |name| format!("ungültiger Worktree-Name {name:?}"),
-    bad_branch_name: "Branch-Namen ohne Leerzeichen und ~ ^ : ? * [ \\ ..",
-    bad_folder_name: "Ein Ordnername: kein / oder \\, nicht . oder ..",
+    bad_branch_name: "Branch-Namen dürfen keine Leerzeichen oder ~ ^ : ? * [ \\ .. enthalten",
+    bad_folder_name: "Ordnernamen dürfen kein / oder \\ enthalten und nicht . oder .. lauten",
     max_panes: |max| format!("ein Tab zeigt höchstens {max} Bereiche"),
     blocklist_failed: |id, error| format!("Sperrliste {id}: Download fehlgeschlagen: {error}"),
     warning: |message| format!("Warnung: {message}"),
@@ -3510,7 +3510,7 @@ pub static DE: Strings = Strings {
     view_unknown: |view| format!("keine Erweiterung bietet die Ansicht {view}"),
     view_gone: |view| {
         format!(
-            "{view} hat hier nichts mehr zu zeigen. Die Erweiterung ist vielleicht aus, oder das Gezeigte wurde gelöscht."
+            "{view} ist nicht mehr verfügbar. Die Erweiterung ist möglicherweise deaktiviert, oder der Inhalt wurde gelöscht."
         )
     },
     terminal_failed: |error| format!("Terminal fehlgeschlagen: {error}"),
@@ -3519,17 +3519,16 @@ pub static DE: Strings = Strings {
     },
     sandbox_shell_replaced: |shell, with| {
         format!(
-            "{shell} kann nicht in der Windows-Sandbox laufen, die ihm den Speicher \
-             vorenthält, den Gits MSYS-Programme teilen; Terminals in Sandboxes starten \
-             stattdessen {with}"
+            "{shell} kann nicht in der Windows-Sandbox laufen, da sie den gemeinsamen Speicher \
+             von Gits MSYS-Programmen blockiert; stattdessen wird {with} gestartet"
         )
     },
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "Signal".to_owned(), |code| format!("Code {code}"));
         if output.is_empty() {
-            format!("Terminal endete direkt nach dem Start ({status})")
+            format!("Terminal wurde sofort beendet ({status})")
         } else {
-            format!("Terminal endete direkt nach dem Start ({status}): {output}")
+            format!("Terminal wurde sofort beendet ({status}): {output}")
         }
     },
     paste_image_failed: |error| format!("Bild konnte nicht eingefügt werden: {error}"),
@@ -3563,28 +3562,28 @@ pub static DE: Strings = Strings {
     serve_machine: "Andere Rechner verbinden lassen",
     when_machines_connect: "Zugriff verbundener Rechner",
     pairing_steps: "Um zwei Rechner zu koppeln, kopiere deinen Schlüssel und lasse ihn auf dem anderen Rechner zu, dann füge den Rechner unter \"Rechner, mit denen du dich verbindest\" hinzu. Für den Zugriff in die andere Richtung dort dasselbe tun.",
-    serve_on: |address| format!("Eingeschaltet erreichen andere Rechner diesen unter {address}"),
+    serve_on: |address| format!("Wenn aktiv, erreichen andere Rechner diesen unter {address}"),
     serving_on: |address| format!("Bereit auf {address}"),
-    any_address: |port| format!("Port {port} jeder Netzwerkadresse"),
+    any_address: |port| format!("Port {port} auf allen Netzwerkschnittstellen"),
     serve_failed: |error| format!("Rechner konnte nicht freigegeben werden: {error}"),
     offer_host: "Shell dieses Rechners anbieten",
-    offer_host_note: "Standard je Schlüssel. Aus: nur VMs",
-    offer_host_no_vms: "Lass es an, bis VMs eingerichtet sind",
+    offer_host_note: "Standard für neue Schlüssel. Wenn aus, sind nur VMs erreichbar.",
+    offer_host_no_vms: "Aktiviert lassen, bis VMs eingerichtet sind.",
     share_projects: "Projekte dieses Rechners teilen",
-    share_projects_note: "Standard je Schlüssel. Clients zeigen sie in der Seitenleiste",
-    web_links_vm_only: "Verknüpfte Webserver bekommen nur VMs",
-    web_links_vm_only_note: "Wenn an, erreicht ein verknüpfter Webserver nur die VMs, nicht die Shell dieser Maschine",
+    share_projects_note: "Standard für neue Schlüssel. Verbundene Clients zeigen geteilte Projekte in ihrer Seitenleiste.",
+    web_links_vm_only: "Verknüpfte Webserver auf VMs beschränken",
+    web_links_vm_only_note: "Wenn aktiv, erreichen verknüpfte Webserver nur VMs, nicht die Shell dieses Rechners.",
     allowed_keys: "Zugelassene Schlüssel",
     settings_results: "PASSENDE SEITEN",
-    allowed_keys_not_serving: "Dieser Rechner nimmt keine Verbindungen an, bis Andere Rechner verbinden lassen an ist.",
-    no_allowed_keys: "Noch keine. Klicke auf dem anderen Rechner hier auf Schlüssel kopieren und füge das Kopierte ein.",
+    allowed_keys_not_serving: "Aktiviere „Andere Rechner verbinden lassen“, um eingehende Verbindungen anzunehmen.",
+    no_allowed_keys: "Noch keine Schlüssel. Klicke auf dem anderen Rechner auf Schlüssel kopieren und füge ihn unten ein.",
     key_to_allow: "Öffentlicher Schlüssel zum Zulassen",
     vms_only: "Nur VMs",
-    vms_only_note: "\"Nur VMs zulassen\" lässt den Schlüssel nur die virtuellen Maschinen erreichen, nicht die Shell dieses Rechners.",
+    vms_only_note: "„Nur VMs zulassen“ gewährt Zugriff auf virtuelle Maschinen, nicht aber auf die Shell dieses Rechners.",
     allow: "Shell und VMs zulassen",
     allow_vms_only: "Nur VMs zulassen",
-    paste_key_first: "Füge oben den Schlüssel der anderen Maschine ein, dann lassen sich die Knöpfe zum Zulassen drücken.",
-    not_a_key: "Keine öffentliche cmdterm-Schlüsselzeile",
+    paste_key_first: "Füge oben den öffentlichen Schlüssel des anderen Rechners ein, um die Zulassen-Schaltflächen zu aktivieren.",
+    not_a_key: "kein gültiger öffentlicher cmdterm-Schlüssel",
     remove_named: |name| format!("{name} entfernen"),
     show_named: |name| format!("{name} zeigen"),
     hide_named: |name| format!("{name} ausblenden"),
@@ -3596,7 +3595,7 @@ pub static DE: Strings = Strings {
     key_defaults_named: |name| format!("Standard für {name} nutzen"),
     key_own_settings: "Eigene Einstellungen",
     known_machines: "Rechner, mit denen du dich verbindest",
-    no_known_machines: "Noch keinem vertraut",
+    no_known_machines: "Noch keine vertrauten Rechner",
     machine_address: "Adresse des Rechners, host oder host:port",
     add_machine: "Rechner hinzufügen",
     add: "Hinzufügen",
@@ -3605,8 +3604,8 @@ pub static DE: Strings = Strings {
     forget: "Vergessen",
     forget_named: |name| format!("{name} vergessen"),
     fuse_named: |name| format!("Projekte von {name} zeigen"),
-    fused_unreachable: "Nicht erreichbar, neuer Versuch folgt",
-    fetching_key: |address| format!("Schlüssel von {address} wird abgerufen"),
+    fused_unreachable: "Nicht erreichbar, neuer Versuch…",
+    fetching_key: |address| format!("Schlüssel von {address} wird abgerufen…"),
     compare_key: |address| {
         format!(
             "{address} hat diesen Schlüssel. Vergleiche ihn mit cmdterm-remote keygen auf dem Rechner."
@@ -3617,10 +3616,10 @@ pub static DE: Strings = Strings {
     cancel: "Abbrechen",
     cancel_set_up: |image| format!("Einrichtung von {image} abbrechen"),
     ok: "OK",
-    already_trusted: |address| format!("{address} ist schon vertraut"),
+    already_trusted: |address| format!("{address} wird bereits vertraut"),
     key_changed: |address| {
         format!(
-            "Der Schlüssel von {address} hat sich geändert. Jemand könnte mithören. Vergiss ihn nur, wenn der Server absichtlich einen neuen Schlüssel hat."
+            "Der Schlüssel von {address} hat sich geändert. Jemand könnte die Verbindung abfangen. Vergiss den alten Schlüssel nur, wenn auf dem Server absichtlich ein neuer Schlüssel erzeugt wurde."
         )
     },
     connect_failed: |error| format!("Verbindung fehlgeschlagen: {error}"),
@@ -3648,16 +3647,16 @@ pub static DE: Strings = Strings {
     ssh_named: |peer| format!("Projekt auf {peer} über SSH öffnen"),
     remote: "Remote",
     remote_named: |peer| format!("Projekt auf {peer} als entfernten Rechner öffnen"),
-    vpn_nebula_note: "Nebula hat keine Liste der Rechner. Gezeigt werden Lighthouses, static_host_map und Einträge aus /etc/hosts in seinem Netz.",
-    vpn_note: "SSH öffnet ein Projekt an der VPN-Adresse des Rechners. Remote braucht dort ein freigebendes scriptschnell-term und hier seinen vertrauten Schlüssel. In der Palette nennen tailscale://box/~/src, netbird://box/~/src und nebula://box/~/src einen Rechner direkt.",
+    vpn_nebula_note: "Nebula führt keine Peer-Liste. Angezeigt werden Lighthouses, static_host_map und passende Einträge aus /etc/hosts.",
+    vpn_note: "SSH öffnet ein Projekt über die VPN-Adresse des Rechners. Remote erfordert ein dort freigegebenes scriptschnell-term mit hier vertrautem Schlüssel. In der Befehlspalette sprechen tailscale://box/~/src, netbird://box/~/src und nebula://box/~/src einen Rechner direkt an.",
     config_not_saved: |error| format!("nicht gespeichert: {error}"),
     no_kvm: "/dev/kvm ist nicht verfügbar, VMs laufen hier nicht",
     local_vms: "Deine VMs",
-    no_local_vms: "Noch keine. Öffne unten eine per Name.",
+    no_local_vms: "Noch keine VMs. Gib unten einen Namen ein, um eine zu öffnen.",
     running: "läuft",
     stopped: "gestoppt",
     reset: "Zurücksetzen",
-    reset_note: "Löscht die Platte der VM. Sie startet nächstes Mal vom Image.",
+    reset_note: "Löscht die Festplatte der VM, sodass sie beim nächsten Mal frisch vom Basis-Image startet.",
     delete_disk_of: |name| format!("{name} zurücksetzen"),
     vm_name: "Name der neuen VM",
     open_vm: "Projekt in dieser VM öffnen",
@@ -3687,21 +3686,21 @@ pub static DE: Strings = Strings {
     vm_settings_saved: "VM-Einstellungen gespeichert",
     not_a_number: |value| format!("keine Zahl: {value}"),
     vm_notes: &[
-        "Für selbst gebaute Images. Ein leeres Feld entfernt seine Einstellung.",
-        "Laufende VMs behalten die alten Einstellungen, bis sie stoppen.",
+        "Für eigene Images. Ein leeres Feld verwendet den Standard.",
+        "Laufende VMs behalten ihre bisherigen Einstellungen, bis sie stoppen.",
     ],
     ready_made_vms: "Fertige VMs",
     image_ready: |summary| format!("Bereit. {summary}"),
     set_up: "Einrichten",
     start_set_up: "Starten",
-    set_up_explained: "Lädt Firecracker und einen Kernel herunter und baut dann das Image mit der Container-Engine. Starten beginnt, Abbrechen geht zurück.",
+    set_up_explained: "Lädt Firecracker und einen Kernel herunter und baut das Image mit deiner Container-Engine. Klicke auf Starten oder Abbrechen.",
     set_up_image: |title| format!("{title} einrichten"),
     rebuild: "Neu bauen",
     rebuild_image: |title| format!("{title} neu bauen"),
     preparing: "Startet",
     install_first: |tools| format!("Installiere {tools}, um Images einzurichten."),
     vms_have_network: "VMs erreichen das Internet über pasta, ohne root.",
-    vms_without_network: "VMs haben kein Netz. Installiere passt (pasta) dafür.",
+    vms_without_network: "VMs haben keinen Netzwerkzugriff. Installiere passt (pasta), um Netzwerk zu aktivieren.",
     vm_name_note: "Eine VM namens ubuntu oder ubuntu-irgendwas startet vom Ubuntu-Image.",
     advanced_settings: "Erweiterte Einstellungen",
     this_worktree: "Terminals dieses Worktrees",
@@ -3712,26 +3711,26 @@ pub static DE: Strings = Strings {
     automatic: "Automatisch: docker, wenn installiert, sonst podman",
     section_sandbox: "Sandbox",
     sandbox_network: "Netzwerk",
-    sandbox_network_note: "Terminals in der Sandbox dürfen ins Netz",
+    sandbox_network_note: "Erlaubt Terminals in der Sandbox den Netzwerkzugriff",
     sandbox_restrict: "Nur erlaubte Hosts",
-    sandbox_restrict_note: "Terminals in der Sandbox erreichen nur die erlaubten Hosts (Sandboxing, dann Hosts), über einen Proxy aus HTTP_PROXY und HTTPS_PROXY",
+    sandbox_restrict_note: "Beschränkt Terminals in der Sandbox auf erlaubte Hosts (Sandboxing › Hosts) über HTTP_PROXY und HTTPS_PROXY",
     sandbox_host_network: "Netzwerk des Hosts",
-    sandbox_host_network_note: "Aus: Die Sandbox hat ein eigenes Loopback. Server darin belegen keine Ports dieses Rechners, und nur HTTP und HTTPS verlassen sie über den Proxy. An: Sie teilt Netzwerk und Ports dieses Rechners.",
-    sandbox_host_network_unscoped: "Diesem Kernel fehlt Landlock-ABI 6 (Linux 6.12). Sandboxes mit dem Netzwerk des Hosts erreichen daher die abstrakten Unix-Sockets dieses Rechners. Über den von X11 können Programme darin in deine Fenster tippen. Schalte \"Netzwerk des Hosts\" aus oder aktualisiere den Kernel.",
+    sandbox_host_network_note: "Aus: Sandboxes nutzen ein isoliertes Loopback. Server darin belegen keine Host-Ports, und nur HTTP und HTTPS laufen über den Proxy. An: Sandboxes teilen Netzwerk und Ports dieses Rechners.",
+    sandbox_host_network_unscoped: "Diesem Kernel fehlt Landlock-ABI 6 (Linux 6.12). Sandboxes mit Host-Netzwerk können daher abstrakte Unix-Sockets dieses Rechners erreichen (einschließlich X11, wodurch Programme Eingaben in deine Fenster senden können). Schalte „Netzwerk des Hosts“ aus oder aktualisiere den Kernel.",
     sandbox_allowed_hosts: "Erlaubte Hosts",
-    sandbox_hosts_inactive: "Die Sandbox nutzt diese Liste nur, solange ihr Netzwerk an und auf erlaubte Hosts begrenzt ist. Beides lässt sich unter Sandboxing einschalten.",
+    sandbox_hosts_inactive: "Diese Liste gilt nur, wenn unter Sandboxing sowohl Netzwerk als auch Nur erlaubte Hosts aktiviert sind.",
     sandbox_intercept_tls: "HTTPS prüfen",
     sandbox_intercept_tls_note: "Der Proxy entschlüsselt HTTPS mit einer eigenen CA, der Sandboxes vertrauen. HTTPS zu einem Host mit ungültigem Zertifikat schlägt in der Sandbox fehl.",
     sandbox_engines: "Container-Engines",
-    sandbox_engines_note: "Das schwächt die Sandbox. Terminals in der Sandbox nutzen docker, podman, containerd, buildkit und WSL-Interop direkt. Container, die sie starten, laufen außerhalb der Sandbox, mit den Datei- und Netzwerkrechten der Engine.",
+    sandbox_engines_note: "Dies schwächt die Sandbox. Terminals in der Sandbox greifen direkt auf docker, podman, containerd, buildkit und WSL-Interop zu. Gestartete Container laufen außerhalb der Sandbox mit vollem Datei- und Netzwerkzugriff der Engine.",
     engines_passthrough: "Direkt durchreichen (schwächt die Sandbox)",
     engines_sidecar: "Sidecar pro Projekt",
     engines_off: "Aus",
     engines_use_sidecar: "Sidecar-Engine nutzen",
     engines_turn_off: "Engine-Zugriff abschalten",
     engines_keep: "Direktes Durchreichen behalten",
-    engines_fixes_note: "Ein Sidecar hält Container am Laufen, mit einer Engine, die nur das Projekt sieht. Aus heißt, Sandboxes können keine Container starten.",
-    sandbox_sidecar_note: "Jedes Projekt bekommt eine eigene Engine in einem Container, die sich die Sandboxes seiner Worktrees teilen. Sie sieht die Worktrees, ihren eigenen Speicher und die Registry-Zertifikate des Hosts, aber keine anderen Dateien. Ihr Netzwerk ist nicht auf die erlaubten Hosts beschränkt. Nur unter Linux.",
+    engines_fixes_note: "Ein Sidecar hält Container mit einer isolierten Engine am Laufen, die nur das Projekt sieht. Bei „Aus“ können Sandboxes keine Container starten.",
+    sandbox_sidecar_note: "Jedes Projekt erhält eine isolierte Container-Engine, die sich die Sandboxes seiner Worktrees teilen. Sie sieht nur die Worktrees, ihren eigenen Speicher und die Registry-Zertifikate des Hosts. Ihr Netzwerk ist nicht auf erlaubte Hosts beschränkt. Nur unter Linux.",
     sidecar_engine: "Sidecar-Engine",
     sidecar_podman: "podman in podman",
     sidecar_docker: "docker in docker",
@@ -3740,36 +3739,36 @@ pub static DE: Strings = Strings {
     sandbox_host: "Host suchen oder hinzufügen, *.example.com für Subdomains",
     sandbox_host_none: |host| format!("Kein erlaubter Host passt zu \"{host}\"."),
     count_of: |shown, all| format!("{shown} von {all} passen"),
-    sandbox_host_bare: "Gefiltert. Zum Hinzufügen den ganzen Host eingeben, etwa example.com.",
+    sandbox_host_bare: "Liste wird gefiltert. Gib einen vollständigen Hostnamen ein (z. B. example.com), um ihn hinzuzufügen.",
     add_host: "Host hinzufügen",
     choose_hosts: "Häufige Hosts wählen",
     choose_hosts_open: "+ Häufige Hosts wählen…",
     host_setup_dialog: "Erlaubte Hosts für Sandboxes",
     host_setup_intro: "Terminals in der Sandbox erreichen nur die Hosts, die du erlaubst, und der Proxy prüft ihr HTTPS. Wähle, was deine Arbeit braucht.",
-    host_setup_note: "Das lässt sich später unter Einstellungen, Sandboxing, Hosts ändern, wo du auch einzelne Hosts hinzufügen kannst.",
+    host_setup_note: "Du kannst dies später unter Einstellungen › Sandboxing › Hosts ändern und dort auch einzelne Hosts hinzufügen.",
     host_setup_done: "Fertig",
     setup_dialog: "scriptschnell-term einrichten",
     setup_step: |at, of| format!("Schritt {at} von {of}"),
     setup_back: "Zurück",
     setup_next: "Weiter",
     setup_appearance: "Sprache, Tastatur und Farben",
-    setup_appearance_intro: "Änderungen wirken sofort. Unter Einstellungen (Strg+,) findest du das alles später wieder.",
+    setup_appearance_intro: "Änderungen wirken sofort. Du kannst dies jederzeit unter Einstellungen (Strg+,) anpassen.",
     setup_runtime: "Wo Terminals laufen",
-    setup_runtime_intro: "Worktrees, die du ab jetzt öffnest, starten ihre Terminals hier.",
+    setup_runtime_intro: "Wähle die Standardumgebung für Terminals in neu geöffneten Worktrees.",
     setup_runtime_note: "Für einen einzelnen Worktree änderst du das unter Einstellungen › Sandboxing.",
-    setup_sandbox_note: "Schreibt nur in den Worktree, Hosts erreicht sie über einen Proxy.",
-    setup_devcontainer_note: "Nutzt die devcontainer.json des Worktrees, sonst die Sandbox.",
-    setup_host_note: "Läuft als du, mit vollem Zugriff auf diesen Rechner.",
+    setup_sandbox_note: "Beschränkt Schreibzugriffe auf den Worktree und filtert Netzwerkzugriffe über einen Proxy.",
+    setup_devcontainer_note: "Nutzt die devcontainer.json des Worktrees, falls vorhanden, sonst die Sandbox.",
+    setup_host_note: "Läuft direkt auf diesem Rechner mit deinen vollen Benutzerrechten.",
     setup_recommended: "Empfohlen",
     setup_agents: "Coding-Agenten",
-    setup_agents_intro: "Angehakte Agenten bekommen Hooks, die scriptschnell-term melden, wenn sie auf dich warten, und einen Skill, der ihnen die App erklärt. Abwählen entfernt beides.",
+    setup_agents_intro: "Ausgewählte Agenten erhalten Hooks, um ihren Status an scriptschnell-term zu melden, sowie einen Skill zur Bedienung der App. Abwählen entfernt beides.",
     settings_group_app: "ALLGEMEIN",
     settings_group_integrations: "INTEGRATIONEN",
     settings_group_machines: "MASCHINEN",
     settings_group_sandbox: "SANDBOX",
     reset_settings: "Alles zurücksetzen",
     reset_settings_confirm: "Zum Bestätigen klicken",
-    reset_settings_hint: "Setzt alle Einstellungen zurück und öffnet die Einrichtung des ersten Starts",
+    reset_settings_hint: "Setzt alle Einstellungen auf die Standardwerte zurück und öffnet die Ersteinrichtung",
     hosts_added_by_you: "Von dir oder einer Erweiterung hinzugefügt",
     host_removed: |host| format!("{host} entfernt"),
     undo: "Rückgängig",
@@ -3792,36 +3791,36 @@ pub static DE: Strings = Strings {
         "linux" => "Linux-Pakete: Debian, Ubuntu, Alpine",
         _ => "Andere Hosts",
     },
-    bad_host: "Hosts sind Namen oder Adressen, wahlweise mit *. davor",
-    sandbox_writable: "Beschreibbar neben dem Worktree",
+    bad_host: "Gib einen Hostnamen oder eine IP-Adresse ein, optional mit *. davor",
+    sandbox_writable: "Zusätzliche beschreibbare Pfade",
     sandbox_hidden: "Vor der Sandbox verborgen",
     sandbox_path: "Pfad, ~/ erlaubt",
     add_writable: "Als beschreibbar hinzufügen",
     add_hidden: "Als verborgen hinzufügen",
-    sandbox_note: "Änderungen gelten für danach gestartete Terminals.",
+    sandbox_note: "Änderungen gelten für neu gestartete Terminals.",
     restart_terminals: "Terminals dieses Worktrees neu starten",
-    restart_terminals_hint: "Beendet die Programme darin und startet sie mit den aktuellen Einstellungen neu",
-    sandbox_windows_note: "Unter Windows begrenzt die Sandbox nur Schreibzugriffe. Verborgene Pfade bleiben lesbar und das Netzwerk bleibt an.",
+    restart_terminals_hint: "Beendet laufende Programme und startet die Terminals mit den aktuellen Einstellungen neu",
+    sandbox_windows_note: "Unter Windows beschränkt die Sandbox nur Schreibzugriffe. Verborgene Pfade bleiben lesbar und der Netzwerkzugriff bleibt aktiv.",
     section_project: "Projekt",
     project_settings: "Projekteinstellungen",
     settings_page: |page| format!("Einstellungen › {page}"),
     project_none: "Öffne ein Projekt, um seine Einstellungen zu ändern.",
     project_jj: "Jujutsu verwenden",
-    project_jj_note: "Wo das Projekt ein jj-Repository hat",
-    project_launches: "Agenten öffnen Worktrees ohne Nachfrage",
-    project_launches_note: "Sie legen Worktrees an und starten dort Agenten",
+    project_jj_note: "Wenn das Projekt ein jj-Repository enthält",
+    project_launches: "Agenten dürfen Worktrees ohne Nachfrage öffnen",
+    project_launches_note: "Erlaubt Agenten, Worktrees anzulegen und dort automatisch Agenten zu starten",
     project_base: "Referenz-Branch",
-    project_base_hint: "Leer: origin/HEAD, main, master oder trunk",
-    project_base_note: "Der Branch oder die Revision, mit der Reviews vergleichen, wenn du keine angibst. Leer nimmt origin/HEAD, sonst main, master oder trunk; Mercurial nimmt default und jj trunk().",
+    project_base_hint: "Leer für automatische Erkennung (origin/HEAD, main, master oder trunk)",
+    project_base_note: "Standard-Branch oder Revision für Code-Reviews. Leer für automatische Erkennung (origin/HEAD, main, master oder trunk; default für Mercurial; trunk() für jj).",
     project_base_set: "Setzen",
     project_folders: "Sandbox-Ordner",
-    project_folders_note: "Ordner auf dem Rechner des Projekts, die seine Terminals in der Sandbox neben dem Worktree nutzen dürfen. Ein nur lesbarer Ordner darf in einem verborgenen Pfad liegen und ist dann trotzdem sichtbar. Ein Ordner, der einen verborgenen Pfad oder die Dateien der App enthält, wird übersprungen. Änderungen gelten für danach gestartete Terminals.",
+    project_folders_note: "Zusätzliche Ordner auf dem Rechner des Projekts für Terminals in der Sandbox. Ein schreibgeschützter Ordner innerhalb eines verborgenen Pfads bleibt dennoch sichtbar. Ordner, die einen verborgenen Pfad oder App-Dateien enthalten, werden übersprungen. Änderungen gelten für neu gestartete Terminals.",
     project_writable: "Beschreibbar",
     project_readable: "Nur lesbar",
     no_project_folders: "Noch keine",
     add_readable: "Als nur lesbar hinzufügen",
     project_remote_note: "Dieses Projekt liegt auf einem anderen Rechner. Dort gelten nur absolute Pfade.",
-    project_not_sandboxed: "Die Terminals dieses Worktrees laufen nicht in einer Sandbox, für sie gelten diese Ordner also nicht.",
+    project_not_sandboxed: "Dieser Worktree läuft nicht in einer Sandbox, daher gelten diese Ordnerregeln nicht.",
 };
 
 #[cfg(test)]

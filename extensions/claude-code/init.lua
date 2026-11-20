@@ -8,7 +8,7 @@
 -- scriptschnell-term installs this extension and keeps it current. Grant its
 -- permissions on the Extensions page of the settings (Ctrl+,).
 --
--- Your login is NOT copied unless you turn on "Copy the login".
+-- Your login is NOT copied unless you turn on "Copy login credentials".
 -- Copying it gives everything that runs in the environment your Claude
 -- account. Without it, run `claude` once inside and log in there.
 

@@ -453,7 +453,7 @@ pub const PRESETS: [Preset; 6] = [
     Preset {
         id: DEFAULT_KEYMAP,
         name: "scriptschnell-term",
-        description: "Uses Ctrl+Shift, so every Ctrl+letter key still reaches the shell",
+        description: "Uses Ctrl+Shift so all Ctrl+letter shortcuts still reach the shell",
         bindings: &[&[
             ("ctrl+shift+p", "palette"),
             ("ctrl+,", "settings"),
@@ -517,7 +517,7 @@ pub const PRESETS: [Preset; 6] = [
     Preset {
         id: "vscode",
         name: "VS Code",
-        description: "The integrated terminal's keys: Ctrl+Shift+` for a terminal, Ctrl+Shift+5 to split",
+        description: "VS Code integrated terminal shortcuts: Ctrl+Shift+` for a new terminal, Ctrl+Shift+5 to split",
         bindings: &[VSCODE],
     },
     Preset {

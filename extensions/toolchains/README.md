@@ -37,7 +37,7 @@ directory: with `RUSTUP_HOME` set, that directory becomes writable instead of `~
 Many tools fetch releases from GitHub, which the default allowed hosts already cover.
 Directories that do not exist when a sandbox starts stay missing inside it, so install a
 manager once outside the sandbox. `~/.local/bin`, where `uv tool` and `pipx` link their
-commands, stays read-only: add it under More writable paths if you want those links.
+commands, stays read-only: add it under Additional writable paths if you want those links.
 
 It applies its rules when the app starts and again whenever a sandbox comes up.
 
@@ -52,9 +52,9 @@ directories read-only.
 
 On the extension's page of the settings (Ctrl+,):
 
-- Turned off: tools by the names in the table, such as `cargo` or `dotnet`. Their
+- Disabled tools: tools by the names in the table, such as `cargo` or `dotnet`. Their
   directories stay read-only and their hosts are not added.
-- More writable paths: further directories sandboxes may write. Paths may start with `~/`.
+- Additional writable paths: extra directories sandboxes may write to. Paths may start with `~/`.
 
 ## Permissions
 
