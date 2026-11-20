@@ -3,6 +3,8 @@
 //!
 //! - no stream panics, and the cursor, margins and row lengths stay inside the screen;
 //! - feeding a stream in one call and in random chunks ends in the same screen;
+//! - the parser's run scans and the terminal's ASCII runs end where the byte-at-a-time
+//!   path does;
 //! - stable indexes stay monotonic and agree with the scrollback and the rows, and the
 //!   scrollback limit holds;
 //! - resizing narrower and wider keeps the invariants.
@@ -118,6 +120,33 @@ proptest! {
         let mut out = Vec::new();
         t.take_replies(&mut out);
         let _ = t.drain_events().count();
+    }
+
+    #[test]
+    fn fast_paths_match_the_bytewise_path(case in vocab::case()) {
+        let bytes = case.bytes();
+        let mut fast = start(&case);
+        fast.advance(&bytes);
+        let mut slow = start(&case);
+        slow.advance_bytewise(&bytes);
+        prop_assert_eq!(
+            snapshot::of_cmdterm(&fast),
+            snapshot::of_cmdterm(&slow),
+            "bytes: {}",
+            vocab::escape(&bytes)
+        );
+        for y in 0..fast.size().rows {
+            let (a, b) = (fast.row(y).unwrap(), slow.row(y).unwrap());
+            prop_assert_eq!(a.cells(), b.cells(), "row {}", y);
+            prop_assert_eq!(a.wrapped(), b.wrapped(), "row {}", y);
+        }
+        prop_assert_eq!(fast.cursor(), slow.cursor());
+        prop_assert_eq!(fast.scrollback_len(), slow.scrollback_len());
+        let (mut a, mut b) = (Vec::new(), Vec::new());
+        fast.take_replies(&mut a);
+        slow.take_replies(&mut b);
+        prop_assert_eq!(a, b);
+        prop_assert_eq!(fast.drain_events().collect::<Vec<_>>(), slow.drain_events().collect::<Vec<_>>());
     }
 
     #[test]

@@ -336,6 +336,58 @@ impl Terminal {
         self.parser.advance(&mut self.core, bytes);
     }
 
+    /// `advance` without the fast paths: the parser runs its state machine on every
+    /// byte and the terminal prints one character at a time. Tests check that both end
+    /// in the same state.
+    #[doc(hidden)]
+    pub fn advance_bytewise(&mut self, bytes: &[u8]) {
+        /// Forwards everything but `print_ascii`, whose default prints byte by byte.
+        struct Bytewise<'a>(&'a mut Core);
+        impl Perform for Bytewise<'_> {
+            fn print(&mut self, c: char) {
+                self.0.print(c);
+            }
+            fn execute(&mut self, byte: u8) {
+                self.0.execute(byte);
+            }
+            fn csi_dispatch(
+                &mut self,
+                params: &Params,
+                intermediates: &[u8],
+                private: Option<u8>,
+                ignore: bool,
+                action: u8,
+            ) {
+                self.0
+                    .csi_dispatch(params, intermediates, private, ignore, action);
+            }
+            fn esc_dispatch(&mut self, intermediates: &[u8], ignore: bool, byte: u8) {
+                self.0.esc_dispatch(intermediates, ignore, byte);
+            }
+            fn osc_dispatch(&mut self, payload: &[u8], end: OscEnd) {
+                self.0.osc_dispatch(payload, end);
+            }
+            fn hook(
+                &mut self,
+                params: &Params,
+                intermediates: &[u8],
+                private: Option<u8>,
+                ignore: bool,
+                action: u8,
+            ) {
+                self.0.hook(params, intermediates, private, ignore, action);
+            }
+            fn put(&mut self, byte: u8) {
+                Perform::put(self.0, byte);
+            }
+            fn unhook(&mut self) {
+                self.0.unhook();
+            }
+        }
+        self.parser
+            .advance_bytewise(&mut Bytewise(&mut self.core), bytes);
+    }
+
     /// Moves the pending replies to `out`.
     pub fn take_replies(&mut self, out: &mut Vec<u8>) {
         out.append(&mut self.core.replies);
@@ -870,6 +922,48 @@ impl Core {
         };
         let c = set.map(c);
         self.put(c);
+    }
+
+    /// Prints the start of `text` (printable ASCII) as one write to the cursor row, up
+    /// to the right margin, and returns how many bytes it took. Returns 0 when a byte
+    /// needs `print_char`: a wrap waits, the cursor is past the margin with wrap-around
+    /// off, insert mode is on, the character set maps ASCII, or the cell left of the
+    /// cursor holds a cluster that an ASCII character could join. The result is the same
+    /// as `print_char` for each byte.
+    fn put_ascii_run(&mut self, text: &[u8]) -> usize {
+        if self.pending
+            || self.edge_print
+            || self.insert
+            || self.single_shift.is_some()
+            || self.g[self.gl] != Charset::Ascii
+        {
+            return 0;
+        }
+        let (row, col) = (self.row, self.col);
+        if col > 0 {
+            // `extend_cluster` looks at this cell. A plain single character there never
+            // takes an ASCII character into its cluster.
+            let prev = self.screens[self.active]
+                .row(row)
+                .map_or(Cell::BLANK, |r| r.get(col - 1));
+            if prev.cluster() != 0 || prev.width != Width::Single || !is_plain(prev.ch()) {
+                return 0;
+            }
+        }
+        let limit = self.col_limit();
+        let n = text.len().min(limit + 1 - col);
+        let style = self.style_id;
+        self.scr().put_ascii(row, col, &text[..n], style);
+        self.last_char = Some(text[n - 1] as char);
+        self.col += n;
+        if self.col > limit {
+            self.col = limit;
+            self.pending = self.autowrap;
+            self.edge_print = !self.autowrap;
+        } else {
+            self.edge_print = false;
+        }
+        n
     }
 
     /// Prints `c`. A character that continues the cluster in the cell left of the cursor
@@ -1819,6 +1913,19 @@ fn semicolon_color(rest: &[&[u16]]) -> (Option<Color>, usize) {
 impl Perform for Core {
     fn print(&mut self, c: char) {
         self.print_char(c);
+    }
+
+    fn print_ascii(&mut self, text: &[u8]) {
+        let mut rest = text;
+        while let Some((&b, tail)) = rest.split_first() {
+            let n = self.put_ascii_run(rest);
+            if n == 0 {
+                self.print_char(b as char);
+                rest = tail;
+            } else {
+                rest = &rest[n..];
+            }
+        }
     }
 
     fn execute(&mut self, byte: u8) {

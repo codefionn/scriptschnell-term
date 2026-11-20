@@ -43,11 +43,28 @@ below are the last recorded run.
 
 | Stream | cmdterm-vt | wezterm-term | Ratio |
 | --- | --- | --- | --- |
-| ascii lines | 56 MiB/s | 36 MiB/s | 1.55x |
-| SGR (ls --color, compiler logs) | 82 MiB/s | 46 MiB/s | 1.76x |
-| TUI redraw | 69 MiB/s | 16 MiB/s | 4.4x |
-| wide characters and clusters | 64 MiB/s | 53 MiB/s | 1.21x |
-| OSC 8 links | 138 MiB/s | 41 MiB/s | 3.4x |
+| ascii lines | 500 MiB/s | 36 MiB/s | 14x |
+| SGR (ls --color, compiler logs) | 137 MiB/s | 46 MiB/s | 3.0x |
+| TUI redraw | 224 MiB/s | 16 MiB/s | 14x |
+| wide characters and clusters | 53 MiB/s | 53 MiB/s | 1.0x |
+| OSC 8 links | 315 MiB/s | 41 MiB/s | 7.7x |
+
+The cmdterm-vt column was measured after the run scans below went in; before them it read
+55, 79, 68, 53 and 137 MiB/s on the same machine.
+
+### Run scans
+
+`Parser::advance` finds runs of bytes that need no state change with a SIMD scan
+(`src/scan.rs`): printable ASCII in ground state, OSC payload, and the body of SOS, PM,
+APC and ignored DCS strings. The scans are safe Rust written so LLVM vectorizes them: a
+16-byte chunk, one compare per byte, a bit mask and `trailing_zeros`, which becomes
+`pmovmskb` with SSE2 on x86-64 and the NEON equivalent on aarch64. An ASCII run reaches
+`Perform::print_ascii`, and the terminal writes it into the cursor row as one slice up to
+the right margin, with one sequence number for the row. Anything the run path does not
+cover (a waiting wrap, insert mode, a charset that maps ASCII, a cluster an ASCII
+character could join) prints one character at a time as before.
+`Terminal::advance_bytewise` skips both fast paths; `tests/props.rs` and
+`tests/streams.rs` check that it ends in the same state as `advance`.
 
 Reflow of 10000 scrollback lines (100 to 80 columns and back), per resize: 0.67 ms here,
 14.5 ms in wezterm-term.

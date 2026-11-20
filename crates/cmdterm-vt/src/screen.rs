@@ -399,6 +399,43 @@ impl Screen {
         row.touch(&mut self.seq);
     }
 
+    /// Writes one single-width cell per byte of `text` (ASCII) from `(y, x)` on, in
+    /// `style`. The caller made sure the run fits. The row ends as it would after a
+    /// `put_cell` per byte, but gets one sequence number for the run, and none when
+    /// nothing changed.
+    pub(crate) fn put_ascii(&mut self, y: usize, x: usize, text: &[u8], style: StyleId) {
+        let row = &mut self.rows[y];
+        let end = x + text.len();
+        let len = row.cells.len();
+        // Cells `x..stored` exist; the ones past them read blank.
+        let stored = len.clamp(x, end);
+        let (old, past) = text.split_at(stored - x);
+        let same = row
+            .cells
+            .get(x..stored)
+            .unwrap_or(&[])
+            .iter()
+            .zip(old)
+            .all(|(c, &b)| *c == Cell::ascii(b, style))
+            && past.iter().all(|&b| Cell::ascii(b, style) == Cell::BLANK);
+        if same {
+            return;
+        }
+        row.split(x);
+        row.split(end - 1);
+        // Room for a full line, as `recycle` and reflow give rows, so the next run into
+        // this row and the row's later reuse do not grow it again.
+        if row.cells.capacity() < end {
+            row.cells.reserve_exact(self.cols.max(end) - len);
+        }
+        row.pad(end);
+        for (c, &b) in row.cells[x..end].iter_mut().zip(text) {
+            *c = Cell::ascii(b, style);
+        }
+        row.trim();
+        row.touch(&mut self.seq);
+    }
+
     pub(crate) fn scrollback_limit(&self) -> usize {
         self.limit
     }

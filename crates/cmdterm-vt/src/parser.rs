@@ -32,6 +32,7 @@
 //!   `\`, which performers should ignore.
 //! * 0x7F is ignored everywhere.
 
+use crate::scan;
 use crate::utf8::{Step, Utf8Decoder};
 
 /// Most parameter values kept per sequence. Later ones are dropped and
@@ -191,6 +192,14 @@ impl<'a> Iterator for ParamsIter<'a> {
 pub trait Perform {
     /// A printable character.
     fn print(&mut self, _c: char) {}
+    /// A run of printable ASCII (0x20 to 0x7E) in ground state, in order. The parser
+    /// finds these runs with a SIMD scan. The default calls [`Perform::print`] for each
+    /// byte; a performer overrides it to handle the run in one step.
+    fn print_ascii(&mut self, text: &[u8]) {
+        for &b in text {
+            self.print(b as char);
+        }
+    }
     /// A C0 control, or a C1 control as its value 0x80 to 0x9F.
     fn execute(&mut self, _byte: u8) {}
     /// A complete CSI sequence. `private` is the `<`, `=`, `>` or `?` marker that came
@@ -313,15 +322,66 @@ impl Parser {
 
     /// Parses `bytes`. Input may be split anywhere; the result is the same as for the
     /// whole.
+    ///
+    /// Runs of bytes that need no state change (printable ASCII in ground state, OSC
+    /// payload, the body of an ignored string) are found with one scan and handled whole.
+    /// Everything else goes through the state machine one byte at a time.
     pub fn advance<P: Perform>(&mut self, p: &mut P, bytes: &[u8]) {
-        for &b in bytes {
-            if self.state.is_string() {
-                self.string_byte(p, b);
-            } else if b < 0x80 && !self.utf8.pending() {
-                self.ascii(p, b);
-            } else {
-                self.decode(p, b);
+        let mut i = 0;
+        while let Some(&b) = bytes.get(i) {
+            let rest = &bytes[i..];
+            // Scan only when this byte starts a run, so control bytes and UTF-8 do not pay
+            // for a scan that finds nothing. A lone ASCII character goes through the state
+            // machine too: the scan and the call would cost more than they save.
+            let run = match self.state {
+                State::Ground
+                    if (0x20..0x7F).contains(&b)
+                        && rest.get(1).is_some_and(|n| (0x20..0x7F).contains(n))
+                        && !self.utf8.pending() =>
+                {
+                    scan::printable_ascii(rest)
+                }
+                State::OscString if b >= 0x20 && b != 0xC2 && !self.pending_c2 => {
+                    scan::osc_payload(rest)
+                }
+                State::SosPmApc | State::DcsIgnore
+                    if !matches!(b, 0x1B | 0x18 | 0x1A | 0xC2) && !self.pending_c2 =>
+                {
+                    scan::ignored_string(rest)
+                }
+                _ => 0,
+            };
+            if run > 0 {
+                let text = &rest[..run];
+                match self.state {
+                    State::Ground => p.print_ascii(text),
+                    State::OscString => self.osc_extend(text),
+                    _ => {}
+                }
+                i += run;
+                continue;
             }
+            i += 1;
+            self.byte(p, b);
+        }
+    }
+
+    /// The state machine alone: `advance` without the run scans. Tests check that both
+    /// end in the same state.
+    #[doc(hidden)]
+    pub fn advance_bytewise<P: Perform>(&mut self, p: &mut P, bytes: &[u8]) {
+        for &b in bytes {
+            self.byte(p, b);
+        }
+    }
+
+    fn byte<P: Perform>(&mut self, p: &mut P, b: u8) {
+        if self.state.is_string() {
+            self.string_byte(p, b);
+        } else if b < 0x80 && !self.utf8.pending() {
+            self.ascii(p, b);
+        } else {
+            self.decode(p, b);
         }
     }
 
@@ -461,6 +521,16 @@ impl Parser {
             (State::DcsPassthrough, 0x7F) => {}
             (State::DcsPassthrough, _) => p.put(b),
             _ => {}
+        }
+    }
+
+    /// Appends payload bytes to the OSC buffer, up to [`OSC_MAX_LEN`].
+    fn osc_extend(&mut self, text: &[u8]) {
+        let room = OSC_MAX_LEN.saturating_sub(self.osc.len());
+        let take = text.len().min(room);
+        self.osc.extend_from_slice(&text[..take]);
+        if take < text.len() {
+            self.osc_truncated = true;
         }
     }
 

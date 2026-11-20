@@ -20,6 +20,7 @@ pub mod input;
 pub mod osc;
 pub mod parser;
 mod reflow;
+mod scan;
 pub mod screen;
 pub mod style;
 pub mod terminal;

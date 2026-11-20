@@ -46,6 +46,18 @@ impl Cell {
         }
     }
 
+    /// A single-width cell with the ASCII character `b`.
+    pub(crate) const fn ascii(b: u8, style: StyleId) -> Cell {
+        debug_assert!(b.is_ascii());
+        Cell {
+            text: [b, 0, 0, 0],
+            style,
+            cluster: 0,
+            len: 1,
+            width: Width::Single,
+        }
+    }
+
     /// A cell with one character.
     pub fn new(ch: char, style: StyleId, width: Width) -> Cell {
         let mut text = [0; 4];
