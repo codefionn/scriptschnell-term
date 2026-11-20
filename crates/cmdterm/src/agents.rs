@@ -1,6 +1,7 @@
 //! Agent integrations: the hooks, plugins and extensions that make coding
 //! agents (Claude Code, Codex, opencode, pi, GitHub Copilot CLI, Qwen Code,
-//! Gemini CLI, Kimi Code CLI) report what they are doing to the
+//! Gemini CLI, Kimi Code CLI, Mistral Vibe, Antigravity CLI) report what they
+//! are doing to the
 //! scriptschnell-term terminal they run in, the
 //! `configure-scriptschnell-term` skill that tells them how to configure and
 //! extend it, and the settings page that installs both.
@@ -13,8 +14,9 @@
 //! remote host; they are read and written through [`Environment`], in the
 //! home directory of the machine the project lives on.
 //!
-//! Mistral Vibe reports its state itself (OSC 7501, see `term`), so
-//! its integration is only the skills and the debug browser's MCP server.
+//! Mistral Vibe and Antigravity CLI report their state themselves (OSC 7501,
+//! see `term`), so their integration is only the skills and the debug
+//! browser's MCP server.
 //!
 //! The hook integrations also run the helper when a session starts, and pi's
 //! extension asks the same question: inside a scriptschnell-term terminal
@@ -336,8 +338,8 @@ Agents of all the app's terminals (none of these asks the user):
       --max-cpu-time SECONDS
                         stop after this much CPU time
 
-AGENT is claude, codex, opencode, pi, copilot, qwen, gemini, kimi, vibe
-or the name of an agent an extension registered. --prompt gives each its
+AGENT is claude, codex, opencode, pi, copilot, qwen, gemini, kimi, vibe,
+agy or the name of an agent an extension registered. --prompt gives each its
 first prompt: as arguments where the agent takes them, else typed once it
 is ready; --paste always types it. An agent that takes it neither way is
 refused. PATH is relative to the extension's directory, such as init.lua.
@@ -847,6 +849,8 @@ const BUILTIN_NAMES: &[&str] = &[
     "gemini",
     "kimi",
     "vibe",
+    "agy",
+    "antigravity",
     "cursor",
     "cursor-agent",
     "test-agent",
@@ -865,6 +869,7 @@ pub enum Agent {
     Gemini,
     Kimi,
     Vibe,
+    Antigravity,
     Custom(&'static CustomAgent),
 }
 
@@ -1072,7 +1077,7 @@ const KIMI_HOOKS: &[Hook] = &[
 ];
 
 impl Agent {
-    pub const ALL: [Agent; 9] = [
+    pub const ALL: [Agent; 10] = [
         Agent::ClaudeCode,
         Agent::Codex,
         Agent::OpenCode,
@@ -1082,6 +1087,7 @@ impl Agent {
         Agent::Gemini,
         Agent::Kimi,
         Agent::Vibe,
+        Agent::Antigravity,
     ];
 
     pub fn name(self) -> &'static str {
@@ -1095,6 +1101,7 @@ impl Agent {
             Agent::Gemini => "Gemini CLI",
             Agent::Kimi => "Kimi Code",
             Agent::Vibe => "Mistral Vibe",
+            Agent::Antigravity => "Antigravity CLI",
             Agent::Custom(agent) => agent.title,
         }
     }
@@ -1130,7 +1137,7 @@ impl Agent {
             Agent::OpenCode => &[State, Prompt],
             Agent::Pi => &[State, Session, Resume, Prompt, Paste],
             Agent::Kimi => &[State, Session, Resume, Messages, Paste],
-            Agent::Vibe => &[Prompt],
+            Agent::Vibe | Agent::Antigravity => &[Prompt],
             Agent::Custom(agent) => return agent.supports & capability.bit() != 0,
         };
         set.contains(&capability)
@@ -1156,7 +1163,9 @@ impl Agent {
         Some(match self {
             Agent::ClaudeCode | Agent::Codex | Agent::Pi | Agent::Vibe => &[PROMPT_PLACEHOLDER],
             // A bare prompt runs once and exits.
-            Agent::Copilot | Agent::Qwen | Agent::Gemini => &["-i", PROMPT_PLACEHOLDER],
+            Agent::Copilot | Agent::Qwen | Agent::Gemini | Agent::Antigravity => {
+                &["-i", PROMPT_PLACEHOLDER]
+            }
             // A bare argument is the project directory.
             Agent::OpenCode => &["--prompt", PROMPT_PLACEHOLDER],
             Agent::Kimi => return None,
@@ -1204,6 +1213,7 @@ impl Agent {
             Agent::Gemini => "gemini",
             Agent::Kimi => "kimi",
             Agent::Vibe => "vibe",
+            Agent::Antigravity => "agy",
             Agent::Custom(agent) => agent.program,
         }
     }
@@ -1221,6 +1231,8 @@ impl Agent {
             Agent::Gemini => ".gemini",
             Agent::Kimi => ".kimi-code",
             Agent::Vibe => ".vibe",
+            // Gemini CLI owns the rest of `.gemini`.
+            Agent::Antigravity => ".gemini/antigravity-cli",
             Agent::Custom(agent) => agent.config_dir,
         }
     }
@@ -1237,6 +1249,7 @@ impl Agent {
             Agent::Gemini => ".gemini/settings.json",
             Agent::Kimi => ".kimi-code/config.toml",
             Agent::Vibe => ".vibe/config.toml",
+            Agent::Antigravity => ".gemini/config/mcp_config.json",
             // Empty for an extension agent without an integration file.
             Agent::Custom(agent) => agent.target,
         }
@@ -1255,6 +1268,8 @@ impl Agent {
             Agent::Gemini => ".gemini/skills",
             Agent::Kimi => ".kimi-code/skills",
             Agent::Vibe => ".vibe/skills",
+            // The CLI also reads `.gemini/skills`, which is Gemini CLI's.
+            Agent::Antigravity => ".gemini/antigravity-cli/skills",
             Agent::Custom(agent) => return agent.skills_dir,
         })
     }
@@ -1320,6 +1335,9 @@ impl Agent {
             Agent::Gemini => &["GEMINI_API_KEY", "GOOGLE_API_KEY"],
             Agent::Kimi => &["KIMI_API_KEY", "MOONSHOT_API_KEY"],
             Agent::Vibe => &["MISTRAL_API_KEY"],
+            // Read only with `modelProvider` set to `gemini`; a Google login
+            // lives in the keyring.
+            Agent::Antigravity => &["GEMINI_API_KEY"],
             Agent::Custom(agent) => agent.login_vars,
         }
     }
@@ -1337,6 +1355,7 @@ impl Agent {
             Agent::Gemini => &[".gemini"],
             Agent::Kimi => &[".kimi-code"],
             Agent::Vibe => &[".vibe"],
+            Agent::Antigravity => &[".gemini/antigravity-cli"],
             Agent::Custom(agent) => agent.writable,
         }
     }
@@ -1424,6 +1443,15 @@ impl Agent {
                 ".vibe/prompts",
                 ".vibe/tools",
             ],
+            // Hooks, MCP servers, plugins and the skills it shares with the
+            // Antigravity app are in `.gemini/config`.
+            Agent::Antigravity => &[
+                ".gemini/antigravity-cli/settings.json",
+                ".gemini/antigravity-cli/skills",
+                ".gemini/config",
+                ".gemini/AGENTS.md",
+                ".gemini/GEMINI.md",
+            ],
             Agent::Custom(agent) => agent.read_only,
         }
     }
@@ -1438,6 +1466,7 @@ impl Agent {
             Agent::Codex => &[".codex/config.toml"],
             Agent::Qwen => &[".qwen/settings.json"],
             Agent::Gemini => &[".gemini/settings.json"],
+            Agent::Antigravity => &[".gemini/antigravity-cli/settings.json"],
             Agent::Custom(agent) => agent.synced,
             _ => &[],
         }
@@ -1497,6 +1526,7 @@ impl Agent {
             Agent::Gemini => Some(".gemini/settings.json"),
             Agent::Kimi => Some(".kimi-code/mcp.json"),
             Agent::Vibe => Some(".vibe/config.toml"),
+            Agent::Antigravity => Some(".gemini/config/mcp_config.json"),
             Agent::Custom(agent) => agent.mcp.map(|(file, _, _)| file),
         }
     }
@@ -1507,7 +1537,7 @@ impl Agent {
         let style = match self {
             Agent::Custom(agent) => agent.mcp.map_or(McpStyle::Stdio, |(_, _, style)| style),
             Agent::OpenCode => McpStyle::Local,
-            Agent::Qwen | Agent::Gemini | Agent::Kimi => McpStyle::Command,
+            Agent::Qwen | Agent::Gemini | Agent::Kimi | Agent::Antigravity => McpStyle::Command,
             _ => McpStyle::Stdio,
         };
         match (self, style) {
@@ -1572,7 +1602,7 @@ impl Agent {
             // Gemini CLI reads hook timeouts in milliseconds.
             Agent::Gemini => Integration::Hooks(GEMINI_HOOKS, 1000),
             Agent::Kimi => Integration::TomlHooks(KIMI_HOOKS),
-            Agent::Vibe => Integration::Native,
+            Agent::Vibe | Agent::Antigravity => Integration::Native,
             Agent::Custom(agent) => match agent.integration {
                 CustomIntegration::Native => Integration::Native,
                 CustomIntegration::Hooks(hooks, unit) => Integration::Hooks(hooks, unit),
@@ -2020,6 +2050,20 @@ fn mcp_registered(home: &Home, agent: Agent) -> Result<bool, String> {
     Ok(root[agent.mcp_key()][MCP_NAME] == agent.mcp_entry())
 }
 
+/// Whether the debug browser's server has an entry, from this version or
+/// an older one.
+fn mcp_present(home: &Home, agent: Agent) -> Result<bool, String> {
+    let Some(path) = agent.mcp_config() else {
+        return Ok(false);
+    };
+    let text = home.read(path)?.unwrap_or_default();
+    if agent.mcp_toml().is_some() {
+        return Ok(text.lines().any(|line| line.trim_end() == MCP_BEGIN));
+    }
+    let root = parse_json(Some(text))?;
+    Ok(root[agent.mcp_key()].get(MCP_NAME).is_some())
+}
+
 /// Registers the debug browser's server, replacing an older entry.
 fn add_mcp(home: &Home, agent: Agent) -> Result<(), String> {
     let Some(path) = agent.mcp_config() else {
@@ -2113,8 +2157,7 @@ fn check(home: &Home, agent: Agent) -> Result<Status, String> {
             for (path, _) in agent.skills() {
                 found += usize::from(home.read(&path)?.is_some());
             }
-            let text = home.read(agent.target())?.unwrap_or_default();
-            if found == 0 && !text.lines().any(|line| line.trim_end() == MCP_BEGIN) {
+            if found == 0 && !mcp_present(home, agent)? {
                 Status::Off
             } else {
                 Status::On
@@ -2355,6 +2398,7 @@ fn follow_up(home: &Home, agent: Agent, status: &Status) -> Option<Note> {
         | Agent::Gemini
         | Agent::Kimi
         | Agent::Vibe
+        | Agent::Antigravity
         | Agent::Custom(_) => Some(Note::NextSession),
     }
 }
@@ -3333,6 +3377,38 @@ mod tests {
     }
 
     #[test]
+    fn antigravity_gets_the_skills_and_the_server_only() {
+        let (dir, home) = home();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::NotFound));
+        // Gemini CLI's directory alone does not mean Antigravity CLI is there.
+        std::fs::create_dir_all(dir.path().join(".gemini")).unwrap();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::NotFound));
+        std::fs::create_dir_all(dir.path().join(".gemini/antigravity-cli")).unwrap();
+        let config = dir.path().join(".gemini/config/mcp_config.json");
+        std::fs::create_dir_all(config.parent().unwrap()).unwrap();
+        std::fs::write(
+            &config,
+            "{\"mcpServers\": {\"mine\": {\"command\": \"x\"}}}\n",
+        )
+        .unwrap();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::Off));
+        install(&home, Agent::Antigravity).unwrap();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::On));
+        let root: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+        assert_eq!(root["mcpServers"]["mine"]["command"], "x");
+        assert_eq!(root["mcpServers"][MCP_NAME]["command"], "sh");
+        let skill = dir.path().join(Agent::Antigravity.skill());
+        assert!(skill.starts_with(dir.path().join(".gemini/antigravity-cli/skills")));
+        assert!(skill.is_file());
+        std::fs::remove_file(&skill).unwrap();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::Outdated));
+        uninstall(&home, Agent::Antigravity).unwrap();
+        assert_eq!(check(&home, Agent::Antigravity), Ok(Status::Off));
+        let root: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
+        assert_eq!(root["mcpServers"], json!({"mine": {"command": "x"}}));
+    }
+
+    #[test]
     fn vibe_gets_the_skills_and_the_server_only() {
         let (dir, home) = home();
         let config = dir.path().join(".vibe/config.toml");
@@ -4070,6 +4146,11 @@ mod tests {
         assert_eq!(args(Agent::ClaudeCode), (vec!["fix it".to_owned()], None));
         assert_eq!(
             args(Agent::Qwen),
+            (vec!["-i".to_owned(), "fix it".to_owned()], None)
+        );
+        // A bare `-p` prompt would run once and exit.
+        assert_eq!(
+            args(Agent::Antigravity),
             (vec!["-i".to_owned(), "fix it".to_owned()], None)
         );
         assert_eq!(

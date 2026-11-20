@@ -1342,7 +1342,7 @@ fn create_placeholder(path: &Path, inside: &Path, dir: bool) {
 fn placeholder_content(path: &Path) -> &'static str {
     let name = path.file_name().and_then(|n| n.to_str()).unwrap_or("");
     match name {
-        "mcp-config.json" | "mcp.json" => "{\"mcpServers\": {}}\n",
+        "mcp-config.json" | "mcp.json" | "mcp_config.json" => "{\"mcpServers\": {}}\n",
         "models.json" => "{\"providers\": {}}\n",
         _ if name.ends_with(".json") => "{}\n",
         "commondir" => ".\n",

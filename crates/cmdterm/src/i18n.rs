@@ -1365,7 +1365,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
             "Registry logins, Cargo, Forge CLIs, Git over HTTPS, npm, NuGet, PyPI | credentials tokens"
         }
         SettingsSection::Agents => {
-            "Agent integrations, Update hooks, Control socket, CPU | claude codex gemini install processor cores nice limit"
+            "Agent integrations, Update hooks, Control socket, CPU | claude codex gemini antigravity agy install processor cores nice limit"
         }
         SettingsSection::Remote => {
             "Key fingerprint, Let other machines connect, Keys allowed to connect, Machines you connect to | ssh server port pair"
@@ -1402,7 +1402,7 @@ fn keywords_de(section: SettingsSection) -> &'static str {
             "Registry-Logins, Cargo, Forge CLIs, Git über HTTPS, npm, NuGet, PyPI | zugangsdaten tokens"
         }
         SettingsSection::Agents => {
-            "Agenten-Integrationen, Hooks aktualisieren, Steuer-Socket, CPU | claude codex gemini installieren Prozessor Kerne nice Grenze"
+            "Agenten-Integrationen, Hooks aktualisieren, Steuer-Socket, CPU | claude codex gemini antigravity agy installieren Prozessor Kerne nice Grenze"
         }
         SettingsSection::Remote => {
             "Schlüssel-Fingerabdruck, Andere Maschinen verbinden lassen, Erlaubte Schlüssel, Maschinen, mit denen du dich verbindest | ssh server port koppeln"

@@ -218,7 +218,8 @@ the palette; the worktree keeps the choice in `state.json`.
 - `sandbox.writable`: extra paths sandboxes may write. The worktree is always writable,
   and so is the state of coding agents: `~/.claude`, `~/.claude.json`, `~/.codex`,
   `~/.local/share/opencode`, `~/.local/state/opencode`, `~/.pi/agent`, `~/.copilot`,
-  `~/.cache/copilot`, `~/.qwen`, `~/.gemini`, `~/.kimi-code` and `~/.vibe`. Their settings,
+  `~/.cache/copilot`, `~/.qwen`, `~/.gemini` (with Antigravity CLI's
+  `~/.gemini/antigravity-cli`), `~/.kimi-code` and `~/.vibe`. Their settings,
   hooks, plugins, skills and instruction files stay read-only, because the agents on the
   host run what those name. Windows sandboxes deny writes to these too. On Linux and
   Windows a sandbox can keep only an existing path read-only, so when one is missing in
@@ -306,7 +307,9 @@ the palette; the worktree keeps the choice in `state.json`.
   `ANTHROPIC_OAUTH_TOKEN` (Pi; both also read the Anthropic, OpenAI and Gemini keys),
   `COPILOT_GITHUB_TOKEN` (Copilot CLI), `DASHSCOPE_API_KEY` (Qwen Code, which also reads
   `OPENAI_API_KEY`), `GEMINI_API_KEY` and `GOOGLE_API_KEY` (Gemini CLI), `KIMI_API_KEY`
-  and `MOONSHOT_API_KEY` (Kimi) and `MISTRAL_API_KEY` (Mistral Vibe). This is a trade-off.
+  and `MOONSHOT_API_KEY` (Kimi) and `MISTRAL_API_KEY` (Mistral Vibe). Antigravity CLI
+  keeps a Google login in the keyring and reads `GEMINI_API_KEY` only with
+  `modelProvider` set to `gemini`. This is a trade-off.
   The app builds one sandbox per worktree before it knows which agent a terminal will
   run, so every one of these that you set reaches every command in every sandbox, not
   only the agent that needs it. Start the app without the keys of agents you don't use.
@@ -455,8 +458,8 @@ the palette; the worktree keeps the choice in `state.json`.
 - `sandbox.allowed_hosts`: names or `*.example.com`, which matches subdomains but not
   `example.com` itself. The default allows forges (GitHub, GitLab, Codeberg, Bitbucket),
   search engines, search APIs (Exa, Tavily, Brave, Bing, Serper, SerpApi, Jina, Firecrawl,
-  Perplexity), AI model APIs (with the endpoints of Copilot CLI, Gemini CLI, Qwen Code
-  and Kimi Code), documentation sites, the Rust, npm, PyPI and Go
+  Perplexity), AI model APIs (with the endpoints of Copilot CLI, Gemini CLI, Antigravity
+  CLI, Qwen Code and Kimi Code), documentation sites, the Rust, npm, PyPI and Go
   registries, and `localhost`, `127.0.0.1` and `::1`, which the proxy reaches on this
   machine. Only such a name, listed exactly, reaches this machine's loopback or a
   link-local address such as a cloud's metadata service: allowing every host
@@ -545,7 +548,7 @@ the palette; the worktree keeps the choice in `state.json`.
   On Linux, `cmdterm.agent-settings` covers the settings coding agents change themselves,
   such as when you trust a folder or allow a tool: `~/.claude.json` and
   `~/.claude/settings.json` for Claude Code, `~/.codex/config.toml` for Codex, and
-  `settings.json` of Gemini CLI and Qwen Code. A local project's sandboxes write a copy of
+  `settings.json` of Gemini CLI, Antigravity CLI and Qwen Code. A local project's sandboxes write a copy of
   each, kept per project in the app's state directory, and the app compares the copies
   with this machine's files once a second. Changes on this machine go into the copies.
   Changes in a copy go to this machine's file key by key, so both sides may change other
@@ -858,7 +861,9 @@ not on `PATH` runs Git's `usr\bin\sh.exe` or `usr\bin\bash.exe`.
   checks every machine a project lives on for agent integrations that an older version
   installed (Settings, Agents) and for newer releases of Claude Code, Codex, opencode,
   pi, Copilot CLI, Qwen Code, Gemini CLI and Kimi Code installed with `npm install -g` or
-  mise. Mistral Vibe updates through uv or Homebrew and is not checked. It runs `npm ls -g`,
+  mise. Mistral Vibe updates through uv or Homebrew and is not checked. Antigravity CLI
+  updates itself or through Homebrew, and only a mise install (`antigravity-cli`) is
+  checked. It runs `npm ls -g`,
   `npm root -g`, `npm view`, `mise ls` and `mise latest`. An npm package the user cannot
   write to, such as Gemini CLI installed by pacman into `/usr/lib/node_modules`, is left to
   the package manager that installed it. Results show under the bell in the bottom right corner of
@@ -932,7 +937,7 @@ session instead and gets no prompt to continue. Extension agents name their dire
 with `sessions` in `term.agent`. When the directory is missing, and for the other
 agents, the app resumes without checking. A terminal that
 attaches to a session on a remote machine or a local VM finds its agent still running
-and gets nothing typed. opencode and Mistral Vibe report no session yet.
+and gets nothing typed. opencode, Mistral Vibe and Antigravity CLI report no session yet.
 The entry also notes `"working": true` while the agent is in the middle of a turn: busy,
 or asking for a permission or an answer. When the app stopped then, the resumed agent
 gets a prompt telling it to continue, typed once its hooks report the resumed session
@@ -982,7 +987,7 @@ configuration directory. The app types a prompt into it that names `settings.jso
 what broke and press Enter. If the agent opens with a question first, such as Claude Code
 asking whether to trust the folder, the prompt is typed again after you answer it.
 `--agent` takes the agent's program (`claude`, `codex`, `opencode`, `pi`, `copilot`,
-`qwen`, `gemini`, `kimi`, `vibe`). Without it the app picks the first agent on `PATH`
+`qwen`, `gemini`, `kimi`, `vibe`, `agy`). Without it the app picks the first agent on `PATH`
 whose integration is turned on in Settings, Agents, else the first one set up on this
 machine, else the first one on `PATH`. On Windows the prompt is printed for you to paste.
 A project folder named `fix` needs a path such as `./fix`.
@@ -1127,8 +1132,8 @@ connection. The integrations on the Agents page install
 register it as `scriptschnell-term-browser` with Claude Code (`~/.claude.json`), Codex
 (`~/.codex/config.toml`), opencode (`~/.config/opencode/opencode.json`), Copilot CLI
 (`~/.copilot/mcp-config.json`), Qwen Code (`~/.qwen/settings.json`), Gemini CLI
-(`~/.gemini/settings.json`), Kimi Code (`~/.kimi-code/mcp.json`) and Mistral Vibe
-(`~/.vibe/config.toml`). pi has no MCP support. Gemini CLI with
+(`~/.gemini/settings.json`), Antigravity CLI (`~/.gemini/config/mcp_config.json`), Kimi
+Code (`~/.kimi-code/mcp.json`) and Mistral Vibe (`~/.vibe/config.toml`). pi has no MCP support. Gemini CLI with
 `security.enableEnvironmentVariableRedaction` on hides `SCRIPTSCHNELL_TERM_TOKEN` from
 the server and from hooks, so neither reaches the app. Outside a scriptschnell-term terminal the server offers no tools.
 
@@ -1173,7 +1178,7 @@ you. Each terminal with a token gets an id from its worktree's directory name, s
 integrations, the session-start hook puts the agent
 on the app's list under that id, with the harness's session id as its own id next to it,
 and tells the agent its id. Cursor runs Claude Code's hooks too and joins as `cursor`.
-Other agents (pi, opencode, Mistral Vibe, a shell script) join with
+Other agents (pi, opencode, Mistral Vibe, Antigravity CLI, a shell script) join with
 `control join --agent NAME --id ID --note TEXT`. `control who` lists the agents of every
 project with their harness, note, project, worktree, machine, whether they are busy, idle
 or wait for you (from the same hook state the rail shows), when they last used the socket
@@ -1236,11 +1241,11 @@ $SCRIPTSCHNELL_TERM_TOKEN`. Paths under `/v1`:
 | `POST /locks/NAME` | Body `{"max_processes": 1, "ram": BYTES, "total_ram": BYTES, "keep_free": BYTES, "command": "..."}`, each optional: queue for the lock. The response streams `waiting N`, then `granted`, and stays open while the lock is held; closing the connection frees it. 409 when the lock runs with another `max_processes`, 413 when `ram` exceeds what the machine has |
 
 An agent is `"claude"`, `"codex"`, `"opencode"`, `"pi"`, `"copilot"`, `"qwen"`,
-`"gemini"`, `"kimi"`, `"vibe"` or an extension agent's name, or `{"agent": "claude",
+`"gemini"`, `"kimi"`, `"vibe"`, `"agy"` or an extension agent's name, or `{"agent": "claude",
 "args": [...], "prompt": "fix the failing test", "via": "args"}` to start it with
 arguments or a first prompt. `"prompt"` goes where the agent takes it: in its arguments
 (`claude TEXT`, `codex TEXT`, `pi TEXT`, `vibe TEXT`, `copilot -i TEXT`, `qwen -i TEXT`,
-`gemini -i TEXT`, `opencode --prompt TEXT`, or an extension agent's `prompt`), else typed
+`gemini -i TEXT`, `agy -i TEXT`, `opencode --prompt TEXT`, or an extension agent's `prompt`), else typed
 once the agent named its session after it started (Kimi Code, and extension agents
 with `paste`). `"via": "paste"` types it for every agent that names its session at start:
 Claude Code, Copilot CLI, Qwen Code, Gemini CLI, pi and Kimi Code. An agent that takes

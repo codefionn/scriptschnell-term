@@ -1194,6 +1194,8 @@ pub const HOST_GROUPS: &[HostGroup] = &[
             "*.githubcopilot.com",
             // Gemini CLI and Antigravity CLI with a Google login.
             "cloudcode-pa.googleapis.com",
+            // Antigravity CLI.
+            "businessaicode.googleapis.com",
             // Qwen Code.
             "dashscope.aliyuncs.com",
             "coding.dashscope.aliyuncs.com",

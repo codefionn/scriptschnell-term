@@ -143,7 +143,7 @@ sh $control push hello ./hello        # upload it, wait for the user, print the 
 
 `sh $control worktree feature/x claude` asks the user to create a worktree for
 `feature/x` in your project, next to the main one, and to start Claude Code in it
-(`codex`, `opencode`, `pi`, `copilot`, `qwen`, `gemini`, `kimi`, `vibe` work too,
+(`codex`, `opencode`, `pi`, `copilot`, `qwen`, `gemini`, `kimi`, `vibe`, `agy` work too,
 several at once). An existing branch is checked out; a missing one is created at the
 main worktree's revision, or at `--from REV`. The user may have allowed these asks for
 the session or the project, and then the worktree opens without a question.

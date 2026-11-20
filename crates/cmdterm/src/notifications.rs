@@ -632,6 +632,8 @@ pub(crate) fn npm_packages(agent: Agent) -> &'static [&'static str] {
         Agent::Kimi => &["@moonshot-ai/kimi-code"],
         // Published on PyPI only.
         Agent::Vibe => &[],
+        // Updates itself, or through its Homebrew cask.
+        Agent::Antigravity => &[],
         Agent::Custom(agent) => agent.npm,
     }
 }
@@ -647,6 +649,7 @@ fn mise_agent(tool: &str) -> Option<Agent> {
         "copilot" | "copilot-cli" => Some(Agent::Copilot),
         "qwen" | "qwen-code" => Some(Agent::Qwen),
         "gemini" | "gemini-cli" => Some(Agent::Gemini),
+        "antigravity-cli" | "agy" => Some(Agent::Antigravity),
         _ => Agent::all()
             .into_iter()
             .find(|agent| agent.extension().is_some() && agent.program() == tool),

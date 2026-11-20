@@ -126,7 +126,8 @@ It prints JSON:
   call fails with `org.freedesktop.DBus.Error.AccessDenied` and a message starting
   `cmdterm sandbox:`. Other desktop services, such as notifications, are not reachable.
 - On Linux, your own settings files (`~/.claude.json`, `~/.claude/settings.json`,
-  `~/.codex/config.toml`, the `settings.json` of Gemini CLI and Qwen Code) are copies.
+  `~/.codex/config.toml`, the `settings.json` of Gemini CLI, Antigravity CLI and Qwen Code) are
+  copies.
   Writing them works, and the app brings the change over to the host. Trusting a folder,
   allowing a tool, hooks and MCP servers wait until the user answers a dialog; a blocked
   change stays in the sandbox only. Other new files directly in `~` vanish when the

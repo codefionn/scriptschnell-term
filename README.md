@@ -67,7 +67,7 @@ devcontainer engine, and the sandbox's network. Its Files and Hosts subsections 
 A worktree's terminals can run somewhere other than its git: in the worktree's
 devcontainer, or in a sandbox that may write only the worktree and cannot read your
 keys. Coding agents (Claude Code, Codex, opencode, pi, Copilot CLI, Qwen Code, Gemini
-CLI, Kimi Code, Mistral Vibe) may also write their login,
+CLI, Antigravity CLI, Kimi Code, Mistral Vibe) may also write their login,
 sessions and state in a sandbox, but not their settings, hooks, plugins and skills. Linux uses bubblewrap and macOS uses `sandbox-exec`, where `/tmp` stays shared. On
 Windows the `cmdterm-sandbox` launcher, shipped next to `scriptschnell-term.exe`, runs terminals with a
 write-restricted token: they can write only the worktree and the writable paths, but they
@@ -133,7 +133,8 @@ points the agent at `CONFIGURATION.md`, the extension reference and each extensi
 Sandboxes need no copy: they see this machine's skill and references read-only, although
 the rest of the configuration directory stays hidden. Mistral Vibe, Goose and Antigravity
 CLI report their state themselves through OSC 7501, so the rail marks them without hooks;
-for Mistral Vibe the Agents page installs only the skills and the debug browser's server.
+for Mistral Vibe and Antigravity CLI the Agents page installs only the skills and the
+debug browser's server.
 
 Every terminal gets `SCRIPTSCHNELL_TERM=1`, and Claude Code, Codex, pi, Copilot CLI, Qwen
 Code and Gemini CLI tell the agent at session start that it runs inside the app. A second skill,
