@@ -122,7 +122,8 @@ It prints JSON:
   dialog.
 - On Linux, `DBUS_SESSION_BUS_ADDRESS` points to a stand-in for the session bus that
   reaches only the keyring (Secret Service). Reading, changing or deleting a secret
-  waits until the user answers a dialog, under the `cmdterm.keyring` guard. A refused
+  waits until the user answers a dialog, under the `cmdterm.keyring` guard. Coding
+  agents' own logins, such as Antigravity CLI's and Kimi Code's, pass without one. A refused
   call fails with `org.freedesktop.DBus.Error.AccessDenied` and a message starting
   `cmdterm sandbox:`. Other desktop services, such as notifications, are not reachable.
 - On Linux, your own settings files (`~/.claude.json`, `~/.claude/settings.json`,

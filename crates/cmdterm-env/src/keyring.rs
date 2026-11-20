@@ -19,7 +19,10 @@
 //!   name that owns it) on its own interfaces. Reading, changing, creating
 //!   or deleting a secret goes through the [`KEYRING_GUARD`]: in
 //!   `Ask` mode the user answers one question per secret through
-//!   [`Approvals`], named by the secret's label.
+//!   [`Approvals`], named by the secret's label. Coding agents' logins
+//!   ([`KeyringBus::set_logins`]) pass without a question, as their login
+//!   files are writable in sandboxes: agents such as Antigravity CLI give
+//!   the keyring a few seconds and then act as if logged out.
 //!
 //! Everything else gets an `AccessDenied` error. From the bus the proxy
 //! passes everything: the bus delivers only replies, the signals the
@@ -201,6 +204,14 @@ impl Lookup {
         let body = self.call(SECRETS, path, PROPERTIES, "Get", &[interface, "Label"])?;
         Ok(Cursor::new(&self.buf, body).string_variant()?.to_owned())
     }
+
+    fn attributes(&mut self, path: &str) -> io::Result<Vec<(String, String)>> {
+        let body = self.call(SECRETS, path, PROPERTIES, "Get", &[ITEM, "Attributes"])?;
+        let pairs = Cursor::new(&self.buf, body).string_map_variant()?;
+        Ok((pairs.into_iter())
+            .map(|(key, value)| (key.to_owned(), value.to_owned()))
+            .collect())
+    }
 }
 
 struct Shared {
@@ -211,6 +222,8 @@ struct Shared {
     guard: GuardRule,
     mode: RwLock<GuardMode>,
     approvals: RwLock<Option<Arc<Approvals>>>,
+    /// See [`KeyringBus::set_logins`].
+    logins: RwLock<Vec<Vec<(String, String)>>>,
     lookup: Mutex<Option<Lookup>>,
     stop: AtomicBool,
 }
@@ -237,24 +250,26 @@ impl Shared {
         *self.mode.read().unwrap_or_else(|p| p.into_inner())
     }
 
-    /// Whether the user lets `action` happen to the secret at `path`, or
-    /// why not.
-    fn allows(
-        &self,
-        scope: Option<&str>,
-        action: Action,
-        path: &str,
-        interface: &str,
-    ) -> Result<(), &'static str> {
+    /// Whether the user lets `question` pass, or why not.
+    fn allows(&self, scope: Option<&str>, question: &Question) -> Result<(), &'static str> {
         match self.mode() {
             GuardMode::Allow => return Ok(()),
             GuardMode::Block => return Err("the cmdterm.keyring guard blocks secrets"),
             GuardMode::Ask => {}
         }
+        if self.is_login(question) {
+            return Ok(());
+        }
         let approvals = self.approvals.read().ok().and_then(|a| a.clone());
         let Some(approvals) = approvals else {
             return Err("nobody can answer for secrets");
         };
+        let Question {
+            action,
+            path,
+            interface,
+            ..
+        } = *question;
         let label = (self.lookup(|lookup| lookup.label(path, interface)))
             .filter(|label| !label.is_empty())
             .unwrap_or_else(|| path.to_owned());
@@ -264,6 +279,44 @@ impl Shared {
             Err("the user did not allow this keyring access")
         }
     }
+}
+
+impl Shared {
+    /// Whether `question` is about an agent's login.
+    fn is_login(&self, question: &Question) -> bool {
+        let logins = || self.logins.read().unwrap_or_else(|p| p.into_inner());
+        if logins().is_empty() {
+            return false;
+        }
+        match &question.login {
+            Login::No => false,
+            Login::New(attributes) => login_matches(&logins(), attributes),
+            Login::Item => {
+                // The lookup may wait for the bus, so the logins stay
+                // unlocked meanwhile.
+                let attributes = self.lookup(|lookup| lookup.attributes(question.path));
+                attributes.is_some_and(|attributes| {
+                    let pairs: Vec<(&str, &str)> = (attributes.iter())
+                        .map(|(key, value)| (key.as_str(), value.as_str()))
+                        .collect();
+                    login_matches(&logins(), &pairs)
+                })
+            }
+        }
+    }
+}
+
+/// Whether secret attributes `attributes` hold every attribute of one of
+/// `logins`. Attributes that name a key twice never match: a service
+/// keeps one of the values, and it may not be the one compared here.
+fn login_matches(logins: &[Vec<(String, String)>], attributes: &[(&str, &str)]) -> bool {
+    let once = (attributes.iter().enumerate())
+        .all(|(at, (key, _))| attributes[..at].iter().all(|(other, _)| other != key));
+    once && logins.iter().any(|login| {
+        !login.is_empty()
+            && (login.iter())
+                .all(|(key, value)| attributes.contains(&(key.as_str(), value.as_str())))
+    })
 }
 
 /// A running keyring bus. Dropping it stops it and removes its sockets.
@@ -345,6 +398,7 @@ impl KeyringBus {
                 .ok_or_else(|| io::Error::other("no keyring guard"))?,
             mode: RwLock::new(GuardMode::Ask),
             approvals: RwLock::new(None),
+            logins: RwLock::new(Vec::new()),
             lookup: Mutex::new(None),
             stop: AtomicBool::new(false),
         });
@@ -383,6 +437,20 @@ impl KeyringBus {
         *self.shared.mode.write().unwrap_or_else(|p| p.into_inner()) = mode;
     }
 
+    /// The secrets coding agents keep their logins in, each by attributes
+    /// it has, such as `service` and `username`. In `Ask` mode a sandbox
+    /// reads and changes a secret that has every attribute of one of them,
+    /// and creates one, without a question, as it may write the agents'
+    /// login files. Deleting one, or changing its attributes or label,
+    /// still asks.
+    pub fn set_logins(&self, logins: Vec<Vec<(String, String)>>) {
+        *self
+            .shared
+            .logins
+            .write()
+            .unwrap_or_else(|p| p.into_inner()) = logins;
+    }
+
     /// Where questions in `Ask` mode go. Without it secrets stay closed.
     pub fn set_approvals(&self, approvals: Option<Arc<Approvals>>) {
         *self
@@ -415,8 +483,31 @@ enum Verdict<'a> {
     Pass,
     /// Dropped; an error answers it when the caller waits for a reply.
     Refuse(&'static str),
-    /// Passes when the user allows each `(action, path, label interface)`.
-    Ask(Vec<(Action, &'a str, &'static str)>),
+    /// Passes when the user allows each question.
+    Ask(Vec<Question<'a>>),
+}
+
+/// A question about one secret or collection.
+#[derive(Debug, PartialEq, Eq)]
+struct Question<'a> {
+    action: Action,
+    /// The secret or collection the call goes to.
+    path: &'a str,
+    /// The interface whose label names it.
+    interface: &'static str,
+    login: Login<'a>,
+}
+
+/// How a question can turn out to be about an agent's login, which passes
+/// without one.
+#[derive(Debug, PartialEq, Eq)]
+enum Login<'a> {
+    /// It cannot.
+    No,
+    /// By the attributes of the secret at the question's path.
+    Item,
+    /// By the attributes of the secret the call creates.
+    New(Vec<(&'a str, &'a str)>),
 }
 
 /// One sandbox connection.
@@ -504,7 +595,14 @@ impl Session {
         let Some(interface) = header.interface else {
             return Ok(Verdict::Refuse("calls to the keyring need an interface"));
         };
-        let ask = |action, label| Ok(Verdict::Ask(vec![(action, path, label)]));
+        let ask = |action, interface, login| {
+            Ok(Verdict::Ask(vec![Question {
+                action,
+                path,
+                interface,
+                login,
+            }]))
+        };
         match (interface, member) {
             (SERVICE, "OpenSession" | "SearchItems" | "Unlock" | "Lock" | "ReadAlias")
             | (COLLECTION, "SearchItems")
@@ -516,21 +614,36 @@ impl Session {
             (SERVICE, "GetSecrets") if header.signature == "aoo" => {
                 let items = body.strings()?;
                 Ok(Verdict::Ask(
-                    items
-                        .into_iter()
-                        .map(|item| (Action::Read, item, ITEM))
+                    (items.into_iter())
+                        .map(|item| Question {
+                            action: Action::Read,
+                            path: item,
+                            interface: ITEM,
+                            login: Login::Item,
+                        })
                         .collect(),
                 ))
             }
-            (ITEM, "GetSecret") => ask(Action::Read, ITEM),
-            (ITEM, "SetSecret") => ask(Action::Change, ITEM),
-            (ITEM, "Delete") => ask(Action::Delete, ITEM),
-            (COLLECTION, "CreateItem") => ask(Action::Create, COLLECTION),
-            (COLLECTION, "Delete") => ask(Action::Delete, COLLECTION),
-            (SERVICE, "CreateCollection" | "SetAlias") => ask(Action::Create, SERVICE),
+            (ITEM, "GetSecret") => ask(Action::Read, ITEM, Login::Item),
+            (ITEM, "SetSecret") => ask(Action::Change, ITEM, Login::Item),
+            (ITEM, "Delete") => ask(Action::Delete, ITEM, Login::No),
+            (COLLECTION, "CreateItem") => {
+                let attributes = if header.signature.starts_with("a{sv}") {
+                    body.item_attributes()?
+                } else {
+                    None
+                };
+                ask(
+                    Action::Create,
+                    COLLECTION,
+                    attributes.map_or(Login::No, Login::New),
+                )
+            }
+            (COLLECTION, "Delete") => ask(Action::Delete, COLLECTION, Login::No),
+            (SERVICE, "CreateCollection" | "SetAlias") => ask(Action::Create, SERVICE, Login::No),
             (PROPERTIES, "Set") if header.signature.starts_with("ss") => match body.string()? {
-                ITEM => ask(Action::Change, ITEM),
-                COLLECTION => ask(Action::Change, COLLECTION),
+                ITEM => ask(Action::Change, ITEM, Login::No),
+                COLLECTION => ask(Action::Change, COLLECTION, Login::No),
                 _ => Ok(Verdict::Refuse("unknown keyring property")),
             },
             _ => Ok(Verdict::Refuse(
@@ -696,9 +809,7 @@ fn serve(shared: &Arc<Shared>, mut client: UnixStream, scope: Option<Arc<str>>) 
         };
         let verdict = match session.judge(shared, &header, &buf) {
             Ok(Verdict::Ask(questions)) => (questions.iter())
-                .try_for_each(|(action, path, kind)| {
-                    shared.allows(scope.as_deref(), *action, path, kind)
-                })
+                .try_for_each(|question| shared.allows(scope.as_deref(), question))
                 .map_or_else(Verdict::Refuse, |()| Verdict::Pass),
             Ok(verdict) => verdict,
             Err(_) => Verdict::Refuse("malformed arguments"),
@@ -829,7 +940,30 @@ mod tests {
                 .field(3, "s", member)
                 .field(6, "s", destination)
                 .strings(args);
-            self.stream.write_all(&message).unwrap();
+            self.send(&message)
+        }
+
+        /// [`Self::call`] with a body of signature `signature`.
+        fn call_with(
+            &mut self,
+            path: &str,
+            interface: &str,
+            member: &str,
+            signature: &str,
+            body: &[u8],
+        ) -> (u8, String) {
+            self.serial += 1;
+            let message = Builder::new(wire::METHOD_CALL, 0, self.serial)
+                .field(1, "o", path)
+                .field(2, "s", interface)
+                .field(3, "s", member)
+                .field(6, "s", SECRETS)
+                .finish(signature, body);
+            self.send(&message)
+        }
+
+        fn send(&mut self, message: &[u8]) -> (u8, String) {
+            self.stream.write_all(message).unwrap();
             loop {
                 wire::read_message(&mut self.stream, &mut self.buf).unwrap();
                 let header = wire::parse(&self.buf).unwrap();
@@ -850,6 +984,8 @@ mod tests {
 
     /// A Secret Service that owns its name on `address`, gives every item
     /// the label `GitHub token` and answers `GetSecret` with `hunter2`.
+    /// Items under `/agent/` have the attributes `service=agent` and
+    /// `user=login`, others `service=github`.
     fn fake_keyring(address: &str) {
         let address = Address::parse(address).unwrap();
         let mut client =
@@ -883,6 +1019,7 @@ mod tests {
                 serial += 1;
                 let (kind, value) = match header.member {
                     Some("GetSecret") => (wire::METHOD_RETURN, "hunter2"),
+                    Some("CreateItem" | "Delete") => (wire::METHOD_RETURN, "/"),
                     Some("Get") => (wire::METHOD_RETURN, "GitHub token"),
                     _ => (wire::ERROR, "unknown"),
                 };
@@ -892,7 +1029,21 @@ mod tests {
                 if kind == wire::ERROR {
                     reply = reply.field(4, "s", "org.example.Unknown");
                 }
-                let message = if header.member == Some("Get") {
+                let property = (header.member == Some("Get")).then(|| {
+                    let mut body = Cursor::new(&buf, header.body);
+                    body.string().unwrap();
+                    body.string().unwrap()
+                });
+                let message = if property == Some("Attributes") {
+                    let mut body = wire::Body::default();
+                    body.signature("a{ss}");
+                    if header.path.unwrap().contains("/agent/") {
+                        body.string_map(&[("service", "agent"), ("user", "login")]);
+                    } else {
+                        body.string_map(&[("service", "github")]);
+                    }
+                    reply.finish("v", &body.0)
+                } else if property.is_some() {
                     // A variant holding a string.
                     let mut body = vec![1, b's', 0, 0];
                     body.extend_from_slice(&(value.len() as u32).to_le_bytes());
@@ -1010,6 +1161,104 @@ mod tests {
         assert!(approvals.pending().is_empty());
     }
 
+    /// Answers the next question with `allow` and returns it.
+    fn answer_next(approvals: &Arc<Approvals>, allow: bool) -> thread::JoinHandle<crate::Approval> {
+        let approvals = Arc::clone(approvals);
+        thread::spawn(move || {
+            loop {
+                if let Some(question) = approvals.pending().into_iter().next() {
+                    approvals.answer(question.id, allow);
+                    return question;
+                }
+                thread::sleep(Duration::from_millis(5));
+            }
+        })
+    }
+
+    #[test]
+    fn agents_reach_their_logins_without_a_question() {
+        let dir = tempfile::tempdir().unwrap();
+        let Some(bus) = test_bus(dir.path()) else {
+            eprintln!("skipped: no dbus-daemon");
+            return;
+        };
+        fake_keyring(&bus.address);
+        let keyring = KeyringBus::start(&dir.path().join("keyring.sock"), &bus.address).unwrap();
+        let approvals = Arc::new(Approvals::new(|| {}));
+        keyring.set_approvals(Some(Arc::clone(&approvals)));
+        let pair = |k: &str, v: &str| (k.to_owned(), v.to_owned());
+        keyring.set_logins(vec![vec![pair("service", "agent"), pair("user", "login")]]);
+        let mut client = Client::connect(keyring.socket());
+        let session = "/org/freedesktop/secrets/session/1";
+        let login = "/org/freedesktop/secrets/collection/agent/1";
+        let other = "/org/freedesktop/secrets/collection/login/1";
+        let collection = "/org/freedesktop/secrets/collection/login";
+
+        let (kind, secret) = client.call(SECRETS, login, ITEM, "GetSecret", &[session]);
+        assert_eq!((kind, secret.as_str()), (wire::METHOD_RETURN, "hunter2"));
+        assert!(approvals.pending().is_empty());
+        let mut body = wire::Body::default();
+        body.new_item(&[("user", "login"), ("service", "agent")], true);
+        // The secret itself and `replace` are left out; the fake keyring
+        // does not read them.
+        let (kind, _) = client.call_with(collection, COLLECTION, "CreateItem", "a{sv}", &body.0);
+        assert_eq!(kind, wire::METHOD_RETURN);
+
+        // Other secrets, a new one with other attributes and deleting the
+        // login still ask. The fake keyring labels everything alike and an
+        // answer holds for its label, so each asks from a project of its own.
+        let project = |scope: &str| {
+            let socket = dir.path().join(format!("keyring-{scope}.sock"));
+            Client::connect(&keyring.socket_for(scope, &socket).unwrap())
+        };
+        let asking = answer_next(&approvals, false);
+        let (kind, _) = project("p1").call(SECRETS, other, ITEM, "GetSecret", &[session]);
+        assert_eq!(kind, wire::ERROR);
+        assert_eq!(asking.join().unwrap().method, "read");
+        let asking = answer_next(&approvals, false);
+        let mut body = wire::Body::default();
+        body.new_item(&[("service", "agent")], false);
+        let (kind, _) =
+            project("p2").call_with(collection, COLLECTION, "CreateItem", "a{sv}", &body.0);
+        assert_eq!(kind, wire::ERROR);
+        assert_eq!(asking.join().unwrap().method, "create");
+        let asking = answer_next(&approvals, false);
+        let (kind, _) = project("p3").call(SECRETS, login, ITEM, "Delete", &[]);
+        assert_eq!(kind, wire::ERROR);
+        assert_eq!(asking.join().unwrap().method, "delete");
+
+        keyring.set_mode(GuardMode::Block);
+        let (kind, error) = client.call(SECRETS, login, ITEM, "GetSecret", &[session]);
+        assert_eq!(kind, wire::ERROR);
+        assert!(error.contains("guard blocks"), "{error}");
+    }
+
+    #[test]
+    fn logins_match_by_every_attribute_once() {
+        let logins = vec![vec![
+            ("service".to_owned(), "gemini".to_owned()),
+            ("username".to_owned(), "antigravity".to_owned()),
+        ]];
+        let matches = |pairs: &[(&str, &str)]| login_matches(&logins, pairs);
+        assert!(matches(&[
+            ("username", "antigravity"),
+            ("service", "gemini")
+        ]));
+        assert!(matches(&[
+            ("service", "gemini"),
+            ("username", "antigravity"),
+            ("xdg:schema", "org.freedesktop.Secret.Generic"),
+        ]));
+        assert!(!matches(&[("service", "gemini")]));
+        assert!(!matches(&[("service", "gemini"), ("username", "other")]));
+        assert!(!matches(&[
+            ("service", "gemini"),
+            ("username", "antigravity"),
+            ("service", "github"),
+        ]));
+        assert!(!login_matches(&[Vec::new()], &[("service", "gemini")]));
+    }
+
     #[test]
     fn match_rules_are_read_the_way_the_bus_reads_them() {
         let keys = |rule: &str| match_rule_keys(rule);
@@ -1044,6 +1293,7 @@ mod tests {
             guard: builtin_guards().remove(0),
             mode: RwLock::new(GuardMode::Ask),
             approvals: RwLock::new(None),
+            logins: RwLock::new(Vec::new()),
             lookup: Mutex::new(None),
             stop: AtomicBool::new(false),
         };

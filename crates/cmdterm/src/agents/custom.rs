@@ -50,6 +50,8 @@ pub struct CustomAgent {
     pub home_var: Option<(&'static str, &'static str)>,
     /// The variables it logs in with, which sandboxes keep.
     pub login_vars: &'static [&'static str],
+    /// The attributes of the keyring secrets it logs in with.
+    pub keyring: &'static [&'static [(&'static str, &'static str)]],
     pub guarded: &'static [Guarded],
     pub npm: &'static [&'static str],
 }
@@ -221,6 +223,16 @@ fn leak_agent(info: &AgentInfo) -> CustomAgent {
         synced: leak_list(&info.sandbox.synced),
         home_var: (info.sandbox.home_var.as_ref()).map(|(var, dir)| (leak(var), leak(dir))),
         login_vars: leak_list(&info.sandbox.login_vars),
+        keyring: Box::leak(
+            (info.sandbox.keyring.iter())
+                .map(|login| -> &'static [(&'static str, &'static str)] {
+                    let pairs: Vec<_> = (login.iter())
+                        .map(|(key, value)| (leak(key), leak(value)))
+                        .collect();
+                    Box::leak(pairs.into_boxed_slice())
+                })
+                .collect::<Box<[_]>>(),
+        ),
         guarded: Box::leak(guarded),
         npm: leak_list(&info.npm),
     }

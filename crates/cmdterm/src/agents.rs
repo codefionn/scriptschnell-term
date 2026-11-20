@@ -1336,9 +1336,27 @@ impl Agent {
             Agent::Kimi => &["KIMI_API_KEY", "MOONSHOT_API_KEY"],
             Agent::Vibe => &["MISTRAL_API_KEY"],
             // Read only with `modelProvider` set to `gemini`; a Google login
-            // lives in the keyring.
+            // lives in the keyring, see [`Self::keyring_logins`].
             Agent::Antigravity => &["GEMINI_API_KEY"],
             Agent::Custom(agent) => agent.login_vars,
+        }
+    }
+
+    /// The keyring secrets the agent keeps its login in, each by attributes
+    /// it has. The keyring bus of bubblewrap sandboxes lets them be read,
+    /// renewed and created without asking, see
+    /// `cmdterm_env::KeyringBus::set_logins`.
+    pub fn keyring_logins(self) -> &'static [&'static [(&'static str, &'static str)]] {
+        match self {
+            // go-keyring's entry, labeled "Password for 'antigravity' on
+            // 'gemini'". Antigravity CLI waits five seconds for the keyring,
+            // too short for a question, and then shows the login screen.
+            Agent::Antigravity => &[&[("service", "gemini"), ("username", "antigravity")]],
+            // Python keyring's entry for the OAuth login, user
+            // `oauth/kimi-code`.
+            Agent::Kimi => &[&[("service", "kimi-code")]],
+            Agent::Custom(agent) => agent.keyring,
+            _ => &[],
         }
     }
 
@@ -1355,7 +1373,9 @@ impl Agent {
             Agent::Gemini => &[".gemini"],
             Agent::Kimi => &[".kimi-code"],
             Agent::Vibe => &[".vibe"],
-            Agent::Antigravity => &[".gemini/antigravity-cli"],
+            // Its file-based secret storage, for plugins and for its login
+            // when the keyring does not answer, is in `.config/antigravity`.
+            Agent::Antigravity => &[".gemini/antigravity-cli", ".config/antigravity"],
             Agent::Custom(agent) => agent.writable,
         }
     }
@@ -4218,6 +4238,7 @@ mod tests {
                 synced: vec![format!(".{name}/settings.json")],
                 home_var: None,
                 login_vars: vec![format!("{}_API_KEY", name.to_uppercase().replace('-', "_"))],
+                keyring: vec![vec![("service".to_owned(), name.to_owned())]],
                 guarded: vec![(
                     format!(".{name}/settings.json"),
                     vec![vec!["trust".to_owned()]],
@@ -4251,6 +4272,7 @@ mod tests {
         assert!(Agent::all().contains(&agent));
         // Sandboxes keep its login, as they keep the built-in agents'.
         assert_eq!(agent.login_vars(), ["EXT_HOOKED_API_KEY"]);
+        assert_eq!(agent.keyring_logins(), [[("service", "ext-hooked")]]);
         assert_eq!(
             (agent.name(), agent.extension()),
             ("Test ext-hooked", Some("test"))

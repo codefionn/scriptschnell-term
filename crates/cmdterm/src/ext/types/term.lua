@@ -262,6 +262,7 @@
 ---@field synced? string[] settings files the agent changes itself; copied into sandboxes and brought back after asking
 ---@field home_var? string[] `{ variable, directory }` for an agent that renames new settings over old ones
 ---@field login_vars? string[] variables the agent logs in with, which sandboxes keep although they look like credentials; needs the `env` permission
+---@field keyring? table<string, string>[] the keyring secrets the agent logs in with, each by attributes it has, such as `{ service = "my-agent" }`; Linux sandboxes read and renew them without asking; needs the `secrets` permission
 ---@field guarded? table<string, string[][]> per synced file, the key paths whose changes ask; `*` matches any key
 
 ---@class term.AgentSessions

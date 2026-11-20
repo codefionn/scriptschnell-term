@@ -381,6 +381,7 @@ impl Runtimes {
         });
         let keyring = keyring.as_ref()?;
         keyring.set_mode(settings.guard_mode(cmdterm_env::KEYRING_GUARD, None));
+        keyring.set_logins(keyring_logins());
         match scope {
             Some(id) => {
                 let socket = self.scoped_socket("keyring", id)?;
@@ -1059,6 +1060,21 @@ pub fn sandbox_env(
         }
     };
     Environment::Sandbox(Box::new(SandboxTarget::new(project.env.clone(), policy)))
+}
+
+/// The keyring secrets of every agent's login, see
+/// [`crate::agents::Agent::keyring_logins`]. Like [`passed_credentials`],
+/// they serve every sandbox, whichever agent its terminals run.
+#[cfg(target_os = "linux")]
+fn keyring_logins() -> Vec<Vec<(String, String)>> {
+    (crate::agents::Agent::all().into_iter())
+        .flat_map(|agent| agent.keyring_logins().iter())
+        .map(|login| {
+            (login.iter())
+                .map(|(key, value)| ((*key).to_owned(), (*value).to_owned()))
+                .collect()
+        })
+        .collect()
 }
 
 /// The credential-shaped variables a local sandbox keeps from the app's

@@ -4059,6 +4059,54 @@ fn agents_need_their_permissions_and_are_checked() {
         );
     }
 
+    // Keyring logins pass sandboxes without a question, so they need the
+    // secrets permission, and every entry names its attributes.
+    let keyring = r#"term.agent{ name = "ext-test-keyring", config_dir = ".keyring",
+        sandbox = { keyring = { { username = "me", service = "keyring-agent" } } } }"#;
+    let boxed: Permissions = [Permission::Agents, Permission::Sandbox]
+        .into_iter()
+        .collect();
+    let error = ExtensionHost::new()
+        .load_source_with("keyring", keyring, boxed)
+        .unwrap_err();
+    assert!(
+        error.message.contains("'secrets' permission"),
+        "{}",
+        error.message
+    );
+    let secrets: Permissions = [Permission::Agents, Permission::Sandbox, Permission::Secrets]
+        .into_iter()
+        .collect();
+    let mut keyed = ExtensionHost::new();
+    keyed.load_source_with("keyring", keyring, secrets).unwrap();
+    let pair = |k: &str, v: &str| (k.to_owned(), v.to_owned());
+    assert_eq!(
+        keyed.agents()[0].sandbox.keyring,
+        [vec![
+            pair("service", "keyring-agent"),
+            pair("username", "me")
+        ]]
+    );
+    for bad in [
+        r#"{ {} }"#,
+        r#"{ { service = 1 } }"#,
+        r#"{ "service" }"#,
+        r#""x""#,
+    ] {
+        let source = format!(
+            r#"term.agent{{ name = "ext-test-bad-keyring", config_dir = ".bad",
+                sandbox = {{ keyring = {bad} }} }}"#
+        );
+        let error = ExtensionHost::new()
+            .load_source_with("bad-keyring", &source, secrets)
+            .unwrap_err();
+        assert!(
+            error.message.contains("sandbox.keyring"),
+            "{bad}: {}",
+            error.message
+        );
+    }
+
     // Hooks that provide what the agent opted in to pass.
     let messaging = r#"term.agent{ name = "ext-test-talker", config_dir = ".talker",
         supports = { "state", "session", "messages", "paste" },

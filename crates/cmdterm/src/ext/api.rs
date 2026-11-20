@@ -1180,6 +1180,11 @@ fn install_agent(
         if !info.sandbox.login_vars.is_empty() {
             b.require(Permission::Env, "agent{ sandbox.login_vars }")?;
         }
+        // Sandboxes read these secrets of this machine's keyring without
+        // asking the user.
+        if !info.sandbox.keyring.is_empty() {
+            b.require(Permission::Secrets, "agent{ sandbox.keyring }")?;
+        }
         info.extension = b.extension.to_string();
         let mut shared = b.shared.borrow_mut();
         let shared = &mut *shared;
@@ -1568,6 +1573,32 @@ fn agent_sandbox(runtime: &Runtime, table: TableHandle) -> RuntimeResult<AgentSa
             "'sandbox.login_vars' must be a list of up to 32 variable names",
         ));
     }
+    const KEYRING: &str = "'sandbox.keyring' must be a list of up to 8 tables of 1 to 8 secret attributes, such as { service = \"my-agent\" }";
+    let mut keyring = Vec::new();
+    match runtime.table_get(table, &Value::from("keyring"))? {
+        Value::Nil => {}
+        Value::Table(list) => {
+            for index in 1_i64.. {
+                match runtime.table_get(list, &Value::Integer(index))? {
+                    Value::Nil => break,
+                    Value::Table(map) => {
+                        let mut login = string_map(runtime, map, KEYRING)?;
+                        login.sort();
+                        keyring.push(login);
+                    }
+                    _ => return Err(agent_error(KEYRING)),
+                }
+            }
+        }
+        _ => return Err(agent_error(KEYRING)),
+    }
+    let attributes_ok = |login: &Vec<(String, String)>| {
+        (1..=8).contains(&login.len())
+            && (login.iter()).all(|(key, value)| !key.is_empty() && !value.is_empty())
+    };
+    if keyring.len() > 8 || !keyring.iter().all(attributes_ok) {
+        return Err(agent_error(KEYRING));
+    }
     let mut guarded = Vec::new();
     match runtime.table_get(table, &Value::from("guarded"))? {
         Value::Nil => {}
@@ -1609,6 +1640,7 @@ fn agent_sandbox(runtime: &Runtime, table: TableHandle) -> RuntimeResult<AgentSa
         synced,
         home_var,
         login_vars,
+        keyring,
         guarded,
     })
 }

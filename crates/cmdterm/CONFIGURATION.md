@@ -226,7 +226,7 @@ the palette; the worktree keeps the choice in `state.json`.
   and so is the state of coding agents: `~/.claude`, `~/.claude.json`, `~/.codex`,
   `~/.local/share/opencode`, `~/.local/state/opencode`, `~/.pi/agent`, `~/.copilot`,
   `~/.cache/copilot`, `~/.qwen`, `~/.gemini` (with Antigravity CLI's
-  `~/.gemini/antigravity-cli`), `~/.kimi-code` and `~/.vibe`. Their settings,
+  `~/.gemini/antigravity-cli`), `~/.config/antigravity`, `~/.kimi-code` and `~/.vibe`. Their settings,
   hooks, plugins, skills and instruction files stay read-only, because the agents on the
   host run what those name. Windows sandboxes deny writes to these too. On Linux and
   Windows a sandbox can keep only an existing path read-only, so when one is missing in
@@ -315,8 +315,8 @@ the palette; the worktree keeps the choice in `state.json`.
   `COPILOT_GITHUB_TOKEN` (Copilot CLI), `DASHSCOPE_API_KEY` (Qwen Code, which also reads
   `OPENAI_API_KEY`), `GEMINI_API_KEY` and `GOOGLE_API_KEY` (Gemini CLI), `KIMI_API_KEY`
   and `MOONSHOT_API_KEY` (Kimi) and `MISTRAL_API_KEY` (Mistral Vibe). Antigravity CLI
-  keeps a Google login in the keyring and reads `GEMINI_API_KEY` only with
-  `modelProvider` set to `gemini`. This is a trade-off.
+  keeps a Google login in the keyring (see `cmdterm.keyring` below) and reads
+  `GEMINI_API_KEY` only with `modelProvider` set to `gemini`. This is a trade-off.
   The app builds one sandbox per worktree before it knows which agent a terminal will
   run, so every one of these that you set reaches every command in every sandbox, not
   only the agent that needs it. Start the app without the keys of agents you don't use.
@@ -550,8 +550,13 @@ the palette; the worktree keeps the choice in `state.json`.
   that only when the app itself has a session bus. Listing secrets and reading their
   labels always works. Reading, changing, creating or deleting a secret follows the guard:
   `ask` shows a dialog with the secret's label, and the answer holds for that secret for
-  one minute. Calls to other services, owning a bus name and listening to other
-  programs' signals are refused.
+  one minute. Coding agents' own logins are the exception in `ask` mode: sandboxes read,
+  renew and create them without a dialog, as they may write the agents' login files.
+  These are Antigravity CLI's (`service` `gemini`, `username` `antigravity`), which
+  waits only five seconds for the keyring and then shows its login screen, Kimi Code's
+  (`service` `kimi-code`) and those extensions name in `sandbox.keyring` of
+  `term.agent`. Deleting one still asks, and `block` blocks them too. Calls to other
+  services, owning a bus name and listening to other programs' signals are refused.
   On Linux, `cmdterm.agent-settings` covers the settings coding agents change themselves,
   such as when you trust a folder or allow a tool: `~/.claude.json` and
   `~/.claude/settings.json` for Claude Code, `~/.codex/config.toml` for Codex, and

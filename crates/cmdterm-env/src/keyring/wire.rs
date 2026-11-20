@@ -162,7 +162,64 @@ impl<'a> Cursor<'a> {
             _ => Err(invalid("variant is no string")),
         }
     }
+
+    /// The length of an array and where it ends, with the cursor on its
+    /// first element, whose alignment is `to`.
+    fn array(&mut self, to: usize) -> io::Result<usize> {
+        let len = self.u32()? as usize;
+        self.align(to)?;
+        (self.at.checked_add(len))
+            .filter(|end| *end <= self.buf.len())
+            .ok_or_else(|| invalid("array runs past the message"))
+    }
+
+    /// A dictionary of strings (`a{ss}`), such as a secret's attributes,
+    /// as pairs in the order of the message.
+    pub fn string_map(&mut self) -> io::Result<Vec<(&'a str, &'a str)>> {
+        let end = self.array(8)?;
+        let mut pairs = Vec::new();
+        while self.at < end {
+            self.align(8)?;
+            pairs.push((self.string()?, self.string()?));
+        }
+        Ok(pairs)
+    }
+
+    /// A variant that holds a dictionary of strings, as the reply to
+    /// reading a secret's `Attributes` does.
+    pub fn string_map_variant(&mut self) -> io::Result<Vec<(&'a str, &'a str)>> {
+        match self.signature()? {
+            "a{ss}" => self.string_map(),
+            _ => Err(invalid("variant is no dictionary of strings")),
+        }
+    }
+
+    /// The attributes among the properties of a new secret (`a{sv}`), as
+    /// `CreateItem` takes them. `None` when there are none, when they
+    /// are named twice, or when a property before them has a type other
+    /// than a string, an object path, a boolean or a 32-bit number.
+    pub fn item_attributes(&mut self) -> io::Result<Option<Vec<(&'a str, &'a str)>>> {
+        let end = self.array(8)?;
+        let mut attributes = None;
+        while self.at < end {
+            self.align(8)?;
+            let key = self.string()?;
+            match (key, self.signature()?) {
+                (ITEM_ATTRIBUTES, "a{ss}") if attributes.is_none() => {
+                    attributes = Some(self.string_map()?);
+                }
+                (ITEM_ATTRIBUTES, _) => return Ok(None),
+                (_, "s" | "o") => drop(self.string()?),
+                (_, "b" | "u" | "i") => drop(self.u32()?),
+                _ => return Ok(None),
+            }
+        }
+        Ok(attributes)
+    }
 }
+
+/// The property of a new secret that holds its attributes.
+const ITEM_ATTRIBUTES: &str = "org.freedesktop.Secret.Item.Attributes";
 
 /// Parses the header of a whole message from [`read_message`].
 pub fn parse(message: &[u8]) -> io::Result<Header<'_>> {
@@ -363,9 +420,151 @@ pub fn accept(stream: &mut (impl Read + Write), guid: &str) -> io::Result<()> {
     }
 }
 
+/// A message body in little-endian D-Bus encoding, for tests.
+#[cfg(test)]
+#[derive(Default)]
+pub struct Body(pub Vec<u8>);
+
+#[cfg(test)]
+impl Body {
+    pub fn pad(&mut self, to: usize) {
+        self.0.resize(align(self.0.len(), to), 0);
+    }
+
+    pub fn u32(&mut self, value: u32) {
+        self.pad(4);
+        self.0.extend_from_slice(&value.to_le_bytes());
+    }
+
+    pub fn string(&mut self, value: &str) {
+        self.u32(value.len() as u32);
+        self.0.extend_from_slice(value.as_bytes());
+        self.0.push(0);
+    }
+
+    pub fn signature(&mut self, value: &str) {
+        self.0.push(value.len() as u8);
+        self.0.extend_from_slice(value.as_bytes());
+        self.0.push(0);
+    }
+
+    /// An array of `count` dictionary entries, each written by `entry`.
+    pub fn dict(&mut self, count: usize, mut entry: impl FnMut(&mut Self, usize)) {
+        self.u32(0);
+        let len_at = self.0.len() - 4;
+        self.pad(8);
+        let start = self.0.len();
+        for index in 0..count {
+            self.pad(8);
+            entry(self, index);
+        }
+        let len = (self.0.len() - start) as u32;
+        self.0[len_at..len_at + 4].copy_from_slice(&len.to_le_bytes());
+    }
+
+    pub fn string_map(&mut self, pairs: &[(&str, &str)]) {
+        self.dict(pairs.len(), |body, index| {
+            body.string(pairs[index].0);
+            body.string(pairs[index].1);
+        });
+    }
+
+    /// `CreateItem`'s properties (`a{sv}`) with `attributes` and a
+    /// label, the label first when `label_first`.
+    pub fn new_item(&mut self, attributes: &[(&str, &str)], label_first: bool) {
+        self.dict(2, |body, index| {
+            if (index == 0) == label_first {
+                body.string("org.freedesktop.Secret.Item.Label");
+                body.signature("s");
+                body.string("token");
+            } else {
+                body.string(ITEM_ATTRIBUTES);
+                body.signature("a{ss}");
+                body.string_map(attributes);
+            }
+        });
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn new_secrets_name_their_attributes() {
+        let login = [("service", "gemini"), ("username", "antigravity")];
+        let read = |body: Body| {
+            let message = Builder::new(METHOD_CALL, 0, 1)
+                .field(1, "o", "/org/freedesktop/secrets/collection/login")
+                .field(3, "s", "CreateItem")
+                .finish("a{sv}", &body.0);
+            let header = parse(&message).unwrap();
+            let mut cursor = Cursor::new(&message, header.body);
+            (cursor.item_attributes().unwrap()).map(|pairs| {
+                (pairs.into_iter())
+                    .map(|(k, v)| (k.to_owned(), v.to_owned()))
+                    .collect::<Vec<_>>()
+            })
+        };
+        let owned = |pairs: &[(&str, &str)]| {
+            (pairs.iter())
+                .map(|(k, v)| ((*k).to_owned(), (*v).to_owned()))
+                .collect::<Vec<_>>()
+        };
+        for label_first in [true, false] {
+            let mut body = Body::default();
+            body.new_item(&login, label_first);
+            assert_eq!(
+                read(body),
+                Some(owned(&login)),
+                "label first: {label_first}"
+            );
+        }
+        let mut body = Body::default();
+        body.new_item(&[], true);
+        assert_eq!(read(body), Some(Vec::new()));
+
+        // Named twice, the service might keep either.
+        let mut body = Body::default();
+        body.dict(2, |body, index| {
+            body.string(ITEM_ATTRIBUTES);
+            body.signature("a{ss}");
+            body.string_map(if index == 0 {
+                &login
+            } else {
+                &[("service", "x")]
+            });
+        });
+        assert_eq!(read(body), None);
+        // A property of a type the cursor cannot step over.
+        let mut body = Body::default();
+        body.dict(2, |body, index| {
+            if index == 0 {
+                body.string("org.example.Size");
+                body.signature("t");
+                body.pad(8);
+                body.0.extend_from_slice(&7u64.to_le_bytes());
+            } else {
+                body.string(ITEM_ATTRIBUTES);
+                body.signature("a{ss}");
+                body.string_map(&login);
+            }
+        });
+        assert_eq!(read(body), None);
+
+        // A property reply holding attributes.
+        let mut body = Body::default();
+        body.signature("a{ss}");
+        body.string_map(&login);
+        let message = Builder::new(METHOD_RETURN, 0, 2)
+            .field_u32(5, 1)
+            .finish("v", &body.0);
+        let header = parse(&message).unwrap();
+        let pairs = Cursor::new(&message, header.body)
+            .string_map_variant()
+            .unwrap();
+        assert_eq!(pairs, login);
+    }
 
     #[test]
     fn built_messages_parse_back() {

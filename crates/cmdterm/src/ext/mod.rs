@@ -472,6 +472,9 @@ pub struct AgentSandbox {
     /// The variables it logs in with, such as `MY_AGENT_API_KEY`, which
     /// sandboxes keep although they look like credentials.
     pub login_vars: Vec<String>,
+    /// The keyring secrets it logs in with, each by attributes it has,
+    /// sorted by key. Sandboxes on Linux read and renew them without asking.
+    pub keyring: Vec<Vec<(String, String)>>,
     /// Per synced file, the key paths whose changes need the user's answer.
     /// A file without an entry asks for every change.
     pub guarded: Vec<(String, Vec<Vec<String>>)>,

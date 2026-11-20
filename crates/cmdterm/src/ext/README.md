@@ -804,7 +804,12 @@ with `~/`. They hold letters, digits and `._-/+@`, and no `..`.
   `sandbox.pass_env` in `CONFIGURATION.md`), but keep these, so the agent can log in
   inside. Every command in every sandbox sees them, not only the agent, so name only
   what the agent needs. They also need the `env` permission, since the sandbox gets
-  their values as `os.getenv` would.
+  their values as `os.getenv` would. `keyring = { { service = "my-agent" } }` names the
+  secrets in this machine's keyring that the agent logs in with, each by attributes the
+  secret has. On Linux, sandboxes read, renew and create a secret with all attributes
+  of one entry without asking under the `cmdterm.keyring` guard, as they may write the
+  agent's login files; deleting it still asks. Use this for an agent that gives up on
+  the keyring before the user could answer. It needs the `secrets` permission.
 - `npm` names the packages the agent is published as. The update check offers to
   update a global npm or mise install of one.
 

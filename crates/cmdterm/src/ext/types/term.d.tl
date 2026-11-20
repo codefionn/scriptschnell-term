@@ -367,6 +367,8 @@ global record Term
       home_var: {string}
       -- variables the agent logs in with, which sandboxes keep; needs "env"
       login_vars: {string}
+      -- keyring secrets the agent logs in with, by attributes; needs "secrets"
+      keyring: {{string: string}}
       -- per synced file, key paths whose changes ask
       guarded: {string: {{string}}}
    end
