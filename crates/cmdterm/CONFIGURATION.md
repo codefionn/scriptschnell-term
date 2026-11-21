@@ -325,7 +325,8 @@ the palette; the worktree keeps the choice in `state.json`.
   `sandbox.pass_env`. Agents that extensions add keep the variables they name in
   `sandbox.login_vars` of `term.agent`.
 - Variables the app sets for a sandbox stay even when their names look like
-  credentials: the proxy's, `SCRIPTSCHNELL_TERM_TOKEN`, a worktree's `env_vars`, and the
+  credentials: the proxy's, `SCRIPTSCHNELL_TERM_TOKEN`, a project's or worktree's
+  `env_vars`, and the
   fake credentials extensions hand out (`term.secret` in the extension reference),
   which the proxy swaps for the real ones on the way out. A fake credential is the safer
   way to give sandboxes a login, since the real one never enters them.
@@ -921,6 +922,17 @@ inside a writable one. A folder that contains a hidden path or one of the app's
 directories, or lies in one of the app's directories, is skipped. A project on another
 machine uses only its absolute paths, on that machine. Terminals pick changes up when
 they start.
+`env_vars` on a project holds per-project environment variables edited on the Project
+page of the settings, passed to every newly started terminal of that project's worktrees
+(including sandboxed ones, even when a variable's name looks like a credential). Worktree
+`env_vars` override project `env_vars` of the same name. When the operating system's
+secret storage is available (Secret Service through `secret-tool` on Linux, or the login
+keychain on macOS, outside `--config-dir`), only each variable's `name` is saved in
+`state.json` and the values live encrypted in the keyring under service
+`scriptschnell-term-project-env`. When no secret storage is reachable, each entry falls
+back to keeping its `value` in `state.json` (mode 0600 on Unix). On Linux, local
+sandboxes receive these variables through the process environment rather than `bwrap`
+command-line arguments.
 `task_runs` holds when each extension
 task (`term.task`) last ran, per project; delete an entry to make that task due again.
 A terminal on a remote machine or a local VM saves the name of its `session`. The shell

@@ -767,6 +767,12 @@ pub struct Strings {
     pub toast_host_added: fn(&str) -> String,
     pub toast_path_added: fn(&str) -> String,
     pub toast_project_base: fn(Option<&str>) -> String,
+    pub toast_project_env_keyring: fn(&str) -> String,
+    pub toast_project_env_plain: fn(&str) -> String,
+    pub toast_project_env_session: fn(&str) -> String,
+    pub toast_project_env_fallback: fn(&str, &str) -> String,
+    pub toast_project_env_removed: fn(&str) -> String,
+    pub project_env_loaded_notice: fn(&str) -> String,
     /// The Accounts page of the settings.
     pub section_accounts: &'static str,
     pub accounts_forges: &'static str,
@@ -1208,6 +1214,22 @@ pub struct Strings {
     pub project_base_hint: &'static str,
     pub project_base_note: &'static str,
     pub project_base_set: &'static str,
+    pub project_env: &'static str,
+    pub project_env_note_keyring: &'static str,
+    pub project_env_note_plain: &'static str,
+    pub project_env_note_temporary: &'static str,
+    pub project_env_remote_note: &'static str,
+    pub project_env_name: &'static str,
+    pub project_env_value: &'static str,
+    pub project_env_add: &'static str,
+    pub project_env_reload: &'static str,
+    pub project_env_invalid_name: &'static str,
+    pub project_env_invalid_value: &'static str,
+    pub project_env_storage_keyring: &'static str,
+    pub project_env_storage_loading: &'static str,
+    pub project_env_storage_locked: &'static str,
+    pub project_env_storage_plain: &'static str,
+    pub project_env_storage_session: &'static str,
     pub project_folders: &'static str,
     pub project_folders_note: &'static str,
     pub project_writable: &'static str,
@@ -1357,7 +1379,9 @@ fn cpu_detail_de(free: u32, percent: u32, nice: u8) -> String {
 
 fn keywords_en(section: SettingsSection) -> &'static str {
     match section {
-        SettingsSection::Project => "Sandbox folders, Jujutsu, Reset all settings | project jj",
+        SettingsSection::Project => {
+            "Environment variables, Sandbox folders, Jujutsu, Reset all settings | project jj env secrets keyring"
+        }
         SettingsSection::Font => "Terminal font, Terminal font size | text ligatures family",
         SettingsSection::ColorScheme => "Color scheme, Follow the system | colour theme dark light",
         SettingsSection::Keyboard => "Keymap, Key bindings | keys shortcuts record",
@@ -1391,7 +1415,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
 fn keywords_de(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Project => {
-            "Sandbox-Ordner, Jujutsu, Alle Einstellungen zurücksetzen | projekt jj"
+            "Umgebungsvariablen, Sandbox-Ordner, Jujutsu, Alle Einstellungen zurücksetzen | projekt jj env geheimnisse schlüsselbund"
         }
         SettingsSection::Font => {
             "Terminalschrift, Schriftgröße im Terminal | text ligaturen font schriftart"
@@ -2115,6 +2139,16 @@ pub static EN: Strings = Strings {
         Some(base) => format!("Reviews compare against {base}"),
         None => "Reviews will auto-detect the base branch".to_owned(),
     },
+    toast_project_env_keyring: |name| format!("Saved {name} in the system keyring"),
+    toast_project_env_plain: |name| format!("Saved {name} in state.json"),
+    toast_project_env_session: |name| format!("Set {name} for this session"),
+    toast_project_env_fallback: |name, error| {
+        format!("Saved {name} in state.json (keyring unavailable: {error})")
+    },
+    toast_project_env_removed: |name| format!("Removed {name}"),
+    project_env_loaded_notice: |project| {
+        format!("Loaded environment variables for {project} from the keyring. Restart terminals to apply.")
+    },
     section_accounts: "Accounts",
     accounts_forges: "Forges",
     forge_used_by: |forge, project| format!("{forge} · used by {project}"),
@@ -2588,6 +2622,22 @@ pub static EN: Strings = Strings {
     project_base_hint: "Leave empty to auto-detect (origin/HEAD, main, master, or trunk)",
     project_base_note: "Default branch or revision for code reviews. Leave empty to auto-detect (origin/HEAD, main, master, or trunk; default for Mercurial; trunk() for jj).",
     project_base_set: "Set",
+    project_env: "Environment variables",
+    project_env_note_keyring: "Set for newly started terminals in this project, including sandboxed terminals. Values are stored encrypted in the system keyring and never written to state.json.",
+    project_env_note_plain: "Set for newly started terminals in this project, including sandboxed terminals. No system keyring is available here, so values are stored in state.json (readable only by your user).",
+    project_env_note_temporary: "Set for newly started terminals in this temporary session. Values stay in memory until the app closes.",
+    project_env_remote_note: "This project is on another machine. Terminals there receive variables on the remote command line, which other users on this machine can inspect.",
+    project_env_name: "Variable name",
+    project_env_value: "Value",
+    project_env_add: "Save",
+    project_env_reload: "Reload from keyring",
+    project_env_invalid_name: "Variable names must start with a letter or underscore and contain only letters, digits, and underscores.",
+    project_env_invalid_value: "Variable values cannot contain null characters.",
+    project_env_storage_keyring: "Encrypted in system keyring",
+    project_env_storage_loading: "Loading from system keyring…",
+    project_env_storage_locked: "Unavailable in keyring; reload to unlock",
+    project_env_storage_plain: "Saved in state.json",
+    project_env_storage_session: "In memory for this session",
     project_folders: "Sandbox folders",
     project_folders_note: "Additional folders on this project's machine accessible to sandboxed terminals. A read-only folder inside a hidden path will still be visible. Folders containing a hidden path or app files are skipped. Changes apply to newly started terminals.",
     project_writable: "Writable",
@@ -3335,6 +3385,16 @@ pub static DE: Strings = Strings {
         Some(base) => format!("Reviews vergleichen mit {base}"),
         None => "Reviews erkennen den Basis-Branch wieder automatisch".to_owned(),
     },
+    toast_project_env_keyring: |name| format!("{name} im System-Schlüsselbund gespeichert"),
+    toast_project_env_plain: |name| format!("{name} in state.json gespeichert"),
+    toast_project_env_session: |name| format!("{name} für diese Sitzung gesetzt"),
+    toast_project_env_fallback: |name, error| {
+        format!("{name} in state.json gespeichert (Schlüsselbund nicht verfügbar: {error})")
+    },
+    toast_project_env_removed: |name| format!("{name} entfernt"),
+    project_env_loaded_notice: |project| {
+        format!("Umgebungsvariablen für {project} aus dem Schlüsselbund geladen. Starte Terminals neu, um sie zu übernehmen.")
+    },
     section_accounts: "Konten",
     accounts_forges: "Forges",
     forge_used_by: |forge, project| format!("{forge} · von {project} genutzt"),
@@ -3813,6 +3873,22 @@ pub static DE: Strings = Strings {
     project_base_hint: "Leer für automatische Erkennung (origin/HEAD, main, master oder trunk)",
     project_base_note: "Standard-Branch oder Revision für Code-Reviews. Leer für automatische Erkennung (origin/HEAD, main, master oder trunk; default für Mercurial; trunk() für jj).",
     project_base_set: "Setzen",
+    project_env: "Umgebungsvariablen",
+    project_env_note_keyring: "Gilt für neu gestartete Terminals in diesem Projekt, auch in Sandboxes. Werte werden verschlüsselt im System-Schlüsselbund gespeichert und nicht in state.json geschrieben.",
+    project_env_note_plain: "Gilt für neu gestartete Terminals in diesem Projekt, auch in Sandboxes. Kein System-Schlüsselbund verfügbar, daher werden Werte in state.json gespeichert (nur für deinen Benutzer lesbar).",
+    project_env_note_temporary: "Gilt für neu gestartete Terminals in dieser temporären Sitzung. Werte bleiben nur bis zum Beenden im Speicher.",
+    project_env_remote_note: "Dieses Projekt liegt auf einem anderen Rechner. Terminals dort erhalten Variablen über die Kommandozeile, die andere Benutzer auf diesem Rechner einsehen können.",
+    project_env_name: "Variablenname",
+    project_env_value: "Wert",
+    project_env_add: "Speichern",
+    project_env_reload: "Aus Schlüsselbund laden",
+    project_env_invalid_name: "Variablennamen müssen mit einem Buchstaben oder Unterstrich beginnen und dürfen nur Buchstaben, Ziffern und Unterstriche enthalten.",
+    project_env_invalid_value: "Variablenwerte dürfen keine Nullzeichen enthalten.",
+    project_env_storage_keyring: "Verschlüsselt im System-Schlüsselbund",
+    project_env_storage_loading: "Wird aus dem Schlüsselbund geladen…",
+    project_env_storage_locked: "Im Schlüsselbund nicht verfügbar; zum Entsperren neu laden",
+    project_env_storage_plain: "In state.json gespeichert",
+    project_env_storage_session: "Für diese Sitzung im Speicher",
     project_folders: "Sandbox-Ordner",
     project_folders_note: "Zusätzliche Ordner auf dem Rechner des Projekts für Terminals in der Sandbox. Ein schreibgeschützter Ordner innerhalb eines verborgenen Pfads bleibt dennoch sichtbar. Ordner, die einen verborgenen Pfad oder App-Dateien enthalten, werden übersprungen. Änderungen gelten für neu gestartete Terminals.",
     project_writable: "Beschreibbar",

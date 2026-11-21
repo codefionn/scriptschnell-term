@@ -96,6 +96,10 @@ pub enum MachineText {
     SandboxHost,
     /// A folder for the active project's sandboxes, on the Project page.
     ProjectPath,
+    /// The name of a per-project environment variable, on the Project page.
+    ProjectEnvName,
+    /// The value of a per-project environment variable, on the Project page.
+    ProjectEnvValue,
     Vm(VmField),
 }
 
@@ -127,6 +131,11 @@ pub struct MachineForm {
     pub project_path: String,
     /// The reference branch typed for a project, by its id, until it is set.
     pub project_base: Option<(u64, String)>,
+    /// Name and value typed for a new project environment variable.
+    pub project_env_name: String,
+    pub project_env_value: String,
+    /// Why the last project environment variable Add was refused.
+    pub project_env_error: Option<String>,
     /// The Firecracker fields in [`VmField::ALL`] order. Empty until the
     /// first read of `server.json` fills them.
     pub vm: Vec<String>,
@@ -141,6 +150,8 @@ impl MachineForm {
             MachineText::SandboxPath => &mut self.sandbox_path,
             MachineText::SandboxHost => &mut self.sandbox_host,
             MachineText::ProjectPath => &mut self.project_path,
+            MachineText::ProjectEnvName => &mut self.project_env_name,
+            MachineText::ProjectEnvValue => &mut self.project_env_value,
             MachineText::Vm(field) => {
                 if self.vm.len() < VmField::ALL.len() {
                     self.vm.resize(VmField::ALL.len(), String::new());
@@ -1361,6 +1372,41 @@ impl Workspace {
             inner.dirty.settings = true;
         }
         self.save_settings();
+    }
+
+    /// Adds or updates the typed environment variable on the active project.
+    pub fn add_project_env_var(&self) {
+        let (id, name, value) = {
+            let mut inner = self.borrow_mut();
+            let tr = inner.tr;
+            let Some(id) = inner.state.active_project else {
+                return;
+            };
+            let name = inner
+                .settings_ui
+                .machines
+                .form
+                .project_env_name
+                .trim()
+                .to_owned();
+            if !crate::project_env::valid_var_name(&name) {
+                inner.settings_ui.machines.form.project_env_error =
+                    Some(tr.project_env_invalid_name.to_owned());
+                inner.dirty.settings = true;
+                return;
+            }
+            let value = std::mem::take(&mut inner.settings_ui.machines.form.project_env_value);
+            if value.contains('\0') {
+                inner.settings_ui.machines.form.project_env_error =
+                    Some(tr.project_env_invalid_value.to_owned());
+                inner.dirty.settings = true;
+                return;
+            }
+            inner.settings_ui.machines.form.project_env_name.clear();
+            inner.settings_ui.machines.form.project_env_error = None;
+            (id, name, value)
+        };
+        self.set_project_env_var(id, &name, &value);
     }
 
     /// Adds the typed folder to the active project's writable or read-only

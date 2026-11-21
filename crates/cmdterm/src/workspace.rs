@@ -891,6 +891,9 @@ pub struct Inner {
     pub agents_expanded: [bool; 3],
     /// Forge accounts and what forges reported about agent branches.
     pub forges: crate::forges::Forges,
+    /// Per-project environment variables, backed by the system keyring when
+    /// available.
+    pub(crate) project_env: crate::project_env::ProjectEnvStore,
     /// Set when a frozen agent finished resuming, see
     /// [`TerminalPanel::thaw`].
     pub thaw_signal: Arc<AtomicBool>,
@@ -975,6 +978,12 @@ impl Workspace {
         notices.extend(errors.into_iter().map(Notice::new));
         let keymap_revision = ext.commands_revision();
         let forges = crate::forges::Forges::new(wake.clone(), dirs.cache.join("change-requests"));
+        let project_env = crate::project_env::ProjectEnvStore::new(
+            Arc::new(crate::project_env::OsSecretBackend::new(
+                !cfg!(test) && !dirs.is_single(),
+            )),
+            wake.clone(),
+        );
         let mut inner = Inner {
             state,
             store,
@@ -1073,6 +1082,7 @@ impl Workspace {
             rail_tab: RailTab::Projects,
             agents_expanded: [false; 3],
             forges,
+            project_env,
             thaw_signal: Arc::new(AtomicBool::new(false)),
             freeze_check: Arc::new(AtomicBool::new(false)),
             memory_pressure: Arc::new(std::sync::atomic::AtomicU8::new(0)),
@@ -1172,7 +1182,14 @@ impl Workspace {
         workspace.warn_unscoped_host_network();
         let active = workspace.0.borrow().state.active_project;
         {
-            let inner = workspace.0.borrow();
+            let mut inner = workspace.0.borrow_mut();
+            let inner = &mut *inner;
+            inner.project_env.start_initial_loads(&inner.state);
+            if let Some(id) = active {
+                inner
+                    .project_env
+                    .wait_for_project(id, crate::project_env::STARTUP_WAIT);
+            }
             for project in &inner.state.projects {
                 if Some(project.id) != active && !project.is_global() {
                     inner.vcs.send(Job::Refresh {
@@ -1399,6 +1416,9 @@ impl Workspace {
     pub(crate) fn drop_project(&self, id: u64) {
         {
             let mut inner = self.0.borrow_mut();
+            if let Some(project) = inner.state.project(id).cloned() {
+                inner.project_env.forget_project(&project);
+            }
             inner.state.remove_project(id);
             inner.runtimes.forget_project(id);
             for live in inner
@@ -1450,6 +1470,8 @@ impl Workspace {
             };
             if switching {
                 inner.vcs.send(watch(project, inner.settings.jj));
+                inner.settings_ui.machines.form.project_env_value.clear();
+                inner.settings_ui.machines.form.project_env_error = None;
             }
             project.active_worktree = Some(path.to_path_buf());
             let env = project.env.clone();
@@ -1464,11 +1486,12 @@ impl Workspace {
             inner.state.active_project = Some(id);
             if inner.live_get(id, path).is_none() {
                 let term_env = inner.terminal_env(id, path);
+                let vars = inner.worktree_env_vars(id, path);
                 let mut live = LiveWorktree::default();
                 // Panel id per saved index; a panel that fails to open has none.
                 let mut ids = Vec::with_capacity(config.panels.len());
                 for spec in &config.panels {
-                    let panel = inner.open_panel(&term_env, path, spec, &config.env_vars);
+                    let panel = inner.open_panel(&term_env, path, spec, &vars);
                     ids.push(panel.as_ref().map(|(id, _)| *id));
                     live.panels.extend(panel);
                 }
@@ -2067,11 +2090,7 @@ impl Workspace {
         let mut inner = self.0.borrow_mut();
         let inner = &mut *inner;
         let (id, path) = inner.active_key()?;
-        let project = inner.state.project(id)?;
-        let vars = project
-            .worktree(&path)
-            .map(|config| config.env_vars.clone())
-            .unwrap_or_default();
+        let vars = inner.worktree_env_vars(id, &path);
         let env = inner.terminal_env(id, &path);
         let panel = inner.open_panel(&env, &path, &spec, &vars)?;
         let panel_id = panel.0;
@@ -3049,6 +3068,7 @@ impl Workspace {
         self.poll_tasks_panel();
         self.poll_runtimes();
         self.poll_forges();
+        self.poll_project_env();
         if cmdterm_env::sandbox_warnings_pending() {
             self.report_sandbox_warnings();
         }
@@ -3766,6 +3786,158 @@ impl Workspace {
             .collect();
         for id in ids {
             self.reread_project(id);
+        }
+    }
+
+    /// Applies completed background secret-storage operations for per-project
+    /// environment variables. Returns immediately without allocating while idle.
+    fn poll_project_env(&self) {
+        if !self.0.borrow().project_env.has_pending() {
+            return;
+        }
+        let applied = self.0.borrow_mut().project_env.drain();
+        if applied.is_empty() {
+            return;
+        }
+        let mut save = false;
+        let mut notices = Vec::new();
+        {
+            let mut inner = self.0.borrow_mut();
+            let tr = inner.tr;
+            for event in applied {
+                match event {
+                    crate::project_env::Applied::Loaded {
+                        project_id,
+                        found_any,
+                    } => {
+                        if inner.settings_ui.open {
+                            inner.dirty.settings = true;
+                        }
+                        if found_any
+                            && inner.live.get(&project_id).is_some_and(|w| !w.is_empty())
+                            && let Some(project) = inner.state.project(project_id)
+                        {
+                            notices.push((tr.project_env_loaded_notice)(&project.name));
+                        }
+                    }
+                    crate::project_env::Applied::SavedInKeyring { name } => {
+                        if inner.settings_ui.open {
+                            inner.dirty.settings = true;
+                            let text = (tr.toast_project_env_keyring)(&name);
+                            inner.toast(false, text);
+                        }
+                    }
+                    crate::project_env::Applied::SaveFallback {
+                        project_id,
+                        name,
+                        value,
+                        error,
+                    } => {
+                        if let Some(project) = inner.state.project_mut(project_id)
+                            && let Some(entry) =
+                                project.env_vars.iter_mut().find(|v| v.name == name)
+                        {
+                            entry.value = Some(value);
+                            save = true;
+                        }
+                        if inner.settings_ui.open {
+                            inner.dirty.settings = true;
+                            let text = (tr.toast_project_env_fallback)(&name, &error);
+                            inner.toast(true, text);
+                        }
+                    }
+                    crate::project_env::Applied::Removed | crate::project_env::Applied::Ignored => {
+                    }
+                }
+            }
+        }
+        if save {
+            self.save();
+        }
+        for notice in notices {
+            self.notify(notice);
+        }
+    }
+
+    /// Sets environment variable `name` to `value` on project `id`. Stores
+    /// `value` in the operating system's secret storage when available, else
+    /// in `state.json`.
+    pub fn set_project_env_var(&self, id: u64, name: &str, value: &str) {
+        let mut inner = self.0.borrow_mut();
+        let Some(project) = inner.state.project(id).cloned() else {
+            return;
+        };
+        let in_keyring = inner.project_env.set_var(&project, name, value);
+        let stored_value = (!in_keyring).then(|| value.to_owned());
+        if let Some(project) = inner.state.project_mut(id) {
+            if let Some(existing) = project.env_vars.iter_mut().find(|v| v.name == name) {
+                existing.value = stored_value;
+            } else {
+                project.env_vars.push(crate::state::ProjectEnvVar {
+                    name: name.to_owned(),
+                    value: stored_value,
+                });
+            }
+        }
+        inner.dirty.settings = true;
+        if !in_keyring {
+            let text = if project.temporary {
+                (inner.tr.toast_project_env_session)(name)
+            } else {
+                (inner.tr.toast_project_env_plain)(name)
+            };
+            inner.toast(false, text);
+        }
+        drop(inner);
+        self.save();
+    }
+
+    /// Removes environment variable `name` from project `id` and its keyring
+    /// entry.
+    pub fn remove_project_env_var(&self, id: u64, name: &str) {
+        let mut inner = self.0.borrow_mut();
+        let Some(project) = inner.state.project(id).cloned() else {
+            return;
+        };
+        let was_in_keyring = project
+            .env_vars
+            .iter()
+            .find(|v| v.name == name)
+            .is_some_and(|v| v.value.is_none());
+        inner.project_env.remove_var(&project, name, was_in_keyring);
+        if let Some(project) = inner.state.project_mut(id) {
+            project.env_vars.retain(|v| v.name != name);
+        }
+        inner.dirty.settings = true;
+        let text = (inner.tr.toast_project_env_removed)(name);
+        inner.toast(false, text);
+        drop(inner);
+        self.save();
+    }
+
+    /// Retries reading project `id`'s keyring-backed environment variables.
+    pub fn reload_project_env_vars(&self, id: u64) {
+        let mut inner = self.0.borrow_mut();
+        let Some(project) = inner.state.project(id).cloned() else {
+            return;
+        };
+        inner.project_env.load_project(&project);
+        inner.dirty.settings = true;
+    }
+
+    #[cfg(test)]
+    pub(crate) fn set_project_env_backend(
+        &self,
+        backend: Arc<dyn crate::project_env::SecretBackend>,
+    ) {
+        let mut inner = self.0.borrow_mut();
+        inner.project_env.set_backend(backend);
+        let state = inner.state.clone();
+        inner.project_env.start_initial_loads(&state);
+        if let Some(id) = state.active_project {
+            inner
+                .project_env
+                .wait_for_project(id, std::time::Duration::from_secs(2));
         }
     }
 
@@ -5138,6 +5310,20 @@ impl Inner {
             .find(|record| record.is(agent))?
             .title
             .as_deref()
+    }
+
+    /// Effective environment variables for terminals in `(id, path)`: the
+    /// project's variables followed by the worktree's, with worktree values
+    /// taking precedence.
+    pub(crate) fn worktree_env_vars(&self, id: u64, path: &Path) -> Vec<(String, String)> {
+        let Some(project) = self.state.project(id) else {
+            return Vec::new();
+        };
+        let project_vars = self.project_env.resolve_project(project);
+        let worktree_vars = project
+            .worktree(path)
+            .map_or(&[][..], |config| &config.env_vars);
+        crate::project_env::merge_env_vars(project_vars, worktree_vars)
     }
 
     pub(crate) fn open_panel(

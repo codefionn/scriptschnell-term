@@ -6214,3 +6214,91 @@ fn a_dragged_split_keeps_its_panes_usable_in_a_small_window() {
     let (first, _) = split_sizes(wide, SplitAxis::SideBySide, (1, 1), 200);
     assert!((first.width - 398.0).abs() < 4.0, "{first:?}");
 }
+
+#[test]
+fn project_environment_variables_reach_terminals_and_survive_reload() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    let backend = crate::project_env::tests::MemoryBackend::available();
+
+    let ws = workspace(dir.path());
+    ws.set_project_env_backend(backend.clone());
+    let id = ws.borrow_mut().state.add_project(
+        "env-proj".into(),
+        cmdterm_env::Environment::Local,
+        repo.clone(),
+        crate::vcs::VcsKind::Git,
+        None,
+    );
+    ws.borrow_mut()
+        .state
+        .project_mut(id)
+        .unwrap()
+        .worktree_mut(&repo)
+        .runtime = crate::state::Runtime::Host;
+    ws.select_project(id);
+
+    ws.set_project_env_var(id, "PROJECT_API_TOKEN", "from-keyring");
+    ws.set_project_env_var(id, "SHARED_VAR", "from-project");
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while ws.borrow().project_env.has_pending() && Instant::now() < deadline {
+        ws.poll();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    ws.poll();
+
+    // Worktree override wins over project variable of the same name.
+    ws.borrow_mut()
+        .state
+        .project_mut(id)
+        .unwrap()
+        .worktree_mut(&repo)
+        .env_vars
+        .push(("SHARED_VAR".into(), "from-worktree".into()));
+    ws.save();
+
+    // Verify state.json never stores the keyring-backed secret value.
+    let raw = std::fs::read_to_string(dir.path().join("cfg/state.json")).unwrap();
+    assert!(raw.contains("PROJECT_API_TOKEN"), "{raw}");
+    assert!(!raw.contains("from-keyring"), "{raw}");
+
+    // Fresh workspace reloads the project's secret from the keyring and passes it to terminals.
+    let reloaded = workspace(dir.path());
+    reloaded.set_project_env_backend(backend.clone());
+    let out = dir.path().join("env-out.txt");
+    let script = format!(
+        "printf '%s|%s' \"$PROJECT_API_TOKEN\" \"$SHARED_VAR\" > {}",
+        out.display()
+    );
+    reloaded.open_terminal(Some(vec!["sh".into(), "-c".into(), script]), None);
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while Instant::now() < deadline {
+        if let Ok(text) = std::fs::read_to_string(&out)
+            && !text.is_empty()
+        {
+            assert_eq!(text, "from-keyring|from-worktree");
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    assert_eq!(
+        std::fs::read_to_string(&out).unwrap_or_default(),
+        "from-keyring|from-worktree"
+    );
+
+    // Removing the project cleans up its keyring entry.
+    let account = crate::project_env::account_key(reloaded.borrow().state.project(id).unwrap());
+    reloaded.remove_project(id);
+    let deadline = Instant::now() + Duration::from_secs(2);
+    while reloaded.borrow().project_env.has_pending() && Instant::now() < deadline {
+        reloaded.poll();
+        std::thread::sleep(Duration::from_millis(5));
+    }
+    assert!(
+        !backend
+            .entries
+            .lock()
+            .unwrap()
+            .contains_key(&(crate::project_env::SERVICE.to_owned(), account))
+    );
+}

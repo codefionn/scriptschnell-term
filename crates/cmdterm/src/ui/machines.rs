@@ -10,8 +10,8 @@ use crate::state::{EngineAccess, HOST_GROUPS, Runtime, SidecarEngine};
 use schnellui::layout::EdgeInsets;
 use schnellui::scene::ComponentRef;
 use schnellui::widgets::{
-    Align, Button, ButtonAppearance, Column, Dropdown, DropdownOption, Justify, Pad, Row, Scroll,
-    Switch, Text, TextInput, ThemeProvider, View, WrapMode,
+    Align, Button, ButtonAppearance, Column, Dropdown, DropdownOption, Justify, Pad, PasswordInput,
+    Row, Scroll, Switch, Text, TextInput, ThemeProvider, View, WrapMode,
 };
 
 use super::settings::{
@@ -1850,6 +1850,16 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .and_then(|(_, path)| project.worktree(&path).map(|w| w.runtime))
         .unwrap_or_default();
     let path = inner.settings_ui.machines.form.project_path.clone();
+    let env_name = inner.settings_ui.machines.form.project_env_name.clone();
+    let env_value = inner.settings_ui.machines.form.project_env_value.clone();
+    let env_error = inner.settings_ui.machines.form.project_env_error.clone();
+    let keyring_available = inner.project_env.available();
+    let has_locked_env = inner.project_env.has_locked_vars(&project);
+    let env_rows: Vec<(String, crate::project_env::VarStorage)> = project
+        .env_vars
+        .iter()
+        .map(|var| (var.name.clone(), inner.project_env.var_storage(&project, var)))
+        .collect();
     let base = match &inner.settings_ui.machines.form.project_base {
         Some((id, typed)) if *id == project.id => typed.clone(),
         _ => project.base.clone().unwrap_or_default(),
@@ -1910,6 +1920,89 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
                     ),
             );
     }
+    let env_note = if project.temporary {
+        tr.project_env_note_temporary
+    } else if keyring_available {
+        tr.project_env_note_keyring
+    } else {
+        tr.project_env_note_plain
+    };
+    column = column
+        .child(section_title(tr.project_env))
+        .child(note(scheme, env_note));
+    if !project.env.is_local() {
+        column = column.child(note(scheme, tr.project_env_remote_note));
+    }
+    if has_locked_env && keyring_available {
+        let reload = ws.clone();
+        column = column.child(
+            button(tr.project_env_reload, tr.project_env_reload)
+                .on_click(move || reload.reload_project_env_vars(id)),
+        );
+    }
+    if env_rows.is_empty() {
+        column = column.child(label(scheme, tr.no_project_folders));
+    } else {
+        for (name, storage) in &env_rows {
+            let subtitle = match storage {
+                crate::project_env::VarStorage::Keyring => tr.project_env_storage_keyring,
+                crate::project_env::VarStorage::Loading => tr.project_env_storage_loading,
+                crate::project_env::VarStorage::Locked => tr.project_env_storage_locked,
+                crate::project_env::VarStorage::Plain if project.temporary => {
+                    tr.project_env_storage_session
+                }
+                crate::project_env::VarStorage::Plain => tr.project_env_storage_plain,
+            };
+            let remove = ws.clone();
+            let target = name.clone();
+            column = column.child(item(
+                name.clone(),
+                subtitle.to_owned(),
+                vec![Box::new(remove_icon((tr.remove_named)(name)).on_click(
+                    move || remove.remove_project_env_var(id, &target),
+                ))],
+                REMOVE_WIDTH,
+            ));
+        }
+    }
+    let name_width = ((page_width() - BUTTON_WIDTH - GAP * 2.0) * 0.42).floor();
+    let value_width = (page_width() - BUTTON_WIDTH - GAP * 2.0 - name_width).max(80.0);
+    let (typed_value, add_env) = (ws.clone(), ws.clone());
+    column = column.child(
+        Row::new()
+            .gap(GAP)
+            .align(Align::Center)
+            .child(hinted(
+                scheme,
+                input(
+                    ws,
+                    MachineText::ProjectEnvName,
+                    tr.project_env_name,
+                    env_name,
+                    name_width,
+                ),
+            ))
+            .child(hinted(
+                scheme,
+                PasswordInput::new(env_value)
+                    .text_size(INPUT_TEXT_SIZE)
+                    .hint(tr.project_env_value)
+                    .height(INPUT_HEIGHT)
+                    .width(value_width)
+                    .on_input(move |value| {
+                        typed_value.set_machine_text(MachineText::ProjectEnvValue, value);
+                    }),
+            ))
+            .child(
+                button(tr.project_env_add, tr.project_env_add)
+                    .width(BUTTON_WIDTH)
+                    .on_click(move || add_env.add_project_env_var()),
+            ),
+    );
+    if let Some(error) = env_error {
+        column = column.child(label(scheme, error));
+    }
+
     column = column
         .child(section_title(tr.project_folders))
         .child(note(scheme, tr.project_folders_note));

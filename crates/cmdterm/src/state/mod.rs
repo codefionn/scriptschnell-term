@@ -105,11 +105,28 @@ pub struct Project {
     /// reach besides the worktree, on top of [`SandboxSettings`].
     #[serde(default, skip_serializing_if = "ProjectSandbox::is_empty")]
     pub sandbox: ProjectSandbox,
+    /// Environment variables for terminals opened in this project's worktrees.
+    /// Values live in the system secret storage when available, and in
+    /// [`ProjectEnvVar::value`] otherwise.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub env_vars: Vec<ProjectEnvVar>,
     /// Shown because its remote machine shares it (`remote.fused` in
     /// [`Settings`]), not because the user added it. It goes away when the
     /// machine stops listing it or the machine is no longer fused.
     #[serde(default, skip_serializing_if = "is_false")]
     pub fused: bool,
+}
+
+/// One environment variable set on a project.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ProjectEnvVar {
+    /// The variable's name, such as `DATABASE_URL` or `API_KEY`.
+    pub name: String,
+    /// The plain value when no operating system secret storage was available
+    /// when the variable was saved. `None` when the value lives in the system
+    /// secret storage (Secret Service or Keychain).
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub value: Option<String>,
 }
 
 /// Folders one project's sandboxes may reach. Paths may start with `~/`,
@@ -560,6 +577,12 @@ impl Project {
             git_dir: self.git_dir.clone()?,
         })
     }
+
+    /// True when any environment variable of this project keeps its value in
+    /// the operating system's secret storage.
+    pub fn has_keyring_env_vars(&self) -> bool {
+        self.env_vars.iter().any(|var| var.value.is_none())
+    }
 }
 
 impl AppState {
@@ -636,6 +659,7 @@ impl AppState {
             jj: None,
             base: None,
             sandbox: ProjectSandbox::default(),
+            env_vars: Vec::new(),
             fused: false,
         });
         id
@@ -2176,5 +2200,38 @@ mod tests {
         state.active_project = Some(a);
         state.remove_project(a);
         assert_eq!(state.active_project, Some(b));
+    }
+
+    #[test]
+    fn project_env_vars_round_trip_with_and_without_plain_values() {
+        let dir = tempfile::tempdir().unwrap();
+        let store = StateStore::new(dir.path().join("state.json"));
+        let mut state = AppState::default();
+        let id = state.add_project(
+            "demo".into(),
+            Environment::Local,
+            "/demo".into(),
+            VcsKind::Git,
+            None,
+        );
+        state.project_mut(id).unwrap().env_vars = vec![
+            ProjectEnvVar {
+                name: "SECRET_TOKEN".into(),
+                value: None,
+            },
+            ProjectEnvVar {
+                name: "FALLBACK_VAR".into(),
+                value: Some("plain-val".into()),
+            },
+        ];
+        store.save(&state).unwrap();
+        let raw = std::fs::read_to_string(store.path()).unwrap();
+        assert!(raw.contains("SECRET_TOKEN"));
+        assert!(!raw.contains("\"value\": null"));
+        assert!(raw.contains("plain-val"));
+        let back = store.load().unwrap();
+        let project = back.project(id).unwrap();
+        assert!(project.has_keyring_env_vars());
+        assert_eq!(project.env_vars, state.project(id).unwrap().env_vars);
     }
 }

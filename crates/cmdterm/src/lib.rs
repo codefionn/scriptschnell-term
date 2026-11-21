@@ -29,6 +29,7 @@ mod machines;
 mod memory;
 mod monitor;
 mod notifications;
+mod project_env;
 mod runtime;
 mod search;
 pub mod state;
@@ -109,7 +110,7 @@ struct Cli {
     /// With --screenshot: open the command palette filtered by this text.
     #[arg(long)]
     palette: Option<String>,
-    /// With --screenshot: open the settings at this section (font,
+    /// With --screenshot: open the settings at this section (project, font,
     /// color-scheme, keyboard, extensions, accounts, registries, agents, remote, vpn, sandboxing,
     /// sandbox-files or sandbox-hosts), or at `extensions/<name>` for one
     /// extension's page.
@@ -260,6 +261,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 None => (section.as_str(), None),
             };
             ws.show_settings_section(match section {
+                "project" => ui::SettingsSection::Project,
                 "color-scheme" => ui::SettingsSection::ColorScheme,
                 "keyboard" => ui::SettingsSection::Keyboard,
                 "extensions" => ui::SettingsSection::Extensions,

@@ -111,9 +111,11 @@ It prints JSON:
   `AWS_SECRET_ACCESS_KEY` or `NPM_TOKEN`. Agents' logins stay (`ANTHROPIC_API_KEY`,
   `CLAUDE_CODE_OAUTH_TOKEN`, `OPENAI_API_KEY`, `GEMINI_API_KEY` and the others listed in
   `CONFIGURATION.md`), and so does every variable the app sets, such as
-  `SCRIPTSCHNELL_TERM_TOKEN`, the worktree's own variables and extensions' fake
+  `SCRIPTSCHNELL_TERM_TOKEN`, the project's and worktree's own variables and extensions' fake
   credentials. When a tool fails because such a variable is empty, an extension that
-  hands out a fake credential for it is the better fix. Otherwise suggest
+  hands out a fake credential for it is the better fix, or the user can set a per-project
+  variable on the Project page of the settings (stored in the system keyring when
+  available). Otherwise suggest
   `{"add": {"sandbox.pass_env": ["HF_TOKEN"]}}` with the variable's name; terminals
   started after the user allows it get the variable.
 - A guarded request (a push, a publish, `gh pr create`, `gh pr merge`) waits until the

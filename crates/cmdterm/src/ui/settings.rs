@@ -725,6 +725,8 @@ impl Workspace {
                 inner.settings_ui.open = false;
                 inner.settings_ui.toast = None;
                 inner.settings_ui.recording = None;
+                inner.settings_ui.machines.form.project_env_value.clear();
+                inner.settings_ui.machines.form.project_env_error = None;
                 inner.dirty.settings = true;
             }
         }
@@ -5117,6 +5119,114 @@ mod tests {
             .unwrap();
         app.dispatch_click(launches);
         assert!(ws.borrow().state.project(id).unwrap().allows_launches);
+    }
+
+    #[test]
+    fn the_project_page_edits_environment_variables_with_keyring_and_fallback() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ws = Workspace::new(
+            StateStore::new(root.join("cfg/state.json")),
+            SettingsStore::new(root.join("cfg/settings.json")),
+            &root.join("cfg/extensions"),
+        );
+        let id = ws.borrow_mut().state.add_project(
+            "demo".into(),
+            cmdterm_env::Environment::Local,
+            root.join("repo"),
+            crate::vcs::VcsKind::Git,
+            None,
+        );
+        ws.borrow_mut().state.active_project = Some(id);
+        ws.open_project_settings();
+
+        // With Secret Service available, values go only to the keyring and never to state.json.
+        let backend = crate::project_env::tests::MemoryBackend::available();
+        ws.set_project_env_backend(backend.clone());
+        let mut app = crate::build_app(&ws, VIEWPORT);
+
+        // Invalid variable names are rejected without saving.
+        let name_input = app
+            .find_widget(Role::TextInput, Some(EN.project_env_name))
+            .unwrap();
+        assert!(app.set_text_value(name_input, "BAD-NAME"));
+        let save_btn = app
+            .find_widget(Role::Button, Some(EN.project_env_add))
+            .unwrap();
+        app.dispatch_click(save_btn);
+        assert!(ws.borrow().state.project(id).unwrap().env_vars.is_empty());
+        assert!(
+            ws.borrow()
+                .settings_ui
+                .machines
+                .form
+                .project_env_error
+                .is_some()
+        );
+
+        // Valid variable saves into keyring; state.json only keeps its name.
+        ws.set_machine_text(crate::machines::MachineText::ProjectEnvName, " API_SECRET ");
+        ws.set_machine_text(
+            crate::machines::MachineText::ProjectEnvValue,
+            "super-secret-value",
+        );
+        app.dispatch_click(save_btn);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while ws.borrow().project_env.has_pending() && std::time::Instant::now() < deadline {
+            ws.poll();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        ws.poll();
+        let raw = std::fs::read_to_string(root.join("cfg/state.json")).unwrap();
+        assert!(raw.contains("API_SECRET"), "{raw}");
+        assert!(
+            !raw.contains("super-secret-value"),
+            "secret must not be written to state.json: {raw}"
+        );
+        let account = crate::project_env::account_key(ws.borrow().state.project(id).unwrap());
+        let stored = backend
+            .entries
+            .lock()
+            .unwrap()
+            .get(&(crate::project_env::SERVICE.to_owned(), account.clone()))
+            .cloned()
+            .expect("value stored in keyring");
+        assert!(stored.contains("super-secret-value"), "{stored}");
+
+        // Removing via UI deletes it from state.json and the keyring.
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        let remove = app
+            .find_widget(Role::Button, Some("Remove API_SECRET"))
+            .unwrap();
+        app.dispatch_click(remove);
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(2);
+        while ws.borrow().project_env.has_pending() && std::time::Instant::now() < deadline {
+            ws.poll();
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        ws.poll();
+        assert!(ws.borrow().state.project(id).unwrap().env_vars.is_empty());
+        assert!(
+            !backend
+                .entries
+                .lock()
+                .unwrap()
+                .contains_key(&(crate::project_env::SERVICE.to_owned(), account))
+        );
+
+        // When no keyring is available, values fall back to state.json.
+        ws.set_project_env_backend(crate::project_env::tests::MemoryBackend::unavailable());
+        ws.set_machine_text(crate::machines::MachineText::ProjectEnvName, "PLAIN_KEY");
+        ws.set_machine_text(crate::machines::MachineText::ProjectEnvValue, "plain-val");
+        ws.add_project_env_var();
+        let saved = StateStore::new(root.join("cfg/state.json")).load().unwrap();
+        assert_eq!(
+            saved.project(id).unwrap().env_vars,
+            vec![crate::state::ProjectEnvVar {
+                name: "PLAIN_KEY".into(),
+                value: Some("plain-val".into()),
+            }]
+        );
     }
 
     #[test]
