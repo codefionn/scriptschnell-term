@@ -1372,19 +1372,18 @@ mod tests {
 
     #[test]
     fn hidden_paths_are_sorted_and_missing_ones_dropped() {
-        let dir = tempfile::tempdir().unwrap();
-        let file = dir.path().join("token");
+        let temp = tempfile::tempdir().unwrap();
+        // Hidden paths are canonical, and the temporary directory is a
+        // symlink on macOS (/var is /private/var).
+        let dir = crate::canonicalize(temp.path()).unwrap();
+        let file = dir.join("token");
         std::fs::write(&file, "secret").unwrap();
         let policy = SandboxPolicy::local(
             vec![],
-            &[
-                dir.path().to_path_buf(),
-                file.clone(),
-                dir.path().join("nope"),
-            ],
+            &[dir.clone(), file.clone(), dir.join("nope")],
             false,
         );
-        assert_eq!(policy.hidden_dirs, [dir.path()]);
+        assert_eq!(policy.hidden_dirs, [dir]);
         assert_eq!(policy.hidden_files, [file]);
         let args: Vec<String> = policy
             .args(true)
@@ -1397,15 +1396,16 @@ mod tests {
 
     #[test]
     fn readable_paths_show_through_a_hidden_directory() {
-        let dir = tempfile::tempdir().unwrap();
-        let docs = dir.path().join("extensions");
-        let mut policy = SandboxPolicy::local(vec![], &[dir.path().to_path_buf()], true);
+        let temp = tempfile::tempdir().unwrap();
+        let dir = crate::canonicalize(temp.path()).unwrap();
+        let docs = dir.join("extensions");
+        let mut policy = SandboxPolicy::local(vec![], std::slice::from_ref(&dir), true);
         policy.kind = SandboxKind::Bwrap;
         policy.readable.push(docs.clone());
         let args = strings(&policy.args(true));
         let hide = args
             .iter()
-            .position(|a| *a == dir.path().to_string_lossy())
+            .position(|a| *a == dir.to_string_lossy())
             .unwrap();
         let show = args
             .iter()

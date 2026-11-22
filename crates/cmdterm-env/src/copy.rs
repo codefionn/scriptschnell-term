@@ -180,7 +180,9 @@ mod tests {
     }
 
     /// A tar that warns about every one of thousands of files it cannot
-    /// read writes more than a pipe holds to stderr.
+    /// read writes more than a pipe holds to stderr. The files are not
+    /// empty: bsdtar, the tar of macOS, never opens an empty file, so it
+    /// would not notice that it cannot read one.
     #[cfg(unix)]
     #[test]
     fn noisy_tars_do_not_hang() {
@@ -195,7 +197,7 @@ mod tests {
         std::fs::create_dir(&tree).unwrap();
         for n in 0..2500 {
             let file = tree.join(format!("unreadable-file-number-{n:05}"));
-            std::fs::write(&file, "").unwrap();
+            std::fs::write(&file, "x").unwrap();
             std::fs::set_permissions(&file, std::fs::Permissions::from_mode(0o000)).unwrap();
         }
         let error = Environment::Local

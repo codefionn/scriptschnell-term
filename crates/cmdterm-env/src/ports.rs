@@ -1548,6 +1548,8 @@ mod tests {
         assert!(hub.ports().iter().all(|p| p.port != free));
     }
 
+    /// The bridge finds listeners in `/proc/net/tcp`, which only Linux has.
+    #[cfg(target_os = "linux")]
     #[test]
     fn a_real_bridge_mirrors_and_reports() {
         // The bridge side against a hub, both in this process: a listener

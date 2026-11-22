@@ -465,7 +465,10 @@ mod tests {
 
     #[test]
     fn powershell_in_sandboxes_keeps_history_in_temp() {
-        let shell = sandbox_history(vec!["C:\\pf\\pwsh.exe".into(), "-NoLogo".into()]);
+        let shell = sandbox_history(vec![
+            path(&["C:", "pf", "pwsh.exe"]).into(),
+            "-NoLogo".into(),
+        ]);
         assert_eq!(shell[2..4], ["-NoExit", "-Command"]);
         assert!(shell[4].to_string_lossy().contains("$env:TEMP"));
         let script = vec!["PowerShell.EXE".into(), "-File".into(), "x.ps1".into()];
