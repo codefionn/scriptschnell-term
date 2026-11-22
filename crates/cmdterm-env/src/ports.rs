@@ -1294,6 +1294,24 @@ mod tests {
         }
     }
 
+    /// A free port below the ephemeral ranges (Linux from 32768, macOS from
+    /// 49152), for a test that binds it again after letting it go. A port
+    /// from `bind(0)` can meanwhile become the source port of another test's
+    /// connection: macOS hands out the same range for both, so a rebind
+    /// there fails until that connection ends.
+    fn unshared_port() -> u16 {
+        static NEXT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(0);
+        // Apart per process, so test binaries running side by side differ.
+        let base = 20_000 + (std::process::id() % 1_000) * 10;
+        loop {
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let port = u16::try_from(base + n % 12_000).unwrap();
+            if TcpListener::bind(("127.0.0.1", port)).is_ok() {
+                return port;
+            }
+        }
+    }
+
     fn until(mut done: impl FnMut() -> bool) {
         for _ in 0..200 {
             if done() {
@@ -1532,10 +1550,7 @@ mod tests {
         let dir = tempfile::tempdir().unwrap();
         let socket = dir.path().join("hub.sock");
         let hub = PortHub::start(&socket).unwrap();
-        let free = {
-            let probe = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-            probe.local_addr().unwrap().port()
-        };
+        let free = unshared_port();
         let owner = FakeBridge::join(&socket);
         run_bridge(&socket, vec![]).unwrap();
         owner.say(&format!("LISTEN {free}"));
@@ -1646,11 +1661,7 @@ mod tests {
             mirror: true,
             stop: AtomicBool::new(false),
         });
-        let port = TcpListener::bind(("127.0.0.1", 0))
-            .unwrap()
-            .local_addr()
-            .unwrap()
-            .port();
+        let port = unshared_port();
         let mirrored = || {
             let mirrors = bridge.mirrors.lock().unwrap();
             mirrors
@@ -1707,10 +1718,7 @@ mod tests {
         until(|| hub.ports().is_empty());
 
         // A port another sandbox owns is not mirrored on this loopback.
-        let free = {
-            let probe = TcpListener::bind(("127.0.0.1", 0)).unwrap();
-            probe.local_addr().unwrap().port()
-        };
+        let free = unshared_port();
         let owner = FakeBridge::join(&dir.path().join("hub.sock"));
         owner.say(&format!("LISTEN {free}"));
         until(|| !hub.ports().is_empty());
