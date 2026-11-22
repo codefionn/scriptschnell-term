@@ -1112,7 +1112,11 @@ impl Bridge {
     }
 }
 
-#[cfg(all(test, unix))]
+/// The app runs a hub for bubblewrap sandboxes on Linux and for the
+/// Windows launcher, whose tests drive it over TCP. macOS has no use for
+/// one, and its sockets behave differently enough that these tests hang
+/// there.
+#[cfg(all(test, target_os = "linux"))]
 mod tests {
     use super::*;
 

@@ -282,13 +282,7 @@ impl Runtimes {
             return None;
         }
         let proxy = self.proxy.get_or_init(|| {
-            std::fs::create_dir_all(&self.sandbox_dir).ok()?;
-            let mut socket = self.sandbox_dir.join("proxy.sock");
-            // Unix socket paths are limited to about 100 bytes.
-            if socket.as_os_str().len() > 100 {
-                let name = format!("cmdterm-proxy-{}.sock", std::process::id());
-                socket = std::env::temp_dir().join(name);
-            }
+            let socket = self.socket_path("proxy.sock")?;
             let proxy = cmdterm_env::NetworkProxy::start(&socket, Vec::new()).ok()?;
             proxy.set_approvals(Some(Arc::clone(&self.approvals)));
             Some(proxy)
@@ -311,16 +305,31 @@ impl Runtimes {
         Some(endpoint)
     }
 
-    /// Where the `kind` socket of project `id` goes: the sandbox directory,
-    /// or the temporary directory when that path would be too long for a
-    /// Unix socket (about 100 bytes).
+    /// Where the `kind` socket of project `id` goes, see
+    /// [`Self::socket_path`].
     fn scoped_socket(&self, kind: &str, id: u64) -> Option<PathBuf> {
+        self.socket_path(&format!("{kind}-{id}.sock"))
+    }
+
+    /// Where the socket `name` goes: the sandbox directory, or the
+    /// temporary directory when that path would be too long for a Unix
+    /// socket (about 100 bytes). There the name also carries a hash of the
+    /// sandbox directory: runtimes of one process, such as tests side by
+    /// side, would otherwise replace each other's sockets.
+    fn socket_path(&self, name: &str) -> Option<PathBuf> {
+        use std::hash::{Hash, Hasher};
         std::fs::create_dir_all(&self.sandbox_dir).ok()?;
-        let socket = self.sandbox_dir.join(format!("{kind}-{id}.sock"));
+        let socket = self.sandbox_dir.join(name);
         if socket.as_os_str().len() <= 100 {
             return Some(socket);
         }
-        let name = format!("cmdterm-{kind}-{}-{id}.sock", std::process::id());
+        let mut hasher = std::collections::hash_map::DefaultHasher::new();
+        self.sandbox_dir.hash(&mut hasher);
+        let name = format!(
+            "cmdterm-{}-{:016x}-{name}",
+            std::process::id(),
+            hasher.finish()
+        );
         Some(std::env::temp_dir().join(name))
     }
 
@@ -368,13 +377,7 @@ impl Runtimes {
     fn keyring(&self, settings: &SandboxSettings, scope: Option<u64>) -> Option<PathBuf> {
         let keyring = self.keyring.get_or_init(|| {
             let address = std::env::var("DBUS_SESSION_BUS_ADDRESS").ok()?;
-            std::fs::create_dir_all(&self.sandbox_dir).ok()?;
-            let mut socket = self.sandbox_dir.join("keyring.sock");
-            // Unix socket paths are limited to about 100 bytes.
-            if socket.as_os_str().len() > 100 {
-                let name = format!("cmdterm-keyring-{}.sock", std::process::id());
-                socket = std::env::temp_dir().join(name);
-            }
+            let socket = self.socket_path("keyring.sock")?;
             let keyring = cmdterm_env::KeyringBus::start(&socket, &address).ok()?;
             keyring.set_approvals(Some(Arc::clone(&self.approvals)));
             Some(keyring)
