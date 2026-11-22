@@ -6,6 +6,13 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Fixed
+
+- Agents that were in the middle of a turn when the app closed now resume at start in
+  every worktree, not only the one that shows. Before, an agent in another worktree
+  waited until you opened that worktree. Idle agents still start once their worktree
+  shows.
+
 ## [0.1.1] - 2026-11-22
 
 ### Added

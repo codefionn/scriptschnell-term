@@ -1217,7 +1217,47 @@ impl Workspace {
         if let Some(id) = active {
             workspace.select_project(id);
         }
+        workspace.resume_working_agents();
         workspace
+    }
+
+    /// Starts the saved panels of every worktree but the shown one whose
+    /// agents were in the middle of a turn when the app closed, so they go
+    /// on in the background instead of waiting until their worktree shows.
+    fn resume_working_agents(&self) {
+        {
+            let mut inner = self.0.borrow_mut();
+            let inner = &mut *inner;
+            let shown = inner.active_key();
+            let working = |config: &crate::state::WorktreeConfig| {
+                config.panels.iter().any(|spec| {
+                    matches!(spec, PanelSpec::Terminal { agent: Some(agent), .. }
+                        if agent.working && agent.session.is_some())
+                })
+            };
+            let due: Vec<(u64, crate::state::WorktreeConfig)> = (inner.state.projects.iter())
+                .flat_map(|project| {
+                    (project.worktrees.iter())
+                        .filter(|config| working(config))
+                        .map(|config| (project.id, config.clone()))
+                })
+                .filter(|(id, config)| {
+                    shown.as_ref() != Some(&(*id, config.path.clone()))
+                })
+                .collect();
+            if due.is_empty() {
+                return;
+            }
+            // Their terminals get the project's variables from the keyring
+            // too, as the shown project's do.
+            for (id, _) in &due {
+                (inner.project_env).wait_for_project(*id, crate::project_env::STARTUP_WAIT);
+            }
+            for (id, config) in &due {
+                inner.start_live(*id, &config.path, config);
+            }
+        }
+        self.batch_hidden_sessions();
     }
 
     /// Wakes the UI thread from a worker thread.
@@ -1496,38 +1536,7 @@ impl Workspace {
             }
             let config = config.clone();
             inner.state.active_project = Some(id);
-            if inner.live_get(id, path).is_none() {
-                let term_env = inner.terminal_env(id, path);
-                let vars = inner.worktree_env_vars(id, path);
-                let mut live = LiveWorktree::default();
-                // Panel id per saved index; a panel that fails to open has none.
-                let mut ids = Vec::with_capacity(config.panels.len());
-                for spec in &config.panels {
-                    let panel = inner.open_panel(&term_env, path, spec, &vars);
-                    ids.push(panel.as_ref().map(|(id, _)| *id));
-                    live.panels.extend(panel);
-                }
-                let (tabs, active) = config.tabs();
-                live.tabs = tabs
-                    .iter()
-                    .filter_map(|tab| {
-                        let layout = tab
-                            .layout
-                            .filter_map(&mut |index| ids.get(index).copied().flatten())?;
-                        Some(LiveTab {
-                            layout,
-                            focused: tab.focused,
-                        })
-                    })
-                    .collect();
-                live.active = active;
-                live.normalize();
-                inner
-                    .live
-                    .entry(id)
-                    .or_default()
-                    .insert(path.to_path_buf(), live);
-            }
+            inner.start_live(id, path, &config);
             inner.dirty.sidebar = true;
             inner.dirty.main = true;
             let branch = inner.snapshots.get(&id).and_then(|snapshot| {
@@ -5406,6 +5415,43 @@ impl Inner {
             .worktree(path)
             .map_or(&[][..], |config| &config.env_vars);
         crate::project_env::merge_env_vars(project_vars, worktree_vars)
+    }
+
+    /// Starts the saved panels of `path` of project `id` from `config`,
+    /// unless they already run.
+    fn start_live(&mut self, id: u64, path: &Path, config: &crate::state::WorktreeConfig) {
+        if self.live_get(id, path).is_some() {
+            return;
+        }
+        let term_env = self.terminal_env(id, path);
+        let vars = self.worktree_env_vars(id, path);
+        let mut live = LiveWorktree::default();
+        // Panel id per saved index; a panel that fails to open has none.
+        let mut ids = Vec::with_capacity(config.panels.len());
+        for spec in &config.panels {
+            let panel = self.open_panel(&term_env, path, spec, &vars);
+            ids.push(panel.as_ref().map(|(id, _)| *id));
+            live.panels.extend(panel);
+        }
+        let (tabs, active) = config.tabs();
+        live.tabs = tabs
+            .iter()
+            .filter_map(|tab| {
+                let layout = tab
+                    .layout
+                    .filter_map(&mut |index| ids.get(index).copied().flatten())?;
+                Some(LiveTab {
+                    layout,
+                    focused: tab.focused,
+                })
+            })
+            .collect();
+        live.active = active;
+        live.normalize();
+        self.live
+            .entry(id)
+            .or_default()
+            .insert(path.to_path_buf(), live);
     }
 
     pub(crate) fn open_panel(

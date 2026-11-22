@@ -3061,6 +3061,46 @@ fn a_waiting_agent_marks_its_worktree_until_the_user_answers() {
     });
 }
 
+/// After a restart, the agents that were in the middle of a turn go on in
+/// worktrees that do not show, while idle agents wait until theirs shows.
+#[test]
+fn agents_that_were_working_resume_in_hidden_worktrees_at_start() {
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    let (working, idle) = (dir.path().join("working"), dir.path().join("idle"));
+    let id = {
+        let ws = workspace(dir.path());
+        add_project_and_wait(&ws, &repo);
+        let id = ws.borrow().state.projects[0].id;
+        for (path, busy) in [(&working, true), (&idle, false)] {
+            std::fs::create_dir_all(path).unwrap();
+            let mut inner = ws.borrow_mut();
+            let config = inner.state.project_mut(id).unwrap().worktree_mut(path);
+            config.runtime = crate::state::Runtime::Host;
+            config.panels = vec![crate::state::PanelSpec::Terminal {
+                title: None,
+                command: None,
+                cwd: None,
+                session: None,
+                control: None,
+                agent: Some(crate::state::AgentSession {
+                    agent: "test-agent".into(),
+                    session: Some("s-1".into()),
+                    working: busy,
+                }),
+                once: Vec::new(),
+            }];
+        }
+        ws.save();
+        id
+    };
+    let ws = workspace(dir.path());
+    let inner = ws.borrow();
+    assert_eq!(inner.active_key(), Some((id, repo.clone())));
+    assert!(inner.live_get(id, &working).is_some(), "the working agent waits");
+    assert!(inner.live_get(id, &idle).is_none(), "the idle agent started");
+}
+
 #[test]
 fn the_rail_search_finds_older_agent_sessions_by_their_titles() {
     let dir = tempfile::tempdir().unwrap();
