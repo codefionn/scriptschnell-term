@@ -202,8 +202,9 @@ jobs:
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
 
+      # Every failing test at once: a tag is the only run that gets here.
       - name: Test
-        run: cargo test --workspace --locked
+        run: cargo test --workspace --locked --no-fail-fast
 
       - name: Build
         run: cargo build --release --locked --bin scriptschnell-term --bin cmdterm-sandbox

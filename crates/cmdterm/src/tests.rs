@@ -3971,7 +3971,7 @@ fn the_tasks_panel_lists_panels_of_every_worktree_and_the_threads() {
         let threads = if cfg!(target_os = "linux") {
             "idle threads"
         } else {
-            "no /proc/self/task"
+            "requires /proc/self/task"
         };
         wait_for_mounted_text(&ws, &mut app, threads);
         let text = tasks.text();
@@ -6301,9 +6301,10 @@ fn project_environment_variables_reach_terminals_and_survive_reload() {
     let reloaded = workspace(dir.path());
     reloaded.set_project_env_backend(backend.clone());
     let out = dir.path().join("env-out.txt");
+    // Forward slashes and quotes, so sh keeps a Windows path as it is.
     let script = format!(
-        "printf '%s|%s' \"$PROJECT_API_TOKEN\" \"$SHARED_VAR\" > {}",
-        out.display()
+        "printf '%s|%s' \"$PROJECT_API_TOKEN\" \"$SHARED_VAR\" > '{}'",
+        out.display().to_string().replace('\\', "/")
     );
     reloaded.open_terminal(Some(vec!["sh".into(), "-c".into(), script]), None);
     let deadline = Instant::now() + Duration::from_secs(5);

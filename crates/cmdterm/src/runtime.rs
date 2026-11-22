@@ -2504,7 +2504,10 @@ mod tests {
     #[test]
     fn extensions_add_paths_but_cannot_open_the_users_hidden_ones() {
         let dir = tempfile::tempdir().unwrap();
-        let path = |name: &str| dir.path().join(name);
+        // Hidden paths are canonical, and the temporary directory has a
+        // short name on Windows runners (RUNNER~1).
+        let base = cmdterm_env::canonicalize(dir.path()).unwrap();
+        let path = |name: &str| base.join(name);
         for name in ["secret", "target", "repo"] {
             std::fs::create_dir_all(path(name)).unwrap();
         }
@@ -3489,7 +3492,10 @@ mod tests {
     #[test]
     fn the_app_dirs_are_hidden_but_the_references_show_through() {
         let dir = tempfile::tempdir().unwrap();
-        let path = |name: &str| dir.path().join(name);
+        // Hidden paths are canonical, and the temporary directory has a
+        // short name on Windows runners (RUNNER~1).
+        let base = cmdterm_env::canonicalize(dir.path()).unwrap();
+        let path = |name: &str| base.join(name);
         let app = cmdterm_env::AppDirs {
             config: path("config"),
             data: path("data"),
