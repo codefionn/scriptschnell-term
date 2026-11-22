@@ -10,6 +10,8 @@ latest CI status next to their branches. The rail lists the requests (click one 
 open it in a browser panel) when a token is set in `GITLAB_TOKEN`,
 `AZURE_DEVOPS_EXT_PAT` or `FORGEJO_TOKEN`. Extensions are written in Lua.
 
+![scriptschnell-term with a project of three worktrees in the rail, a terminal after a test run and the file panel showing a Rust source file](docs/screenshot.png)
+
 Every worktree gets a lane color from a fixed palette, by its position in the
 project's worktree list. The color marks the worktree's row in the rail, the active
 tab's underline and the focused pane's border. The status bar under the panel shows
