@@ -187,6 +187,8 @@ pub struct TerminalPanel {
     /// The process group in the foreground when the agent named its
     /// session: the agent's own.
     agent_group: Cell<Option<i32>>,
+    /// The agent's process group while [`Self::freeze`] has it stopped.
+    stopped_group: Cell<Option<i32>>,
     /// Whether the app may stop the agent here and resume it: a shell on
     /// this machine, also in a sandbox, where the agent's process group is
     /// in reach.
@@ -252,6 +254,7 @@ impl TerminalPanel {
             agent_session_seen: Cell::new(0),
             resumed_title: None,
             agent_group: Cell::new(None),
+            stopped_group: Cell::new(None),
             freezable: false,
             freeze: Cell::new(Freeze::Live),
             idle_since: Cell::new(None),
@@ -548,6 +551,7 @@ impl TerminalPanel {
             return;
         };
         self.sync.borrow_mut().freeze(&self.session.lock());
+        self.stopped_group.set(Some(group));
         self.freeze.set(Freeze::Stopped);
         self.idle_since.set(None);
         crate::agents::stop_group(group);
@@ -569,9 +573,11 @@ impl TerminalPanel {
             ),
             None => (String::new(), None),
         };
-        // Only an agent in the foreground froze, so a terminal without a
-        // foreground group now has its shell there again.
-        let shell_back = self.session.foreground_group().is_none();
+        // Once another group than the stopped agent's has the foreground,
+        // the shell is back there: on this machine it reports none, in a
+        // sandbox its own.
+        let stopped = self.stopped_group.take();
+        let shell_back = stopped.is_some() && self.session.foreground_group() != stopped;
         let signal = self.thaw_signal.clone();
         let wake = self.wake.clone();
         let ready = self.thaw_ready.clone();
