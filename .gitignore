@@ -3,3 +3,5 @@
 /.zvec-grep
 /security-audit
 /.claude/scheduled_tasks.lock
+/release.key
+/release.key.pub
