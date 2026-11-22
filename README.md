@@ -20,7 +20,8 @@ the newest notice for eight seconds.
 
 It is built on [SchnellUI](https://github.com/codefionn/schnellui) (GPU UI), cmdterm-vt (its terminal emulator), Servo
 (optional browser panels) and [Oximond](https://github.com/codefionn/oximond) (Lua). `SOUL.md` explains the
-design rules; `AGENTS.md` has the commands and conventions.
+design rules; `AGENTS.md` has the commands and conventions. What changed in each release is in
+[CHANGELOG.md](CHANGELOG.md).
 
 ## Run it
 

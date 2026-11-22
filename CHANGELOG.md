@@ -1,0 +1,51 @@
+# Changelog
+
+All notable changes to scriptschnell-term are in this file. The format is
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and the project follows
+[Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+
+## [Unreleased]
+
+## [0.1.1] - 2026-11-22
+
+### Fixed
+
+- Terminals in bubblewrap sandboxes, coding agents included, no longer exit at once
+  when the app runs from an AppImage. A sandbox gets a fresh /tmp, which hid the
+  proxy bridge every sandboxed command starts through; sandboxes now bind the bridge
+  at its own path.
+
+### Changed
+
+- On every start from an AppImage the app copies `cmdterm-remote` and
+  `cmdterm-proxy-bridge` into `bin/` of its data directory and runs those copies, so
+  helpers that outlive the app keep their file after the AppImage mount goes away. A
+  copy is replaced by a rename only when its size or modification time changed.
+- Commands the app starts no longer inherit the AppImage runtime's `APPIMAGE`,
+  `APPDIR`, `ARGV0` and `OWD` variables.
+
+## [0.1.0] - 2026-11-22
+
+Initial release.
+
+### Added
+
+- GPU-rendered workspace of terminal and browser panels, organized by version-control
+  project and worktree. The rail lists Git, Mercurial and Jujutsu projects, local or
+  over SSH, and their worktrees; switching worktrees brings back that worktree's
+  panels, which keep running in the background.
+- Terminal emulator core (`cmdterm-vt`) with PTYs and sandboxes through `cmdterm-env`:
+  bubblewrap on Linux, Seatbelt on macOS, the `cmdterm-sandbox` launcher on Windows,
+  with an allowlist proxy for sandboxes with a restricted network.
+- Remote machines (`cmdterm-remote serve` or `cmdterm --serve`), Firecracker VMs on
+  this machine and on remote machines, devcontainers, and the `cmdterm-web` server
+  for browsers and phones.
+- Lua extensions on Oximond with a `manifest.toml` permission model, plus shipped
+  example extensions.
+- Change requests and CI status for GitLab, Azure DevOps and Forgejo remotes.
+- Self-updates from GitHub releases and the codefionn.eu mirror, with signed release
+  manifests.
+
+[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.1
+[0.1.0]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.0

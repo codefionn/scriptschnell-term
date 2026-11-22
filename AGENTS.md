@@ -124,5 +124,8 @@ minutes, so leave it off unless you work on browser panels.
   and `extensions/<name>/README.md`. A change to a setting, the Lua API or a shipped
   extension updates the matching file in the same change. A new shipped extension needs
   `init.lua`, `manifest.toml` and `README.md`, and an entry in `bundle::EXTENSIONS`.
+- **Changelog.** After an implementation or bugfix, run the `update-changelog` skill
+  (`.agents/skills/update-changelog/SKILL.md`): it adds the change under
+  `[Unreleased]` in `CHANGELOG.md`.
 - **Writing.** Comments, docs, and commit messages use plain, specific language: no
   em dashes, no filler, sentence-case headings.
