@@ -21,12 +21,12 @@ cmdterm-remote = { path = "crates/cmdterm-remote" }
 cmdterm-update = { path = "crates/cmdterm-update" }
 cmdterm-vt = { path = "crates/cmdterm-vt" }
 
-# Sibling checkouts. cmdterm changes them when it needs to (see AGENTS.md).
-schnellui = { path = "../schnellui/crates/schnellui" }
-schnellui-widgets = { path = "../schnellui/crates/schnellui-widgets" }
-schnellui-icons-md = { path = "../schnellui/crates/schnellui-icons-md" }
-schnellui-servo = { path = "../schnellui/crates/schnellui-servo" }
-oximond = { path = "../oximond/crates/oximond" }
+# GitHub dependencies (override locally with Cargo [patch] when hacking on schnellui).
+schnellui = { git = "https://github.com/codefionn/schnellui" }
+schnellui-widgets = { git = "https://github.com/codefionn/schnellui" }
+schnellui-icons-md = { git = "https://github.com/codefionn/schnellui" }
+schnellui-servo = { git = "https://github.com/codefionn/schnellui" }
+oximond = { git = "https://github.com/codefionn/oximond" }
 
 rustix = { version = "1.1.5", features = ["fs", "process", "pty", "stdio", "termios"] }
 shell-words = "1.1.1"

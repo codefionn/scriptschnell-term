@@ -5801,6 +5801,7 @@ dependencies = [
 [[package]]
 name = "oximond"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/oximond#634f5973ef82d467d3898586626327e80bed28fe"
 dependencies = [
  "bincode",
  "cc",
@@ -5819,6 +5820,7 @@ dependencies = [
 [[package]]
 name = "oximond-mir"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/oximond#634f5973ef82d467d3898586626327e80bed28fe"
 
 [[package]]
 name = "parking"
@@ -7159,6 +7161,7 @@ dependencies = [
 [[package]]
 name = "schnellui"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/schnellui#faa764e1ea0253691d7c1420a9b4ee3c677d2984"
 dependencies = [
  "accesskit 0.25.1",
  "accesskit_winit",
@@ -7197,6 +7200,7 @@ dependencies = [
 [[package]]
 name = "schnellui-icons-md"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/schnellui#faa764e1ea0253691d7c1420a9b4ee3c677d2984"
 dependencies = [
  "md-icons",
  "schnellui",
@@ -7205,6 +7209,7 @@ dependencies = [
 [[package]]
 name = "schnellui-macro"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/schnellui#faa764e1ea0253691d7c1420a9b4ee3c677d2984"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7215,6 +7220,7 @@ dependencies = [
 [[package]]
 name = "schnellui-servo"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/schnellui#faa764e1ea0253691d7c1420a9b4ee3c677d2984"
 dependencies = [
  "cookie 0.18.2",
  "dpi",
@@ -7222,13 +7228,14 @@ dependencies = [
  "serde",
  "serde_json",
  "servo",
- "thiserror 2.0.21",
+ "thiserror 1.0.69",
  "url",
 ]
 
 [[package]]
 name = "schnellui-view-parser"
 version = "0.1.0"
+source = "git+https://github.com/codefionn/schnellui#faa764e1ea0253691d7c1420a9b4ee3c677d2984"
 dependencies = [
  "proc-macro2",
  "quote",

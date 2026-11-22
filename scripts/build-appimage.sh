@@ -41,8 +41,7 @@ export APPIMAGETOOL
 # appimagetool is itself an AppImage; extracting it avoids needing FUSE.
 export APPIMAGE_EXTRACT_AND_RUN=1
 
-# No --locked: the sibling checkouts often move ahead of Cargo.lock locally.
-cargo build --release \
+cargo build --release --locked \
   --bin scriptschnell-term --bin cmdterm-remote --bin cmdterm-proxy-bridge
 
 mkdir -p "$(dirname "$out")"

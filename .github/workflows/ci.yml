@@ -2,13 +2,6 @@
 # an AppImage for Linux and a per-user Windows installer, signs the update
 # manifests and publishes everything as a GitHub release.
 #
-# The workspace depends on the sibling checkouts ../schnellui and ../oximond,
-# so every job checks out all three side by side:
-#
-#     $GITHUB_WORKSPACE/scriptschnell-term
-#     $GITHUB_WORKSPACE/schnellui
-#     $GITHUB_WORKSPACE/oximond
-#
 # --- Releases ---------------------------------------------------------------
 # https://github.com/<repo>/releases/latest/download/manifest-<platform>.json
 #     and .json.sig: the newest release, signed
@@ -24,8 +17,6 @@
 #
 # --- Secrets ----------------------------------------------------------------
 #   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file)
-#   SIBLING_TOKEN       optional: read access to codefionn/schnellui and
-#                       codefionn/oximond when they are private
 
 name: ci
 
@@ -51,17 +42,10 @@ env:
 jobs:
   check:
     runs-on: ubuntu-24.04
-    defaults:
-      run:
-        working-directory: scriptschnell-term
     steps:
       - uses: actions/checkout@v4
         with:
-          path: scriptschnell-term
           persist-credentials: false
-      - uses: ./scriptschnell-term/.github/actions/checkout-siblings
-        with:
-          token: ${{ secrets.SIBLING_TOKEN }}
 
       - name: Install system packages
         run: |
@@ -73,15 +57,9 @@ jobs:
         run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: scriptschnell-term
 
-      # Only this workspace's crates: `--all` would also check the siblings
       - name: Format
-        run: |
-          packages=()
-          for crate in crates/*/; do packages+=(-p "$(basename "$crate")"); done
-          cargo fmt --check "${packages[@]}"
+        run: cargo fmt --all --check
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings
@@ -93,24 +71,15 @@ jobs:
   # layer, sandboxes), so they build and test on macOS too.
   macos:
     runs-on: macos-latest
-    defaults:
-      run:
-        working-directory: scriptschnell-term
     steps:
       - uses: actions/checkout@v4
         with:
-          path: scriptschnell-term
           persist-credentials: false
-      - uses: ./scriptschnell-term/.github/actions/checkout-siblings
-        with:
-          token: ${{ secrets.SIBLING_TOKEN }}
 
       - name: Install toolchain from rust-toolchain.toml
         run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
-        with:
-          workspaces: scriptschnell-term
 
       - name: Clippy
         run: cargo clippy -p cmdterm-vt -p cmdterm-env --all-targets --locked -- -D warnings
@@ -149,9 +118,6 @@ jobs:
     needs: [check, version]
     # The oldest supported runner, so the AppImage runs on older glibc.
     runs-on: ubuntu-22.04
-    defaults:
-      run:
-        working-directory: scriptschnell-term
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SCRIPTSCHNELL_RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
@@ -159,11 +125,7 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: scriptschnell-term
           persist-credentials: false
-      - uses: ./scriptschnell-term/.github/actions/checkout-siblings
-        with:
-          token: ${{ secrets.SIBLING_TOKEN }}
 
       - name: Install system packages
         run: |
@@ -176,7 +138,6 @@ jobs:
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: scriptschnell-term
           key: release
 
       - name: Build
@@ -214,7 +175,6 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: scriptschnell-term
     env:
       VERSION: ${{ needs.version.outputs.version }}
       SCRIPTSCHNELL_RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
@@ -222,18 +182,13 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          path: scriptschnell-term
           persist-credentials: false
-      - uses: ./scriptschnell-term/.github/actions/checkout-siblings
-        with:
-          token: ${{ secrets.SIBLING_TOKEN }}
 
       - name: Install toolchain from rust-toolchain.toml
         run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: scriptschnell-term
           key: release
 
       # Paths, quoting, ConPTY and the sandbox differ on Windows, so the
@@ -289,26 +244,18 @@ jobs:
     environment: release
     permissions:
       contents: write
-    defaults:
-      run:
-        working-directory: scriptschnell-term
     env:
       VERSION: ${{ needs.version.outputs.version }}
     steps:
       - uses: actions/checkout@v4
         with:
-          path: scriptschnell-term
           persist-credentials: false
-      - uses: ./scriptschnell-term/.github/actions/checkout-siblings
-        with:
-          token: ${{ secrets.SIBLING_TOKEN }}
 
       - name: Install toolchain from rust-toolchain.toml
         run: rustup toolchain install
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: scriptschnell-term
           key: publish
 
       - name: Build cmdterm-release

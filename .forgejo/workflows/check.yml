@@ -1,22 +1,9 @@
 # Checks formatting, lints and runs the workspace tests on every push and pull
 # request.
 #
-# The workspace depends on the sibling checkouts ../schnellui and ../oximond,
-# so this job checks out all three side by side, the siblings at their default
-# branches:
-#
-#     $GITHUB_WORKSPACE/scriptschnell-term
-#     $GITHUB_WORKSPACE/schnellui
-#     $GITHUB_WORKSPACE/oximond
-#
 # --- Runner requirements -----------------------------------------------------
 # Jobs run on a forgejo-runner label `docker`. Tests that need bubblewrap
 # namespaces or podman skip themselves when the container cannot provide them.
-#
-# --- Optional secrets (repo/org Settings > Actions > Secrets) -----------------
-#   SIBLING_TOKEN   token with read access to codefionn/schnellui and
-#                   codefionn/oximond. The job token only reads this
-#                   repository, so set it when the siblings are private.
 
 name: check
 
@@ -42,10 +29,8 @@ jobs:
     defaults:
       run:
         shell: bash
-        working-directory: scriptschnell-term
     steps:
       - name: Install job prerequisites
-        working-directory: .
         run: |
           set -euo pipefail
           apt-get update
@@ -56,35 +41,13 @@ jobs:
       - name: Check out repository
         uses: https://data.forgejo.org/actions/checkout@v4
         with:
-          path: scriptschnell-term
-          persist-credentials: false
-
-      - name: Check out schnellui
-        uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          repository: codefionn/schnellui
-          path: schnellui
-          token: ${{ secrets.SIBLING_TOKEN || github.token }}
-          persist-credentials: false
-
-      - name: Check out oximond
-        uses: https://data.forgejo.org/actions/checkout@v4
-        with:
-          repository: codefionn/oximond
-          path: oximond
-          token: ${{ secrets.SIBLING_TOKEN || github.token }}
           persist-credentials: false
 
       - name: Install toolchain from rust-toolchain.toml
         run: rustup toolchain install
 
-      # Only this workspace's crates: `--all` would also check the siblings
       - name: Format
-        run: |
-          set -euo pipefail
-          packages=()
-          for crate in crates/*/; do packages+=(-p "$(basename "$crate")"); done
-          cargo fmt --check "${packages[@]}"
+        run: cargo fmt --all --check
 
       - name: Clippy
         run: cargo clippy --workspace --all-targets --locked -- -D warnings

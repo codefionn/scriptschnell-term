@@ -43,15 +43,17 @@ default, for this machine's ASP.NET Core dev certificate in devcontainers,
 tests in `crates/cmdterm/src/ext` load them. `cmdterm-remote image alpine|ubuntu` builds a VM image without root
 (`crates/cmdterm-remote/src/image.rs`).
 
-## Sibling checkouts
+## External dependencies
 
-- `../schnellui` is a path dependency that scriptschnell-term changes when it needs to (SOUL
-  principle 6). Its `SOUL.md` and
+- `schnellui` (`https://github.com/codefionn/schnellui`) is a git dependency that
+  scriptschnell-term changes when it needs to (SOUL principle 6). Its `SOUL.md` and
   `docs/architecture.md` apply to every change there, including its allocation
   budgets, which only go down. Add a budget test or bench row for every hot path
-  you add to it.
-- `../oximond` is used as published. Another session develops it. Do not edit it;
-  report gaps with a repro instead (`crates/cmdterm/src/ext` lists known ones).
+  you add to it. Override it with a local Cargo `[patch]` when editing `../schnellui`
+  alongside this checkout.
+- `oximond` (`https://github.com/codefionn/oximond`) is a git dependency used as
+  published. Another session develops it. Do not edit it; report gaps with a repro
+  instead (`crates/cmdterm/src/ext` lists known ones).
 - No crate depends on wezterm-term, termwiz or portable-pty. The emulator is `crates/cmdterm-vt` and
   PTYs come from `cmdterm_env::pty`. `crates/cmdterm-vt/COMPAT.md` keeps the differences from wezterm-term
   that the former differential tests found.

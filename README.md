@@ -16,8 +16,8 @@ tab's underline and the focused pane's border. The status bar under the panel sh
 the environment, branch, working directory and grid size of the focused terminal, and
 the newest notice for eight seconds.
 
-It is built on [SchnellUI](../schnellui) (GPU UI), cmdterm-vt (its terminal emulator), Servo
-(optional browser panels) and [Oximond](../oximond) (Lua). `SOUL.md` explains the
+It is built on [SchnellUI](https://github.com/codefionn/schnellui) (GPU UI), cmdterm-vt (its terminal emulator), Servo
+(optional browser panels) and [Oximond](https://github.com/codefionn/oximond) (Lua). `SOUL.md` explains the
 design rules; `AGENTS.md` has the commands and conventions.
 
 ## Run it
