@@ -988,6 +988,19 @@ pub fn sandbox_env(
                 policy.files.push((host, inside));
             }
         }
+        // ssh refuses an included configuration file that neither root nor
+        // the user owns, and root's files show as nobody's in the sandbox,
+        // so every ssh there failed before it read a host name. Copies the
+        // user owns, named after their content like the stand-ins above,
+        // take their place.
+        if bind_files {
+            let dir = files_dir.join("ssh");
+            for (inside, content) in ssh_config_stand_ins(Path::new(SSH_CONFIG_DIR)) {
+                if let Some(host) = write_content_file(&dir, &inside, &content) {
+                    policy.files.push((host, inside));
+                }
+            }
+        }
         use_profile(&mut policy, project.id);
         if let Some(home) = &home {
             use_appcontainer(&mut policy, settings, project.id, home);
@@ -1423,6 +1436,45 @@ fn use_profile(policy: &mut SandboxPolicy, id: u64) {
 /// returns its path. The name comes from `inside`, so each sandbox path
 /// keeps one file. An unchanged file is left alone, so sandboxes that
 /// bound it keep reading it.
+/// The directory whose files the system's `ssh_config` includes.
+const SSH_CONFIG_DIR: &str = "/etc/ssh/ssh_config.d";
+
+/// The readable text files in `dir` as `(path, content)`, with symbolic
+/// links resolved, since bwrap mounts a file only over one that is not a
+/// link. Sorted by path. Empty when `dir` is missing.
+fn ssh_config_stand_ins(dir: &Path) -> Vec<(PathBuf, String)> {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return Vec::new();
+    };
+    let mut found: Vec<(PathBuf, String)> = entries
+        .flatten()
+        .filter_map(|entry| {
+            let path = cmdterm_env::canonicalize(entry.path()).ok()?;
+            if !path.is_file() {
+                return None;
+            }
+            let content = std::fs::read_to_string(&path).ok()?;
+            Some((path, content))
+        })
+        .collect();
+    found.sort();
+    found.dedup_by(|a, b| a.0 == b.0);
+    found
+}
+
+/// [`write_sandbox_file`] at a name taken from `inside` and `content`
+/// both, so a file a running sandbox has bound never changes.
+fn write_content_file(dir: &Path, inside: &Path, content: &str) -> Option<PathBuf> {
+    use std::hash::{Hash, Hasher};
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    content.hash(&mut hasher);
+    write_sandbox_file(
+        &dir.join(format!("{:016x}", hasher.finish())),
+        inside,
+        content,
+    )
+}
+
 fn write_sandbox_file(dir: &Path, inside: &Path, content: &str) -> Option<PathBuf> {
     use std::hash::{Hash, Hasher};
     let mut hasher = std::collections::hash_map::DefaultHasher::new();
@@ -2376,6 +2428,93 @@ mod tests {
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "changed");
     }
 
+    /// The ssh configuration files come out with links resolved, and each
+    /// content gets a copy of its own, so a bound copy never changes.
+    #[cfg(unix)]
+    #[test]
+    fn ssh_config_stand_ins_resolve_links_and_keep_old_copies() {
+        let tmp = tempfile::tempdir().unwrap();
+        let base = cmdterm_env::canonicalize(tmp.path()).unwrap();
+        let (dir, lib) = (base.join("ssh_config.d"), base.join("lib"));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::create_dir_all(&lib).unwrap();
+        std::fs::write(lib.join("20-proxy.conf"), "Host unix/*\n").unwrap();
+        std::os::unix::fs::symlink(lib.join("20-proxy.conf"), dir.join("20-proxy.conf")).unwrap();
+        std::fs::write(dir.join("99-vpn.conf"), "Host *.vpn\n").unwrap();
+        std::fs::create_dir(dir.join("sub")).unwrap();
+        let found = ssh_config_stand_ins(&dir);
+        assert_eq!(
+            found,
+            [
+                (lib.join("20-proxy.conf"), "Host unix/*\n".to_owned()),
+                (dir.join("99-vpn.conf"), "Host *.vpn\n".to_owned()),
+            ]
+        );
+        assert!(ssh_config_stand_ins(&base.join("missing")).is_empty());
+
+        let files = base.join("files/ssh");
+        let inside = &found[0].0;
+        let old = write_content_file(&files, inside, "one").unwrap();
+        let new = write_content_file(&files, inside, "two").unwrap();
+        assert_ne!(old, new);
+        assert_eq!(std::fs::read_to_string(&old).unwrap(), "one");
+        assert_eq!(write_content_file(&files, inside, "one"), Some(old));
+    }
+
+    /// ssh reads this machine's configuration in a sandbox, though root's
+    /// files there belong to nobody.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ssh_reads_the_system_configuration_in_a_sandbox() {
+        let works = |program: &str, args: &[&str]| {
+            std::process::Command::new(program)
+                .args(args)
+                .output()
+                .is_ok_and(|out| out.status.success())
+        };
+        if !works("bwrap", &["--ro-bind", "/", "/", "--unshare-all", "true"])
+            || !works("ssh", &["-V"])
+        {
+            eprintln!("no bwrap or no ssh here; skipping");
+            return;
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let base = cmdterm_env::canonicalize(dir.path()).unwrap();
+        let path = |name: &str| base.join(name);
+        std::fs::create_dir_all(path("repo")).unwrap();
+        let project: Project = serde_json::from_value(serde_json::json!({
+            "id": 1, "name": "p", "root": path("repo"), "vcs": "git",
+        }))
+        .unwrap();
+        let env = sandbox_env(
+            &SandboxSettings::default(),
+            &SandboxRules::default(),
+            &project,
+            &path("repo"),
+            &SandboxDirs {
+                shell: &path("shell"),
+                files: &path("files"),
+                app: &cmdterm_env::AppDirs::under(&path("config")),
+                agents: None,
+            },
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let out = env
+            .command("ssh")
+            .args(["-G", "localhost"])
+            .output()
+            .unwrap();
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+    }
+
     #[test]
     fn sandboxes_keep_the_agents_logins_and_the_names_the_user_passes() {
         let settings = SandboxSettings {
@@ -2579,9 +2718,11 @@ mod tests {
                     .any(|(_, inside)| inside == &path("missing"))
             );
             // A file stands in even under a hidden path, from outside the
-            // sandbox's writable paths. The others are clipboard shims.
+            // sandbox's writable paths. The others are clipboard shims and
+            // copies of the system's ssh configuration.
             let stand_ins: Vec<_> = (policy.files.iter())
                 .filter(|(host, _)| !host.to_string_lossy().contains("clipboard"))
+                .filter(|(host, _)| !host.starts_with(files.join("ssh")))
                 .collect();
             assert_eq!(stand_ins.len(), 1);
             let (host, inside) = stand_ins[0];

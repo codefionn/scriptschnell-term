@@ -20,6 +20,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- `ssh`, and with it `git push` and `git fetch` over SSH, works again in bubblewrap
+  sandboxes instead of stopping at "Bad owner or permissions on
+  /etc/ssh/ssh_config.d/...". Root's files show as nobody's inside, and ssh refuses
+  included configuration files that neither root nor the user owns, so sandboxes now
+  bind copies the user owns over the files in `/etc/ssh/ssh_config.d`.
 - Terminals in bubblewrap sandboxes, coding agents included, no longer exit at once
   when the app runs from an AppImage. A sandbox gets a fresh /tmp, which hid the
   proxy bridge every sandboxed command starts through; sandboxes now bind the bridge
