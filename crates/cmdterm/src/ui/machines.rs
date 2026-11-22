@@ -1858,7 +1858,12 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
     let env_rows: Vec<(String, crate::project_env::VarStorage)> = project
         .env_vars
         .iter()
-        .map(|var| (var.name.clone(), inner.project_env.var_storage(&project, var)))
+        .map(|var| {
+            (
+                var.name.clone(),
+                inner.project_env.var_storage(&project, var),
+            )
+        })
         .collect();
     let base = match &inner.settings_ui.machines.form.project_base {
         Some((id, typed)) if *id == project.id => typed.clone(),

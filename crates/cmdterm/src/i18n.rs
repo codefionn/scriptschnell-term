@@ -1444,7 +1444,9 @@ fn keywords_de(section: SettingsSection) -> &'static str {
         SettingsSection::Sandboxing => {
             "Terminals in einer Sandbox starten, Devcontainer-Engine, Netzwerk, Nur erlaubte Hosts, HTTPS prüfen, Container-Engines, Sidecar-Engine, Terminals neu starten | proxy zertifikat docker podman durchreichen"
         }
-        SettingsSection::SandboxFiles => "Zusätzliche beschreibbare Pfade, Verborgene Pfade | dateien ordner",
+        SettingsSection::SandboxFiles => {
+            "Zusätzliche beschreibbare Pfade, Verborgene Pfade | dateien ordner"
+        }
         SettingsSection::SandboxHosts => "Erlaubte Hosts, Häufige Hosts | domains allowlist proxy",
     }
 }
@@ -2147,7 +2149,9 @@ pub static EN: Strings = Strings {
     },
     toast_project_env_removed: |name| format!("Removed {name}"),
     project_env_loaded_notice: |project| {
-        format!("Loaded environment variables for {project} from the keyring. Restart terminals to apply.")
+        format!(
+            "Loaded environment variables for {project} from the keyring. Restart terminals to apply."
+        )
     },
     section_accounts: "Accounts",
     accounts_forges: "Forges",
@@ -2215,7 +2219,9 @@ pub static EN: Strings = Strings {
         }
     },
     discussion_found: |old| {
-        format!("Matched by content (formerly line {old}); its original commit is not in this repository.")
+        format!(
+            "Matched by content (formerly line {old}); its original commit is not in this repository."
+        )
     },
     discussion_file_gone: |since| {
         if since.is_empty() {
@@ -2797,7 +2803,9 @@ pub static DE: Strings = Strings {
         "guards" => "Fängt Sandbox-Anfragen wie Pushes ab, bis du sie freigibst",
         "network" => "Sendet HTTP-Anfragen und lädt Sperrlisten herunter",
         "agents" => "Registriert Agenten-Werkzeuge und eigene Coding-Agenten",
-        "environments" => "Fügt eigene Umgebungen hinzu, deren Befehle über ein lokales Programm laufen",
+        "environments" => {
+            "Fügt eigene Umgebungen hinzu, deren Befehle über ein lokales Programm laufen"
+        }
         "storage" => "Speichert Erweiterungsdaten global in der App",
         "project_storage" => "Speichert Erweiterungsdaten pro Projekt",
         "filesystem" => "Liest und schreibt Dateien außerhalb des eigenen Ordners",
@@ -2871,7 +2879,9 @@ pub static DE: Strings = Strings {
     control_file_removed: |path| format!("{path}: entfernt"),
     control_more_files: |n| format!("und {n} weitere Dateien"),
     control_permissions: |list| {
-        format!("Angeforderte Berechtigungen: {list}. Du kannst sie auf der Seite Erweiterungen erteilen.")
+        format!(
+            "Angeforderte Berechtigungen: {list}. Du kannst sie auf der Seite Erweiterungen erteilen."
+        )
     },
     control_no_permissions: "Keine Berechtigungen angefordert.",
     control_shipped: "Dies ist eine mitgelieferte Erweiterung. Geänderte Dateien werden nicht mehr automatisch aktualisiert.",
@@ -3052,9 +3062,7 @@ pub static DE: Strings = Strings {
     files_binary: |size| format!("Binärdatei, {size} Bytes"),
     files_unreadable: |error| format!("Datei nicht lesbar: {error}"),
     files_unrendered: |error| format!("Datei nicht darstellbar: {error}"),
-    files_mermaid_unsupported: |reason| {
-        format!("Nicht unterstütztes Mermaid-Diagramm: {reason}")
-    },
+    files_mermaid_unsupported: |reason| format!("Nicht unterstütztes Mermaid-Diagramm: {reason}"),
     files_pixels: |width, height| format!("{width} × {height} px"),
     files_page: |page, pages| format!("Seite {page} von {pages}"),
     files_show_source: "v zeigt den Quelltext",
@@ -3337,7 +3345,9 @@ pub static DE: Strings = Strings {
     forge_sign_out: "Abmelden",
     forge_sign_out_for: |host| format!("Von {host} abmelden"),
     forge_token_missing: "Erst ein Token einfügen",
-    extension_request_failed: |error| format!("Eine Erweiterungsaufgabe ist fehlgeschlagen: {error}"),
+    extension_request_failed: |error| {
+        format!("Eine Erweiterungsaufgabe ist fehlgeschlagen: {error}")
+    },
     forge_new_account_for: |forge| format!("Neues {forge}-Konto"),
     forge_add_account: "Konto hinzufügen",
     forge_add_account_open: "+ Anderer Host…",
@@ -3393,7 +3403,9 @@ pub static DE: Strings = Strings {
     },
     toast_project_env_removed: |name| format!("{name} entfernt"),
     project_env_loaded_notice: |project| {
-        format!("Umgebungsvariablen für {project} aus dem Schlüsselbund geladen. Starte Terminals neu, um sie zu übernehmen.")
+        format!(
+            "Umgebungsvariablen für {project} aus dem Schlüsselbund geladen. Starte Terminals neu, um sie zu übernehmen."
+        )
     },
     section_accounts: "Konten",
     accounts_forges: "Forges",
@@ -3458,7 +3470,9 @@ pub static DE: Strings = Strings {
         if since.is_empty() {
             format!("Zeile {old} wurde geändert; die aktualisierte Zeile wird angezeigt.")
         } else {
-            format!("Zeile {old} wurde seit `{since}` geändert; die aktualisierte Zeile wird angezeigt.")
+            format!(
+                "Zeile {old} wurde seit `{since}` geändert; die aktualisierte Zeile wird angezeigt."
+            )
         }
     },
     discussion_found: |old| {

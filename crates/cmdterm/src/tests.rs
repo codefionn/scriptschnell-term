@@ -5710,7 +5710,10 @@ fn forge_accounts_are_added_and_removed_on_the_accounts_page() {
     ws.set_forge_account_draft("hub.hub", "not a host!");
     ws.add_forge_account("hub.hub");
     let json = accounts_page_json(&ws);
-    assert!(json.contains("not a host! must be a host or host/path"), "{json}");
+    assert!(
+        json.contains("not a host! must be a host or host/path"),
+        "{json}"
+    );
 
     ws.set_forge_account_draft("hub.hub", " Git.Example.com/Team/ ");
     ws.add_forge_account("hub.hub");
@@ -5815,7 +5818,9 @@ fn a_refused_sign_in_shows_why_and_keeps_the_app_running() {
     ws.poll();
     let notices: Vec<String> = ws.borrow().notices.iter().map(|n| n.text.clone()).collect();
     assert!(
-        !notices.iter().any(|n| n.contains("An extension task failed")),
+        !notices
+            .iter()
+            .any(|n| n.contains("An extension task failed")),
         "{notices:?}"
     );
     let json = accounts_page_json(&ws);
@@ -5937,10 +5942,7 @@ fn forge_sign_ins_keep_the_account_and_scope_the_token() {
     assert_eq!(ws.forge_auth_for_test("hub.hub", "git.example.com"), None);
     app = crate::build_app(&ws, VIEWPORT);
     app.frame();
-    assert!(
-        app.a11y_json()
-            .contains("Open sign-in for git.example.com")
-    );
+    assert!(app.a11y_json().contains("Open sign-in for git.example.com"));
     ws.toggle_account_form("hub.hub/git.example.com");
     app = crate::build_app(&ws, VIEWPORT);
     app.frame();

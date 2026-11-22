@@ -680,7 +680,13 @@ pub(crate) mod tests {
                 .cloned())
         }
 
-        fn store(&self, _label: &str, service: &str, account: &str, secret: &str) -> io::Result<()> {
+        fn store(
+            &self,
+            _label: &str,
+            service: &str,
+            account: &str,
+            secret: &str,
+        ) -> io::Result<()> {
             if self.fail_store {
                 return Err(io::Error::other("keyring locked"));
             }
