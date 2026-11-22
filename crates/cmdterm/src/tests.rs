@@ -56,9 +56,11 @@ fn workspace(root: &Path) -> Workspace {
     saved.sandbox.host_network = true;
     // Git for Windows' `sh`, which these tests type into, cannot start under
     // the restricted token while another MSYS program runs: it cannot open
-    // the per-user memory section the others made. Tests that need the
-    // sandbox there pick it themselves.
-    if cfg!(windows) {
+    // the per-user memory section the others made. On Linux without a
+    // working bwrap, such as a CI runner that does not allow user
+    // namespaces, no sandboxed terminal starts at all. Tests that need the
+    // sandbox pick it themselves and skip where it cannot run.
+    if cfg!(windows) || (cfg!(target_os = "linux") && !bwrap_works()) {
         saved.default_runtime = crate::state::Runtime::Host;
     }
     settings.save(&saved).unwrap();
@@ -1771,7 +1773,11 @@ fn remote_project_works_end_to_end_through_an_ssh_shim() {
 fn ssh_hosts_get_the_sandbox_bridge_once_and_never_run_a_changed_one() {
     use cmdterm_env::{Environment, HostBridge, SandboxKind, SandboxPolicy, SandboxTarget};
     use std::os::unix::fs::PermissionsExt;
-    let dir = tempfile::tempdir().unwrap();
+    // Not under $TMPDIR: the sandbox gets a /tmp of its own, where it would
+    // not find the copy of the bridge.
+    let scratch = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let dir = tempfile::tempdir_in(&scratch).unwrap();
     // The far side gets a home of its own, so nothing lands in the real
     // cache.
     let home = dir.path().join("far-home");

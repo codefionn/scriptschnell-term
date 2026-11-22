@@ -126,7 +126,9 @@ fn host_network_sandboxes_cannot_reach_the_hosts_abstract_sockets() {
     // An SSH host, here a stand-in for ssh that runs commands on this
     // machine in a home of their own. Before it has a copy of the bridge
     // its sandboxes reach the abstract socket; after, they do not.
-    let dir = tempfile::tempdir().unwrap();
+    // Not under $TMPDIR: the sandbox gets a /tmp of its own, where it would
+    // not find the copy of the bridge.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let home = dir.path().join("home");
     std::fs::create_dir(&home).unwrap();
     let shim = dir.path().join("ssh");
