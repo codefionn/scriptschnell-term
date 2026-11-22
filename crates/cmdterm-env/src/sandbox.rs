@@ -1125,7 +1125,9 @@ fn bind_wrapper(args: &mut Vec<OsString>, wrapper: &[OsString]) {
     let Some(program) = wrapper.first() else {
         return;
     };
-    if Path::new(program).is_absolute() {
+    // bwrap runs on Linux, also when this app runs elsewhere and reaches it
+    // over SSH, so the path is a Unix one whatever `Path` thinks.
+    if program.as_encoded_bytes().starts_with(b"/") {
         args.extend(["--ro-bind-try".into(), program.clone(), program.clone()]);
     }
 }

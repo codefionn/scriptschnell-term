@@ -14,6 +14,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   when the app runs from an AppImage. A sandbox gets a fresh /tmp, which hid the
   proxy bridge every sandboxed command starts through; sandboxes now bind the bridge
   at its own path.
+- Sandboxes on a Linux machine reached over SSH from Windows also bind the proxy
+  bridge. The app checked the bridge's path with Windows path rules, which do not
+  count `/tmp/...` as absolute, so it left the bind out.
 
 ### Changed
 
