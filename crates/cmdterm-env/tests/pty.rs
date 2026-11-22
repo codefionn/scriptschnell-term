@@ -105,14 +105,20 @@ mod unix {
 
     #[test]
     fn child_is_a_session_leader_with_the_pty_as_controlling_terminal() {
-        let (text, _) = run("ps -o sid=,pid=,tty= -p $$; tty");
+        // `stat` and `tty` mean the same in procps and BSD ps, which macOS
+        // has; BSD ps knows no `sid`. An `s` in the state marks a session
+        // leader.
+        let (text, _) = run("ps -o stat=,tty= -p $$; tty");
         let line = text
             .lines()
-            .find(|l| l.split_whitespace().count() == 3)
+            .find(|l| l.split_whitespace().count() == 2)
             .unwrap_or_else(|| panic!("no ps line in {text:?}"));
         let fields: Vec<&str> = line.split_whitespace().collect();
-        assert_eq!(fields[0], fields[1], "session id equals pid: {line}");
-        assert_ne!(fields[2], "?", "has a controlling terminal: {line}");
+        assert!(fields[0].contains('s'), "a session leader: {line}");
+        assert!(
+            !fields[1].starts_with('?'),
+            "has a controlling terminal: {line}"
+        );
         assert!(text.contains("/dev/"), "tty names a device: {text:?}");
     }
 

@@ -38,11 +38,25 @@ fn winsize(size: PtySize) -> Winsize {
 
 /// The master side of a PTY.
 ///
-/// The slave opens when a child spawns and closes in this process right after,
-/// so the master reads end of input once the child and everything it started
-/// are gone.
+/// The slave opens with the PTY and closes in this process once a child
+/// spawned, so the master reads end of input once the child and everything
+/// it started are gone.
 pub struct Pty {
     master: Arc<File>,
+    /// The slave until the first child takes it. macOS answers terminal
+    /// ioctls on a master whose slave never opened with ENOTTY.
+    slave: Mutex<Option<OwnedFd>>,
+}
+
+/// Opens the slave of `master`, close-on-exec and not as this process's
+/// controlling terminal.
+fn open_slave(master: &impl AsFd) -> io::Result<OwnedFd> {
+    let name = ptsname(master, Vec::new())?;
+    Ok(rustix::fs::open(
+        OsStr::from_bytes(name.to_bytes()),
+        OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
+        Mode::empty(),
+    )?)
 }
 
 impl Pty {
@@ -57,9 +71,11 @@ impl Pty {
         rustix::io::fcntl_setfd(&master, rustix::io::FdFlags::CLOEXEC)?;
         grantpt(&master)?;
         unlockpt(&master)?;
-        tcsetwinsize(&master, winsize(size))?;
+        let slave = open_slave(&master)?;
+        tcsetwinsize(&slave, winsize(size))?;
         Ok(Pty {
             master: Arc::new(File::from(master)),
+            slave: Mutex::new(Some(slave)),
         })
     }
 
@@ -74,12 +90,11 @@ impl Pty {
             .argv
             .first()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty command"))?;
-        let name = ptsname(self.master.as_ref(), Vec::new())?;
-        let slave: OwnedFd = rustix::fs::open(
-            OsStr::from_bytes(name.to_bytes()),
-            OFlags::RDWR | OFlags::NOCTTY | OFlags::CLOEXEC,
-            Mode::empty(),
-        )?;
+        let held = self.slave.lock().unwrap_or_else(|e| e.into_inner()).take();
+        let slave = match held {
+            Some(slave) => slave,
+            None => open_slave(self.master.as_ref())?,
+        };
 
         let mut cmd = Command::new(program);
         cmd.args(&command.argv[1..]);
