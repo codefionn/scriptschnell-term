@@ -6,7 +6,7 @@ use cmdterm_env::{CommandError, EnvCommand, Environment};
 
 use crate::vcs::{
     Commit, GitDirs, KnownRepo, LOG_LIMIT, Remote, Repository, Review, Status, VcsError, Worktree,
-    lines, non_empty_string, parse_log, path_from_bytes, split_once, string_from_bytes,
+    lines, network_ok, non_empty_string, parse_log, path_from_bytes, split_once, string_from_bytes,
     trim_newline,
 };
 
@@ -537,6 +537,90 @@ fn parse_remotes(out: &[u8]) -> Vec<Remote> {
             })
         })
         .collect()
+}
+
+/// `git fetch --prune` from `remote`, or from every remote.
+pub(crate) fn fetch(
+    repo: &Repository,
+    worktree: &Path,
+    remote: Option<&str>,
+) -> Result<(), VcsError> {
+    let command = git(repo, worktree)?.args(["fetch", "--prune"]);
+    network_ok(&match remote {
+        Some(remote) => command.arg(remote),
+        None => command.arg("--all"),
+    })
+}
+
+/// Fast-forwards the checked-out branch to its upstream, whatever
+/// `pull.rebase` says.
+pub(crate) fn pull(repo: &Repository, worktree: &Path) -> Result<(), VcsError> {
+    network_ok(&git(repo, worktree)?.args(["pull", "--ff-only", "--no-rebase"]))
+}
+
+/// Pushes the checked-out branch, see [`Repository::push`].
+pub(crate) fn push(
+    repo: &Repository,
+    worktree: &Path,
+    remote: Option<&str>,
+) -> Result<String, VcsError> {
+    let head = git(repo, worktree)?
+        .args(["rev-parse", "--symbolic-full-name", "HEAD"])
+        .stdout()?;
+    let branch = trim_newline(&head)
+        .strip_prefix(b"refs/heads/")
+        .map(string_from_bytes)
+        .ok_or_else(|| VcsError::InvalidArgument("no branch is checked out".to_owned()))?;
+    // Records of the branch's full name, its upstream and the remote a
+    // plain `git push` would pick from the configuration, empty when none
+    // does. The pattern also matches branches under `<branch>/`.
+    let refname = format!("refs/heads/{branch}");
+    let out = git(repo, worktree)?
+        .args([
+            "for-each-ref",
+            "--format=%(refname)%00%(upstream)%00%(push:remotename)",
+        ])
+        .arg(&refname)
+        .stdout()?;
+    let (upstream, configured) = lines(&out)
+        .find_map(|line| {
+            let mut fields = line.split(|&b| b == 0);
+            (fields.next()? == refname.as_bytes()).then(|| {
+                (
+                    fields.next().unwrap_or_default(),
+                    fields.next().unwrap_or_default(),
+                )
+            })
+        })
+        .unwrap_or_default();
+    let remote = match remote {
+        Some(remote) => remote.to_owned(),
+        None => match configured {
+            b"" | b"." => default_remote(&remotes(repo)?).ok_or_else(|| {
+                VcsError::InvalidArgument(format!(
+                    "{branch} has no remote to push to; pick one of the remotes"
+                ))
+            })?,
+            name => string_from_bytes(name),
+        },
+    };
+    let mut command = git(repo, worktree)?.arg("push");
+    if upstream.is_empty() {
+        command = command.arg("--set-upstream");
+    }
+    network_ok(&command.arg(&remote).arg(format!("{refname}:{refname}")))?;
+    Ok(remote)
+}
+
+/// `origin` when there is one, else the only remote.
+fn default_remote(remotes: &[Remote]) -> Option<String> {
+    match remotes {
+        [only] => Some(only.name.clone()),
+        _ => remotes
+            .iter()
+            .find(|remote| remote.name == "origin")
+            .map(|remote| remote.name.clone()),
+    }
 }
 
 pub(crate) fn files(repo: &Repository, worktree: &Path) -> Result<Vec<u8>, VcsError> {

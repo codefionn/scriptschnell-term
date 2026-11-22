@@ -6069,6 +6069,91 @@ fn rail_context_menus_open_project_settings_and_remove_worktrees() {
     assert_eq!(ws.borrow().settings_ui.section, SettingsSection::Project);
 }
 
+/// With two remotes, a worktree's menu fetches, pulls, pushes and pushes
+/// to each remote by name; a push reports where it went.
+#[test]
+fn rail_context_menus_fetch_pull_and_push() {
+    use crate::i18n::EN;
+    use schnellui::a11y::Role;
+    use schnellui::a11y::accesskit_reexport::{Action, ActionRequest, TreeId};
+    use schnellui::a11y::to_access_id;
+
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    for remote in ["origin", "fork"] {
+        let bare = dir.path().join(format!("{remote}.git"));
+        git(
+            dir.path(),
+            &["init", "-q", "--bare", bare.to_str().unwrap()],
+        );
+        git(&repo, &["remote", "add", remote, bare.to_str().unwrap()]);
+    }
+    let ws = workspace(dir.path());
+    add_project_and_wait(&ws, &repo);
+    wait_until(|| {
+        ws.poll();
+        ws.borrow().snapshots.values().any(|s| s.remotes.len() == 2)
+    });
+    let id = ws.borrow().state.active_project.unwrap();
+    assert_eq!(ws.borrow().snapshots[&id].remotes, ["origin", "fork"]);
+
+    crate::fit_grid(&ws, VIEWPORT);
+    let mut app = crate::build_app(&ws, VIEWPORT);
+    app.frame();
+    let open_menu = |app: &mut schnellui::App, name: &str| {
+        let row = app.find_widget(Role::Button, Some(name)).unwrap();
+        assert!(app.dispatch_action(&ActionRequest {
+            action: Action::ShowContextMenu,
+            target_tree: TreeId::ROOT,
+            target_node: to_access_id(row),
+            data: None,
+        }));
+        assert!(app.context_menu_is_open());
+    };
+
+    open_menu(&mut app, "main");
+    for item in [
+        EN.vcs_fetch.to_owned(),
+        (EN.vcs_pull)("main"),
+        (EN.vcs_push)("main"),
+        (EN.vcs_push_to)("main", "origin"),
+    ] {
+        assert!(
+            app.find_widget(Role::MenuItem, Some(&item)).is_some(),
+            "{item}"
+        );
+    }
+    let item = app
+        .find_widget(Role::MenuItem, Some(&(EN.vcs_push_to)("main", "fork")))
+        .unwrap();
+    app.activate_context_menu_item(item).unwrap();
+    let pushed = (EN.vcs_pushed)("main", "fork");
+    wait_until(|| {
+        ws.poll();
+        ws.borrow()
+            .notices
+            .iter()
+            .any(|notice| notice.text == pushed)
+    });
+    let fork = dir.path().join("fork.git");
+    git(&fork, &["show-ref", "-q", "--verify", "refs/heads/main"]);
+
+    // The project's own row fetches.
+    let mut app = crate::build_app(&ws, VIEWPORT);
+    app.frame();
+    open_menu(&mut app, "app");
+    let item = app.find_widget(Role::MenuItem, Some(EN.vcs_fetch)).unwrap();
+    app.activate_context_menu_item(item).unwrap();
+    let fetched = (EN.vcs_fetched)("app");
+    wait_until(|| {
+        ws.poll();
+        ws.borrow()
+            .notices
+            .iter()
+            .any(|notice| notice.text == fetched)
+    });
+}
+
 /// The Agents tab lists each agent terminal, not the worktree, and a
 /// click on one shows the tab it is in and focuses its pane.
 #[test]

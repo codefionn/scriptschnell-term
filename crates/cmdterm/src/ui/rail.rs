@@ -11,8 +11,10 @@
 //! keeps its focus.
 //!
 //! A secondary click on a project or worktree row opens its context menu:
-//! the project's settings, and for a worktree other than the main one,
-//! removing it.
+//! the project's settings and, where the repository has remotes, a fetch.
+//! A worktree's menu also pulls and pushes its branch, pushes it to each
+//! remote by name when there are several, and for a worktree other than
+//! the main one, removes it.
 
 use std::path::Path;
 
@@ -20,6 +22,7 @@ use crate::forge::{ForgeKind, Pipeline};
 use crate::state::Project;
 use crate::term::Attention;
 use crate::vcs::{Status, Worktree};
+use crate::vcs_worker::{RemoteOp, Snapshot};
 use schnellui::layout::EdgeInsets;
 use schnellui::widgets::{
     Align, Badge, Button, ButtonAppearance, Column, ContextMenu, ContextMenuItem, Justify, ListRow,
@@ -211,12 +214,7 @@ fn projects(mut list: Column, ws: &Workspace, inner: &Inner, matches: Option<&Ma
             // under it carries the strong mark of what is shown.
             .selected_background(scheme.raised)
             .on_click(move || select.select_project(id))
-            .context_menu(
-                ContextMenu::new()
-                    .text_size(13.0)
-                    .row_height(28.0)
-                    .item(project_settings_item(ws, tr, id)),
-            );
+            .context_menu(project_menu(ws, inner, project));
         // Its worktrees show what they wait for; the project only shows
         // that one of them does, also while it scrolled out of view.
         if attention != Attention::None {
@@ -559,7 +557,7 @@ fn worktree_rows(
             })
             .selected_background(inner.scheme.tinted(lane))
             .on_click(move || activate.activate_worktree(id, &path))
-            .context_menu(worktree_menu(ws, tr, id, worktree, &branch));
+            .context_menu(worktree_menu(ws, tr, snapshot, id, worktree, &branch));
         row = if attention.wants_user() {
             // A pill in the attention color takes the place of the VCS
             // summary, and the agent's message, which says what it waits
@@ -633,28 +631,94 @@ fn worktree_rows(
     list
 }
 
-/// The context menu of a worktree row: the project's settings, and
-/// removing the worktree unless it is the main one.
-fn worktree_menu(
-    ws: &Workspace,
-    tr: &'static Strings,
-    id: u64,
-    worktree: &Worktree,
-    branch: &str,
-) -> ContextMenu {
+/// The context menu of a project row: the project's settings, and a
+/// fetch from every remote when it has any.
+fn project_menu(ws: &Workspace, inner: &Inner, project: &Project) -> ContextMenu {
+    let tr = inner.tr;
+    let id = project.id;
     let menu = ContextMenu::new()
         .text_size(13.0)
         .row_height(28.0)
         .item(project_settings_item(ws, tr, id));
+    match inner.snapshots.get(&id) {
+        Some(snapshot) if !snapshot.remotes.is_empty() => {
+            menu.item(ContextMenuItem::separator()).item(remote_item(
+                ws,
+                tr.vcs_fetch.to_owned(),
+                id,
+                &project.root,
+                RemoteOp::Fetch,
+            ))
+        }
+        _ => menu,
+    }
+}
+
+/// The context menu of a worktree row: the project's settings, fetch,
+/// pull and push where the repository has remotes, a push to each remote
+/// when there are several, and removing the worktree unless it is the
+/// main one.
+fn worktree_menu(
+    ws: &Workspace,
+    tr: &'static Strings,
+    snapshot: Option<&Snapshot>,
+    id: u64,
+    worktree: &Worktree,
+    branch: &str,
+) -> ContextMenu {
+    let mut menu = ContextMenu::new()
+        .text_size(13.0)
+        .row_height(28.0)
+        .item(project_settings_item(ws, tr, id));
+    let remotes = snapshot.map_or(&[][..], |snapshot| &snapshot.remotes[..]);
+    if !remotes.is_empty() && !worktree.prunable {
+        let path = &worktree.path;
+        menu = menu.item(ContextMenuItem::separator()).item(remote_item(
+            ws,
+            tr.vcs_fetch.to_owned(),
+            id,
+            path,
+            RemoteOp::Fetch,
+        ));
+        if worktree.branch.is_some() {
+            if snapshot.is_some_and(|snapshot| snapshot.repo.can_pull()) {
+                let label = (tr.vcs_pull)(branch);
+                menu = menu.item(remote_item(ws, label, id, path, RemoteOp::Pull));
+            }
+            let label = (tr.vcs_push)(branch);
+            menu = menu.item(remote_item(ws, label, id, path, RemoteOp::Push(None)));
+            if remotes.len() > 1 {
+                for remote in remotes {
+                    let label = (tr.vcs_push_to)(branch, remote);
+                    let op = RemoteOp::Push(Some(remote.clone()));
+                    menu = menu.item(remote_item(ws, label, id, path, op));
+                }
+            }
+        }
+    }
     if worktree.is_main {
         return menu;
     }
+    let menu = menu.item(ContextMenuItem::separator());
     let remove = ws.clone();
     let path = worktree.path.clone();
     menu.item(
         ContextMenuItem::new((tr.remove_worktree)(branch))
             .on_select(move || remove.remove_worktree(id, &path)),
     )
+}
+
+/// A menu item that runs `op` in worktree `path` of project `id`.
+fn remote_item(
+    ws: &Workspace,
+    label: String,
+    id: u64,
+    path: &Path,
+    op: RemoteOp,
+) -> ContextMenuItem {
+    let run = ws.clone();
+    let path = path.to_path_buf();
+    ContextMenuItem::new(label).on_select(move || run.run_remote(id, &path, op.clone()))
 }
 
 /// Opens the settings on the page of project `id`, which it selects first

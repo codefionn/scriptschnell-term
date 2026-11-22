@@ -2,7 +2,7 @@
 
 use std::path::Path;
 
-use cmdterm::vcs::{VcsError, VcsKind, clone, clone_name, discover, discover_with};
+use cmdterm::vcs::{VcsError, VcsKind, clone, clone_name, discover, discover_with, reason};
 use cmdterm_env::Environment;
 
 const ENV: Environment = Environment::Local;
@@ -666,4 +666,187 @@ fn jujutsu_workspaces() {
     let listed = list.iter().find(|w| w.path == at.path).unwrap();
     assert_eq!(listed.branch.as_deref(), Some("main"));
     assert!(repo.remove_worktree(&base.join("elsewhere"), true).is_err());
+}
+
+/// The commit id `rev` names in the repository at `cwd`.
+fn rev(cwd: &Path, rev: &str) -> String {
+    String::from_utf8(run(cwd, "git", &["rev-parse", rev]))
+        .unwrap()
+        .trim()
+        .to_owned()
+}
+
+#[test]
+fn git_fetch_pull_and_push() {
+    let (_dir, base) = temp();
+    for bare in ["origin.git", "fork.git"] {
+        run(&base, "git", &["init", "-q", "--bare", "-b", "main", bare]);
+    }
+    let root = base.join("repo");
+    std::fs::create_dir(&root).unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    write(&root.join("a"), "one\n");
+    git(&root, &["add", "a"]);
+    git(&root, &["commit", "-q", "-m", "init"]);
+    let origin = base.join("origin.git");
+    let fork = base.join("fork.git");
+    git(
+        &root,
+        &["remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    git(&root, &["remote", "add", "fork", fork.to_str().unwrap()]);
+    let repo = discover(&ENV, &root).unwrap();
+
+    // The first push goes to `origin` and makes it the upstream; a push
+    // to another remote leaves the upstream alone.
+    assert_eq!(repo.push(&root, None).unwrap(), "origin");
+    assert_eq!(rev(&origin, "main"), rev(&root, "HEAD"));
+    assert_eq!(rev(&root, "main@{upstream}"), rev(&root, "origin/main"));
+    assert_eq!(repo.push(&root, Some("fork")).unwrap(), "fork");
+    assert_eq!(rev(&fork, "main"), rev(&root, "HEAD"));
+    let upstream = run(
+        &root,
+        "git",
+        &["rev-parse", "--abbrev-ref", "main@{upstream}"],
+    );
+    assert_eq!(String::from_utf8_lossy(&upstream).trim(), "origin/main");
+
+    // Another clone pushes; a fetch sees it, a pull fast-forwards to it.
+    let other = base.join("other");
+    git(&base, &["clone", "-q", origin.to_str().unwrap(), "other"]);
+    write(&other.join("a"), "two\n");
+    git(&other, &["commit", "-q", "-am", "two"]);
+    git(&other, &["push", "-q", "origin", "main"]);
+    repo.fetch(&root, None).unwrap();
+    assert_eq!(repo.status(&root).unwrap().behind, 1);
+    repo.pull(&root).unwrap();
+    assert_eq!(rev(&root, "HEAD"), rev(&other, "HEAD"));
+
+    // Diverged: the pull refuses to merge and the push is rejected.
+    write(&other.join("a"), "three\n");
+    git(&other, &["commit", "-q", "-am", "three"]);
+    git(&other, &["push", "-q", "origin", "main"]);
+    write(&root.join("b"), "local\n");
+    git(&root, &["add", "b"]);
+    git(&root, &["commit", "-q", "-m", "local"]);
+    let error = repo.pull(&root).unwrap_err();
+    assert!(reason(&error).contains("fast-forward"), "{error}");
+    let error = repo.push(&root, None).unwrap_err();
+    assert!(reason(&error).contains("rejected"), "{error}");
+
+    // A new branch in a worktree has no upstream until its first push.
+    let wt = base.join("wt");
+    repo.add_worktree(&wt, "feature/x", true).unwrap();
+    // The repository lists its linked worktrees as it was opened.
+    let repo = discover(&ENV, &root).unwrap();
+    assert_eq!(repo.push(&wt, None).unwrap(), "origin");
+    assert_eq!(rev(&origin, "feature/x"), rev(&wt, "HEAD"));
+    assert_eq!(rev(&wt, "feature/x@{upstream}"), rev(&wt, "HEAD"));
+
+    // Detached HEAD has nothing to push.
+    git(&wt, &["checkout", "-q", "--detach"]);
+    let error = repo.push(&wt, None).unwrap_err();
+    assert!(reason(&error).contains("no branch"), "{error}");
+
+    assert!(matches!(
+        repo.push(&root, Some("--mirror")),
+        Err(VcsError::InvalidArgument(_))
+    ));
+}
+
+#[test]
+fn git_push_without_origin_needs_a_remote() {
+    let (_dir, base) = temp();
+    for bare in ["a.git", "b.git"] {
+        run(&base, "git", &["init", "-q", "--bare", "-b", "main", bare]);
+    }
+    let root = base.join("repo");
+    std::fs::create_dir(&root).unwrap();
+    git(&root, &["init", "-q", "-b", "main"]);
+    write(&root.join("a"), "one\n");
+    git(&root, &["add", "a"]);
+    git(&root, &["commit", "-q", "-m", "init"]);
+    git(
+        &root,
+        &["remote", "add", "a", base.join("a.git").to_str().unwrap()],
+    );
+    git(
+        &root,
+        &["remote", "add", "b", base.join("b.git").to_str().unwrap()],
+    );
+    let repo = discover(&ENV, &root).unwrap();
+
+    let error = repo.push(&root, None).unwrap_err();
+    assert!(reason(&error).contains("no remote to push to"), "{error}");
+    // `remote.pushDefault` picks one.
+    git(&root, &["config", "remote.pushDefault", "b"]);
+    assert_eq!(repo.push(&root, None).unwrap(), "b");
+    // A fetch from every remote fills both remote-tracking branches.
+    git(&root, &["push", "-q", "a", "main"]);
+    repo.fetch(&root, None).unwrap();
+    assert_eq!(rev(&root, "a/main"), rev(&root, "b/main"));
+}
+
+#[test]
+fn jujutsu_fetch_and_push() {
+    if !have("jj") {
+        eprintln!("jj not installed; skipping");
+        return;
+    }
+    let (_dir, base) = temp();
+    run(
+        &base,
+        "git",
+        &["init", "-q", "--bare", "-b", "main", "origin.git"],
+    );
+    let origin = base.join("origin.git");
+    let root = base.join("jjrepo");
+    run(&base, "jj", &["git", "init", "jjrepo"]);
+    run(
+        &root,
+        "jj",
+        &["git", "remote", "add", "origin", origin.to_str().unwrap()],
+    );
+    write(&root.join("a"), "one\n");
+    run(&root, "jj", &["commit", "-m", "init"]);
+    run(&root, "jj", &["bookmark", "create", "main", "-r", "@-"]);
+    let repo = discover_with(&ENV, &root, true).unwrap();
+    assert!(!repo.can_pull());
+
+    // The bookmark at the parent of `@` goes to the only remote.
+    assert_eq!(repo.push(&root, None).unwrap(), "origin");
+    let pushed = String::from_utf8(run(&origin, "git", &["branch", "--list"])).unwrap();
+    assert!(pushed.contains("main"), "{pushed}");
+    repo.fetch(&root, None).unwrap();
+    repo.fetch(&root, Some("origin")).unwrap();
+}
+
+#[test]
+fn mercurial_fetch_pull_and_push() {
+    if !have("hg") {
+        eprintln!("hg not installed; skipping");
+        return;
+    }
+    let (_dir, base) = temp();
+    run(&base, "hg", &["init", "remote"]);
+    let remote = base.join("remote");
+    let root = base.join("hgrepo");
+    run(&base, "hg", &["init", "hgrepo"]);
+    write(&root.join("a"), "one\n");
+    run(&root, "hg", &["add", "a"]);
+    run(&root, "hg", &["commit", "-q", "-m", "init"]);
+    run(&root, "hg", &["bookmark", "main"]);
+    write(
+        &root.join(".hg/hgrc"),
+        &format!("[paths]\ndefault = {}\n", remote.display()),
+    );
+    let repo = discover(&ENV, &root).unwrap();
+
+    assert_eq!(repo.push(&root, None).unwrap(), "default");
+    let bookmarks = String::from_utf8(run(&remote, "hg", &["bookmarks", "-q"])).unwrap();
+    assert_eq!(bookmarks.trim(), "main");
+    // Nothing left to push is no failure.
+    assert_eq!(repo.push(&root, Some("default")).unwrap(), "default");
+    repo.fetch(&root, None).unwrap();
+    repo.pull(&root).unwrap();
 }

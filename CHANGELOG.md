@@ -8,6 +8,16 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [0.1.1] - 2026-11-22
 
+### Added
+
+- The context menu of a worktree in the rail fetches, pulls and pushes its branch,
+  and pushes it to each remote by name when the repository has several. A project's
+  own row fetches from every remote. The command palette has the same entries for
+  the shown worktree. Git pulls only fast-forward and a first push sets the
+  upstream; Mercurial pushes the checked-out revision with its active bookmark;
+  Jujutsu fetches and pushes the workspace's bookmarks. A notice says when each run
+  starts and how it ended.
+
 ### Fixed
 
 - Terminals in bubblewrap sandboxes, coding agents included, no longer exit at once

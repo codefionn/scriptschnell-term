@@ -323,6 +323,12 @@ pub enum Action {
         project: u64,
         path: PathBuf,
     },
+    /// Fetches, pulls or pushes in a worktree.
+    Remote {
+        project: u64,
+        path: PathBuf,
+        op: crate::vcs_worker::RemoteOp,
+    },
     ForgetProject(u64),
     /// Saves a local or global session from now on.
     KeepProject(u64),
@@ -384,6 +390,48 @@ impl Action {
             self,
             Action::RemoveWorktree { .. } | Action::ForgetProject(_)
         )
+    }
+}
+
+/// Fetch for the active project, and pull and push for its shown worktree,
+/// with a push to each remote when there are several.
+fn remote_entries(
+    out: &mut Vec<Entry>,
+    tr: &'static Strings,
+    project: &crate::state::Project,
+    snapshot: &crate::vcs_worker::Snapshot,
+) {
+    use crate::vcs_worker::RemoteOp;
+    if snapshot.remotes.is_empty() {
+        return;
+    }
+    let path = project.current_worktree();
+    let action = |op| Action::Remote {
+        project: project.id,
+        path: path.to_path_buf(),
+        op,
+    };
+    out.push(plain(
+        &(tr.vcs_fetch_project)(&project.name),
+        action(RemoteOp::Fetch),
+    ));
+    let Some(worktree) =
+        (snapshot.worktrees.iter()).find(|w| w.path == path && w.branch.is_some() && !w.prunable)
+    else {
+        return;
+    };
+    let branch = branch_name(worktree);
+    if snapshot.repo.can_pull() {
+        out.push(plain(&(tr.vcs_pull)(&branch), action(RemoteOp::Pull)));
+    }
+    out.push(plain(&(tr.vcs_push)(&branch), action(RemoteOp::Push(None))));
+    if snapshot.remotes.len() > 1 {
+        for remote in &snapshot.remotes {
+            out.push(plain(
+                &(tr.vcs_push_to)(&branch, remote),
+                action(RemoteOp::Push(Some(remote.clone()))),
+            ));
+        }
     }
 }
 
@@ -677,6 +725,7 @@ pub fn entries(inner: &Inner) -> Vec<Entry> {
                 },
             ));
         }
+        remote_entries(&mut out, tr, project, snapshot);
     }
     group(&mut out, worktrees, Group::Worktrees);
     let runtime = out.len();
@@ -1242,6 +1291,7 @@ impl Workspace {
                 }
             }
             Action::RemoveWorktree { project, path } => self.remove_worktree(project, &path),
+            Action::Remote { project, path, op } => self.run_remote(project, &path, op),
             Action::ForgetProject(id) => self.remove_project(id),
             Action::KeepProject(id) => self.keep_project(id),
             Action::Settings => self.open_settings(),

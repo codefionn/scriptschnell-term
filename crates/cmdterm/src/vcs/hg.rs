@@ -10,7 +10,7 @@ use std::path::{Path, PathBuf};
 use cmdterm_env::{EnvCommand, Environment};
 
 use crate::vcs::{
-    Commit, LOG_LIMIT, Remote, Repository, Review, Status, VcsError, Worktree, lines,
+    Commit, LOG_LIMIT, Remote, Repository, Review, Status, VcsError, Worktree, lines, network_ok,
     non_empty_string, normalize, parse_log, path_from_bytes, split_once, string_from_bytes,
     trim_newline,
 };
@@ -320,6 +320,55 @@ fn parse_paths(out: &[u8]) -> Vec<Remote> {
             })
         })
         .collect()
+}
+
+/// `hg pull` from `remote`, else from `default`; with `update`, the
+/// working copy is updated too.
+pub(crate) fn fetch(
+    env: &Environment,
+    worktree: &Path,
+    remote: Option<&str>,
+    update: bool,
+) -> Result<(), VcsError> {
+    let mut command = hg(env, worktree).arg("pull");
+    if update {
+        command = command.arg("--update");
+    }
+    if let Some(remote) = remote {
+        command = command.arg(remote);
+    }
+    network_ok(&command)
+}
+
+/// `sh -c PUSH sh [PATH]`: pushes `.` with its active bookmark. `hg push`
+/// exits 1 when there is nothing to push, which is no failure here.
+const PUSH: &str = r#"b=$(hg log -r . -T '{activebookmark}') || exit 2
+if [ -n "$b" ]; then hg push -r . -B "$b" "$@"; else hg push -r . "$@"; fi
+c=$?
+[ "$c" = 1 ] && exit 0
+exit "$c"
+"#;
+
+/// Pushes the checked-out revision, see [`Repository::push`].
+pub(crate) fn push(
+    repo: &Repository,
+    worktree: &Path,
+    remote: Option<&str>,
+) -> Result<String, VcsError> {
+    let mut command = script(&repo.env, worktree, PUSH);
+    let name = match remote {
+        Some(remote) => {
+            command = command.arg(remote);
+            remote.to_owned()
+        }
+        None => {
+            let paths = remotes(repo)?;
+            let push = paths.iter().any(|path| path.name == "default-push");
+            (if push { "default-push" } else { "default" }).to_owned()
+        }
+    };
+    network_ok(&command)?;
+    Ok(name)
 }
 
 pub(crate) fn files(env: &Environment, worktree: &Path) -> Result<Vec<u8>, VcsError> {

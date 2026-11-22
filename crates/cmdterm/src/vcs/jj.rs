@@ -14,8 +14,8 @@ use std::path::{Path, PathBuf};
 use cmdterm_env::{EnvCommand, Environment};
 
 use crate::vcs::{
-    Commit, LOG_LIMIT, Remote, Repository, Review, Status, VcsError, Worktree, lines, normalize,
-    parse_log, path_from_bytes, split_once, string_from_bytes, trim_newline,
+    Commit, LOG_LIMIT, Remote, Repository, Review, Status, VcsError, Worktree, lines, network_ok,
+    normalize, parse_log, path_from_bytes, split_once, string_from_bytes, trim_newline,
 };
 
 /// Shell prelude: `jj` without pager or colors, and `jjr` for the queries
@@ -322,6 +322,71 @@ fn parse_remotes(out: &[u8]) -> Vec<Remote> {
             })
         })
         .collect()
+}
+
+/// `jj` for commands that snapshot the working copy first, as a push must.
+fn jj_live(env: &Environment, cwd: &Path) -> EnvCommand {
+    env.command("jj")
+        .args(["--no-pager", "--color=never"])
+        .cwd(cwd)
+}
+
+/// `jj git fetch` from `remote`, or from every remote.
+pub(crate) fn fetch(
+    env: &Environment,
+    worktree: &Path,
+    remote: Option<&str>,
+) -> Result<(), VcsError> {
+    let command = jj_live(env, worktree).args(["git", "fetch"]);
+    network_ok(&match remote {
+        Some(remote) => command.args(["--remote", remote]),
+        None => command.arg("--all-remotes"),
+    })
+}
+
+/// Bookmarks at `@`, a 0x1f, then those at its parents, comma-separated.
+const PUSH_BOOKMARKS: &str = r#"local_bookmarks.map(|b| b.name()).join(",") ++ "\x1f" ++ parents.map(|c| c.local_bookmarks().map(|b| b.name()).join(",")).join(",")"#;
+
+/// Pushes the workspace's bookmarks, see [`Repository::push`].
+pub(crate) fn push(
+    repo: &Repository,
+    worktree: &Path,
+    remote: Option<&str>,
+) -> Result<String, VcsError> {
+    let remote = match remote {
+        Some(remote) => remote.to_owned(),
+        None => {
+            let configured = jj(&repo.env, worktree)
+                .args(["config", "get", "git.push"])
+                .stdout()
+                .ok()
+                .map(|out| string_from_bytes(trim_newline(&out)))
+                .filter(|name| !name.is_empty());
+            match configured {
+                Some(name) => name,
+                None => match remotes(repo)?.as_slice() {
+                    [only] => only.name.clone(),
+                    _ => "origin".to_owned(),
+                },
+            }
+        }
+    };
+    let out = jj_live(&repo.env, worktree)
+        .args(["log", "--no-graph", "-r", "@", "-T", PUSH_BOOKMARKS])
+        .stdout()?;
+    let (at, parents) = split_once(trim_newline(&out), 0x1f);
+    let bookmarks = if at.is_empty() { parents } else { at };
+    let mut command = jj_live(&repo.env, worktree).args(["git", "push", "--remote", &remote]);
+    for name in bookmarks
+        .split(|&b| b == b',')
+        .filter(|name| !name.is_empty())
+    {
+        command = command
+            .arg("--bookmark")
+            .arg(format!("exact:{}", String::from_utf8_lossy(name)));
+    }
+    network_ok(&command)?;
+    Ok(remote)
 }
 
 pub(crate) fn files(env: &Environment, worktree: &Path) -> Result<Vec<u8>, VcsError> {

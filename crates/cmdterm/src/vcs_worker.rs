@@ -100,6 +100,26 @@ pub enum Job {
         repo: Repository,
         path: PathBuf,
     },
+    /// Fetch, pull or push in the worktree `path`, on a thread of its own
+    /// so a slow remote does not hold up polling.
+    Remote {
+        project: u64,
+        repo: Repository,
+        path: PathBuf,
+        op: RemoteOp,
+    },
+}
+
+/// What [`Job::Remote`] does with a worktree's remotes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum RemoteOp {
+    /// Fetch from every remote.
+    Fetch,
+    /// Bring the checked-out branch up to date with its upstream.
+    Pull,
+    /// Push the checked-out branch to the named remote, or to the one it
+    /// pushes to by default.
+    Push(Option<String>),
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -116,6 +136,8 @@ pub struct Snapshot {
     pub forge_url: Option<String>,
     /// URL of `origin`, else of the first remote.
     pub remote_url: Option<String>,
+    /// Names of the remotes (Mercurial: paths), `origin` first.
+    pub remotes: Vec<String>,
     /// Worktrees whose `.git` no longer leads to the repository's metadata,
     /// see [`Repository::replaced_dot_git`].
     pub replaced: Vec<PathBuf>,
@@ -150,6 +172,14 @@ pub enum Reply {
     WorktreeAdded {
         project: u64,
         path: PathBuf,
+    },
+    /// A [`Job::Remote`] ended: with the remote a push went to, or with
+    /// the line that says why it failed.
+    RemoteDone {
+        project: u64,
+        path: PathBuf,
+        op: RemoteOp,
+        result: Result<Option<String>, String>,
     },
 }
 
@@ -423,6 +453,34 @@ fn run(jobs: Receiver<Job>, replies: Sender<Reply>, wake: Arc<dyn Fn() + Send + 
                     repo.known(),
                 ))
             }
+            Some(Job::Remote {
+                project,
+                repo,
+                path,
+                op,
+            }) => {
+                let replies = replies.clone();
+                let wake = wake.clone();
+                let _ = std::thread::Builder::new()
+                    .name("cmdterm-vcs-remote".into())
+                    .spawn(move || {
+                        let result = match &op {
+                            RemoteOp::Fetch => repo.fetch(&path, None).map(|()| None),
+                            RemoteOp::Pull => repo.pull(&path).map(|()| None),
+                            RemoteOp::Push(remote) => repo.push(&path, remote.as_deref()).map(Some),
+                        };
+                        let reply = Reply::RemoteDone {
+                            project,
+                            path,
+                            op,
+                            result: result.map_err(|error| crate::vcs::reason(&error)),
+                        };
+                        if replies.send(reply).is_ok() {
+                            wake();
+                        }
+                    });
+                None
+            }
             None => {
                 next_poll = Instant::now() + POLL;
                 watched.as_ref().map(|w| {
@@ -497,6 +555,7 @@ fn snapshot(
     // Prefer `origin`, else the first remote a forge recognizes.
     remotes.sort_by_key(|remote| remote.name != "origin");
     let remote_url = remotes.first().map(|remote| remote.url.clone());
+    let remote_names = remotes.iter().map(|remote| remote.name.clone()).collect();
     let forge_repo = remotes
         .iter()
         .find_map(|remote| crate::forge::detect(&remote.url, &hints));
@@ -566,6 +625,7 @@ fn snapshot(
         pipelines,
         forge_url,
         remote_url,
+        remotes: remote_names,
         replaced,
     })
 }

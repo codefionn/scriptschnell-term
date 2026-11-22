@@ -12,8 +12,10 @@
 //! "worktrees" are workspaces.
 
 use std::path::{Component, Path, PathBuf};
+use std::process::Output;
+use std::time::Duration;
 
-use cmdterm_env::{CommandError, Environment};
+use cmdterm_env::{CommandError, EnvCommand, Environment};
 use serde::{Deserialize, Serialize};
 
 mod git;
@@ -459,6 +461,64 @@ impl Repository {
         }
     }
 
+    /// Fetches into the repository from `remote`, or from every remote.
+    /// Git prunes remote-tracking branches the remote deleted. Mercurial
+    /// pulls without updating the working copy, from its `default` path
+    /// when no remote is named. Jujutsu runs `jj git fetch`.
+    pub fn fetch(&self, worktree: &Path, remote: Option<&str>) -> Result<(), VcsError> {
+        if let Some(remote) = remote {
+            check_remote(remote)?;
+        }
+        match self.kind {
+            VcsKind::Git => git::fetch(self, worktree, remote),
+            VcsKind::Mercurial => hg::fetch(&self.env, worktree, remote, false),
+            VcsKind::Jujutsu => jj::fetch(&self.env, worktree, remote),
+        }
+    }
+
+    /// Whether [`Self::pull`] works for this VCS. Jujutsu has no pull: a
+    /// fetch moves the remote bookmarks, and the user rebases.
+    pub fn can_pull(&self) -> bool {
+        self.kind != VcsKind::Jujutsu
+    }
+
+    /// Brings the branch checked out in `worktree` up to date with its
+    /// upstream. Git only fast-forwards, so a branch with commits of its
+    /// own fails instead of getting a merge commit. Mercurial pulls from
+    /// its `default` path and updates the working copy.
+    pub fn pull(&self, worktree: &Path) -> Result<(), VcsError> {
+        match self.kind {
+            VcsKind::Git => git::pull(self, worktree),
+            VcsKind::Mercurial => hg::fetch(&self.env, worktree, None, true),
+            VcsKind::Jujutsu => Err(VcsError::InvalidArgument(
+                "jj has no pull; fetch, then rebase".to_owned(),
+            )),
+        }
+    }
+
+    /// Pushes the branch checked out in `worktree` to `remote`, or to the
+    /// remote it pushes to by default, and returns the remote's name.
+    ///
+    /// Git pushes the branch to the branch of the same name, and makes that
+    /// the upstream when the branch has none. Without `remote` it picks
+    /// `branch.<name>.pushRemote`, `remote.pushDefault` or
+    /// `branch.<name>.remote`, else `origin`, else the only remote.
+    /// Mercurial pushes the checked-out revision with its active bookmark,
+    /// to `default-push` or `default` without `remote`; nothing to push
+    /// counts as success. Jujutsu pushes the bookmarks at `@`, else those
+    /// at its parents, else what `jj git push` pushes by default, to
+    /// `git.push`, else the only remote, else `origin`.
+    pub fn push(&self, worktree: &Path, remote: Option<&str>) -> Result<String, VcsError> {
+        if let Some(remote) = remote {
+            check_remote(remote)?;
+        }
+        match self.kind {
+            VcsKind::Git => git::push(self, worktree, remote),
+            VcsKind::Mercurial => hg::push(self, worktree, remote),
+            VcsKind::Jujutsu => jj::push(self, worktree, remote),
+        }
+    }
+
     /// Paths of the files in the worktree `worktree`, relative to it and
     /// separated by NUL bytes: tracked files plus untracked ones the ignore
     /// rules let through. The order is the VCS's own and may repeat a path.
@@ -562,6 +622,77 @@ fn check_name(name: &str) -> Result<(), VcsError> {
         )))
     } else {
         Ok(())
+    }
+}
+
+/// Rejects remote names that a command would read as an option.
+fn check_remote(remote: &str) -> Result<(), VcsError> {
+    if remote.is_empty() || remote.starts_with('-') || remote.contains(['\0', '\n']) {
+        Err(VcsError::InvalidArgument(format!(
+            "bad remote name {remote:?}"
+        )))
+    } else {
+        Ok(())
+    }
+}
+
+/// How long a fetch, pull or push may run before it is killed, so a
+/// remote that never answers does not keep the worktree busy for good.
+const NETWORK_TIMEOUT: Duration = Duration::from_secs(600);
+
+/// Runs a command that talks to a remote, within [`NETWORK_TIMEOUT`],
+/// and returns its output whatever its exit status.
+fn network(command: &EnvCommand) -> Result<Output, VcsError> {
+    Ok(command
+        .output_within(NETWORK_TIMEOUT)
+        .map_err(CommandError::Spawn)?)
+}
+
+/// [`network`], failing with the command's stderr unless it exits 0.
+fn network_ok(command: &EnvCommand) -> Result<(), VcsError> {
+    let output = network(command)?;
+    if output.status.success() {
+        Ok(())
+    } else {
+        Err(failed(&output))
+    }
+}
+
+/// The error of a command that exited with `output`.
+fn failed(output: &Output) -> VcsError {
+    VcsError::Command(CommandError::Failed {
+        code: output.status.code(),
+        stderr: string_from_bytes(output.stderr.trim_ascii()),
+    })
+}
+
+/// One line that says why `error` happened, for a notice: a ref the
+/// remote rejected, else the first `error:`, `fatal:` or `abort:` line
+/// without its prefix, else the first line that is not a hint.
+pub fn reason(error: &VcsError) -> String {
+    let VcsError::Command(CommandError::Failed { stderr, .. }) = error else {
+        return error.to_string();
+    };
+    let lines = || {
+        stderr
+            .lines()
+            .map(str::trim)
+            .filter(|line| !line.is_empty())
+    };
+    fn prefixed(line: &str) -> Option<&str> {
+        ["error:", "fatal:", "abort:", "Error:"]
+            .iter()
+            .find_map(|prefix| line.strip_prefix(prefix))
+            .map(str::trim)
+    }
+    let line = lines()
+        .find(|line| line.starts_with("! "))
+        .map(|line| line.trim_start_matches("! "))
+        .or_else(|| lines().find_map(prefixed))
+        .or_else(|| lines().find(|line| !line.to_ascii_lowercase().starts_with("hint:")));
+    match line {
+        Some(line) => line.split_whitespace().collect::<Vec<_>>().join(" "),
+        None => error.to_string(),
     }
 }
 
@@ -702,6 +833,35 @@ bbbb\x1fbb\x1fBo\x1f1600000000 -3600\x1f\x1fSecond\x1e\n";
         assert_eq!(commits[1].short, "bb");
         let null = b"0000\x1f0\x1fx\x1f0 0\x1f\x1f\x1e";
         assert!(parse_log(null, string_from_bytes).is_empty());
+    }
+
+    #[test]
+    fn reasons_pick_the_line_that_says_why() {
+        let failed = |stderr: &str| {
+            reason(&VcsError::Command(CommandError::Failed {
+                code: Some(1),
+                stderr: stderr.to_owned(),
+            }))
+        };
+        assert_eq!(
+            failed(
+                "To ../origin.git\n ! [rejected]        main -> main (fetch first)\n\
+                 error: failed to push some refs to '../origin.git'\nhint: Updates were rejected"
+            ),
+            "[rejected] main -> main (fetch first)"
+        );
+        assert_eq!(
+            failed("hint: Diverging branches\nfatal: Not possible to fast-forward, aborting."),
+            "Not possible to fast-forward, aborting."
+        );
+        assert_eq!(
+            failed("There is no tracking information for the current branch.\nPlease specify"),
+            "There is no tracking information for the current branch."
+        );
+        assert_eq!(
+            reason(&VcsError::InvalidArgument("x".into())),
+            "invalid argument: x"
+        );
     }
 
     #[test]

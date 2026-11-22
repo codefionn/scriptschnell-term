@@ -39,7 +39,7 @@ use crate::monitor::MonitorPanel;
 use crate::taskview::TasksPanel;
 use crate::terminal_panel::{GridStyle, TerminalPanel};
 use crate::ui::{PaletteState, Scheme, SettingsState, resolve_scheme};
-use crate::vcs_worker::{Job, Reply, Snapshot, VcsWorker};
+use crate::vcs_worker::{Job, RemoteOp, Reply, Snapshot, VcsWorker};
 
 /// Notices kept in memory; the status bar shows the newest.
 const MAX_NOTICES: usize = 4;
@@ -49,6 +49,15 @@ pub const NOTICE_TTL: Duration = Duration::from_secs(8);
 /// A terminal whose program fails this soon after it started failed to
 /// start. Its pane closes like any other, and a notice says why.
 const FAILED_START: Duration = Duration::from_secs(3);
+
+/// A fetch, pull or push that runs in a worktree, see
+/// [`Workspace::run_remote`].
+struct RemoteRun {
+    project: u64,
+    path: PathBuf,
+    /// What the notices name: the project for a fetch, else the branch.
+    label: String,
+}
 
 /// A message for the user, shown in the status bar until it expires or a
 /// newer one replaces it.
@@ -770,6 +779,8 @@ pub struct Inner {
     pub notices: VecDeque<Notice>,
     /// Raw project inputs the worker is still discovering.
     pub pending_projects: Vec<String>,
+    /// Fetches, pulls and pushes the worker runs, one per worktree at most.
+    remote_runs: Vec<RemoteRun>,
     /// The ones of `pending_projects` that open as local sessions.
     temporary_inputs: Vec<String>,
     pub ext: ExtensionHost,
@@ -995,6 +1006,7 @@ impl Workspace {
             dirty: Dirty::default(),
             notices,
             pending_projects: Vec::new(),
+            remote_runs: Vec::new(),
             temporary_inputs: Vec::new(),
             ext,
             requests: Vec::new(),
@@ -1657,6 +1669,48 @@ impl Workspace {
             project: id,
             repo,
             path: path.to_path_buf(),
+        });
+    }
+
+    /// Fetches, pulls or pushes in worktree `path` of project `id` on the
+    /// worker. A notice says when it starts and another how it ended, then
+    /// the project is read again. While one runs in a worktree, another
+    /// one there is refused with a notice.
+    pub fn run_remote(&self, id: u64, path: &Path, op: RemoteOp) {
+        let mut inner = self.0.borrow_mut();
+        let tr = inner.tr;
+        let Some(snapshot) = inner.snapshots.get(&id) else {
+            inner.push_notice(tr.repository_not_loaded.to_owned());
+            return;
+        };
+        let repo = snapshot.repo.clone();
+        let label = match op {
+            RemoteOp::Fetch => inner.state.project(id).map(|p| p.name.clone()),
+            RemoteOp::Pull | RemoteOp::Push(_) => (snapshot.worktrees.iter())
+                .find(|worktree| worktree.path == path)
+                .map(crate::ui::branch_name),
+        }
+        .unwrap_or_else(|| crate::search::folder_name(path));
+        if (inner.remote_runs.iter()).any(|run| run.project == id && run.path == path) {
+            inner.push_notice((tr.vcs_busy)(&label));
+            return;
+        }
+        let started = match &op {
+            RemoteOp::Fetch => (tr.vcs_fetching)(&label),
+            RemoteOp::Pull => (tr.vcs_pulling)(&label),
+            RemoteOp::Push(_) => (tr.vcs_pushing)(&label),
+        };
+        inner.push_notice(started);
+        inner.remote_runs.push(RemoteRun {
+            project: id,
+            path: path.to_path_buf(),
+            label,
+        });
+        inner.vcs.send(Job::Remote {
+            project: id,
+            repo,
+            path: path.to_path_buf(),
+            op,
         });
     }
 
@@ -3390,6 +3444,34 @@ impl Workspace {
             Reply::WorktreeAdded { project, path } => {
                 self.activate_worktree(project, &path);
                 self.finish_launches(project, &path);
+            }
+            Reply::RemoteDone {
+                project,
+                path,
+                op,
+                result,
+            } => {
+                let mut inner = self.0.borrow_mut();
+                let tr = inner.tr;
+                let label = match (inner.remote_runs.iter())
+                    .position(|run| run.project == project && run.path == path)
+                {
+                    Some(i) => inner.remote_runs.remove(i).label,
+                    None => crate::search::folder_name(&path),
+                };
+                let text = match (&op, result) {
+                    (RemoteOp::Fetch, Ok(_)) => (tr.vcs_fetched)(&label),
+                    (RemoteOp::Pull, Ok(_)) => (tr.vcs_pulled)(&label),
+                    (RemoteOp::Push(_), Ok(remote)) => {
+                        (tr.vcs_pushed)(&label, remote.as_deref().unwrap_or_default())
+                    }
+                    (RemoteOp::Fetch, Err(reason)) => (tr.vcs_fetch_failed)(&label, &reason),
+                    (RemoteOp::Pull, Err(reason)) => (tr.vcs_pull_failed)(&label, &reason),
+                    (RemoteOp::Push(_), Err(reason)) => (tr.vcs_push_failed)(&label, &reason),
+                };
+                inner.push_notice(text);
+                drop(inner);
+                self.reread_project(project);
             }
             Reply::Discovered {
                 input,
