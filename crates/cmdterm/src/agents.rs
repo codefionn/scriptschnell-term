@@ -1345,7 +1345,8 @@ impl Agent {
     /// The keyring secrets the agent keeps its login in, each by attributes
     /// it has. The keyring bus of bubblewrap sandboxes lets them be read,
     /// renewed and created without asking, see
-    /// `cmdterm_env::KeyringBus::set_logins`.
+    /// `cmdterm_env::KeyringBus::set_logins`. Only Linux has the keyring bus.
+    #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
     pub fn keyring_logins(self) -> &'static [&'static [(&'static str, &'static str)]] {
         match self {
             // go-keyring's entry, labeled "Password for 'antigravity' on
