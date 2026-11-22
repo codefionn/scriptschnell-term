@@ -4386,10 +4386,37 @@ fn agents_change_extensions_through_the_control_socket_with_approval() {
 #[test]
 fn agents_start_worktrees_with_agents_through_the_control_socket() {
     use crate::control::call;
+    use std::os::unix::fs::PermissionsExt;
     let dir = tempfile::tempdir().unwrap();
     let repo = repo(dir.path());
+    // A `codex` that waits, so the test does not depend on the real one
+    // being installed. Not under $TMPDIR, which sandboxes do not see.
+    let scratch = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../target/test-scratch");
+    std::fs::create_dir_all(&scratch).unwrap();
+    let bin = tempfile::tempdir_in(&scratch).unwrap();
+    let codex = bin.path().join("codex");
+    std::fs::write(&codex, "#!/bin/sh\nexec sleep 30\n").unwrap();
+    std::fs::set_permissions(&codex, std::fs::Permissions::from_mode(0o755)).unwrap();
     let ws = workspace(dir.path());
     add_project_and_wait(&ws, &repo);
+    {
+        let mut inner = ws.borrow_mut();
+        let id = inner.state.projects[0].id;
+        let path = format!(
+            "{}:{}",
+            bin.path().display(),
+            std::env::var("PATH").unwrap_or_default()
+        );
+        inner
+            .state
+            .project_mut(id)
+            .unwrap()
+            .env_vars
+            .push(crate::state::ProjectEnvVar {
+                name: "PATH".into(),
+                value: Some(path),
+            });
+    }
     wait_until(|| {
         ws.poll();
         !ws.borrow().snapshots.is_empty()
