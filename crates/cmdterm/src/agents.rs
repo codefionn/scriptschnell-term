@@ -2756,7 +2756,7 @@ pub fn resume_in(
             };
             let carry_on = carry_on && gone.is_none();
             if let Some(line) = line {
-                if !shell_ready(&input) {
+                if !shell_ready(&input, false) {
                     return;
                 }
                 input.paste(&line);
@@ -2825,11 +2825,14 @@ pub fn stop_group(group: i32) {
 /// Resumes an agent the app stopped, off the UI thread: types `line` into
 /// the shell, which waits at its prompt, and sets `done` once the agent is
 /// [`ready`], or after a minute without that. `wake` then lets the UI show
-/// the terminal again.
+/// the terminal again. `shell_back` says the shell already took the
+/// terminal's foreground back from the stopped agent, so the prompt it
+/// printed then may be the last output there is.
 pub fn thaw(
     input: crate::term::SessionInput,
     agent: &str,
     line: String,
+    shell_back: bool,
     done: Arc<std::sync::atomic::AtomicBool>,
     wake: crate::term::Wake,
 ) {
@@ -2839,7 +2842,7 @@ pub fn thaw(
         .name("cmdterm-agent-thaw".into())
         .spawn(move || {
             let seen = input.agent_session_revision();
-            if !shell_ready(&input) {
+            if !shell_ready(&input, shell_back) {
                 return;
             }
             input.paste(&line);
@@ -2886,9 +2889,10 @@ fn ready(
 /// Waits until the shell reads a command: its output stopped at a prompt
 /// it marked (OSC 133), or, for a shell that marks none, its output stopped
 /// for a while. Shells such as fish drop what was typed while a greeting
-/// still printed. Gives up waiting after 15 seconds; false only when the
-/// shell ended.
-fn shell_ready(input: &crate::term::SessionInput) -> bool {
+/// still printed. A shell that marks none has to print something first,
+/// unless `printed` says it already drew its prompt. Gives up waiting
+/// after 15 seconds; false only when the shell ended.
+fn shell_ready(input: &crate::term::SessionInput, printed: bool) -> bool {
     use std::time::{Duration, Instant};
     let first = input.revision();
     let (mut last, mut changed) = (first, Instant::now());
@@ -2903,7 +2907,7 @@ fn shell_ready(input: &crate::term::SessionInput) -> bool {
         }
         match input.at_prompt() {
             Some(prompt) => prompt,
-            None => last != first && quiet >= Duration::from_millis(700),
+            None => (printed || last != first) && quiet >= Duration::from_millis(700),
         }
     });
     !input.exited()

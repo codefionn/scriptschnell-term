@@ -569,6 +569,9 @@ impl TerminalPanel {
             ),
             None => (String::new(), None),
         };
+        // Only an agent in the foreground froze, so a terminal without a
+        // foreground group now has its shell there again.
+        let shell_back = self.session.foreground_group().is_none();
         let signal = self.thaw_signal.clone();
         let wake = self.wake.clone();
         let ready = self.thaw_ready.clone();
@@ -581,7 +584,9 @@ impl TerminalPanel {
             }
         });
         match line {
-            Some(line) => crate::agents::thaw(self.session.input(), &agent, line, ready, done),
+            Some(line) => {
+                crate::agents::thaw(self.session.input(), &agent, line, shell_back, ready, done)
+            }
             None => {
                 ready.store(true, Ordering::Release);
                 done();
