@@ -1723,7 +1723,13 @@ mod tests {
         vars.push(("PLAIN-NAME", "kept"));
         let (seen, args) = run_wrapper(policy, &vars);
         let unsets = |name: &str| (args.windows(2)).any(|w| w[0] == "--unsetenv" && w[1] == name);
-        assert!(unsets("MY-TOKEN") && unsets("my.password") && !unsets("PLAIN-NAME"));
+        // dash, Debian's and Ubuntu's `sh`, passes no such names on at all,
+        // so bwrap has nothing to unset there.
+        for name in ["MY-TOKEN", "my.password"] {
+            let inherited = seen.iter().any(|s| s == name);
+            assert!(unsets(name) || !inherited, "{name} reaches the sandbox");
+        }
+        assert!(!unsets("PLAIN-NAME"));
         for name in names {
             let kept = name == "KEPT_TOKEN" || !looks_like_credential(name);
             assert_eq!(seen.iter().any(|s| s == name), kept, "{name}");
