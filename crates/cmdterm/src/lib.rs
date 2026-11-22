@@ -159,6 +159,10 @@ pub fn main() -> ExitCode {
     if let Some(Command::Fix { agent }) = &cli.command {
         let dirs = cmdterm_env::AppDirs::resolve(cli.config_dir.as_deref());
         dirs.migrate();
+        let helpers = appimage_helpers(&dirs);
+        if let Some(bin) = &helpers {
+            cmdterm_env::set_proxy_bridge(bin.join("cmdterm-proxy-bridge"));
+        }
         // The references the prompt names, even when the app never started.
         for error in bundle::install(&dirs) {
             eprintln!("scriptschnell-term: {error}");
@@ -177,14 +181,37 @@ pub fn main() -> ExitCode {
     }
 }
 
+/// Where the helper programs are when the app runs from an AppImage: copied
+/// out of its mount into the data directory, see `cmdterm_env::appimage`.
+/// `None` for other installs, or when the copy failed; the app then runs
+/// them from beside itself.
+fn appimage_helpers(dirs: &cmdterm_env::AppDirs) -> Option<std::path::PathBuf> {
+    cmdterm_env::appimage::running_from()?;
+    match cmdterm_env::appimage::install_helpers(&dirs.data.join("bin")) {
+        Ok(bin) => Some(bin),
+        Err(error) => {
+            eprintln!(
+                "scriptschnell-term: cannot copy the helper programs out of the AppImage: {error}"
+            );
+            None
+        }
+    }
+}
+
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let dirs = cmdterm_env::AppDirs::resolve(cli.config_dir.as_deref());
     dirs.migrate();
     notifications::remove_update_leftovers();
+    let helpers = appimage_helpers(&dirs);
+    let mut client = cmdterm_env::RemoteClient::discover();
+    if let Some(bin) = &helpers {
+        cmdterm_env::set_proxy_bridge(bin.join("cmdterm-proxy-bridge"));
+        client.program = bin.join("cmdterm-remote");
+    }
     // Remote machine clients use this run's keys, not the default directory's.
     cmdterm_env::set_remote_client(cmdterm_env::RemoteClient {
         config_dir: dirs.is_single().then(|| dirs.config.clone()),
-        ..cmdterm_env::RemoteClient::discover()
+        ..client
     });
     for error in bundle::install(&dirs) {
         eprintln!("scriptschnell-term: {error}");

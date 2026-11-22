@@ -1117,6 +1117,19 @@ unset IFS
 exec bwrap "$@"
 "#;
 
+/// Binds the program of `wrapper`, the bridge that starts the command, into
+/// the sandbox at its own path. The sandbox may not see it otherwise: an
+/// AppImage runs the app and its bridge from a mount under `/tmp`, which the
+/// sandbox replaces, and every command in it would fail to start.
+fn bind_wrapper(args: &mut Vec<OsString>, wrapper: &[OsString]) {
+    let Some(program) = wrapper.first() else {
+        return;
+    };
+    if Path::new(program).is_absolute() {
+        args.extend(["--ro-bind-try".into(), program.clone(), program.clone()]);
+    }
+}
+
 /// Another environment's commands, inside a sandbox.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SandboxTarget {
@@ -1176,30 +1189,33 @@ impl SandboxTarget {
             args.push(inside.clone().into_os_string());
             args.push(inside.clone().into_os_string());
         }
-        args.push("--".into());
+        let mut wrapper: Vec<OsString> = Vec::new();
         if self.policy.isolated() {
             let proxy = self.policy.proxy.as_ref();
             let ports = self.policy.ports.as_ref();
             if proxy.is_some() || ports.is_some() {
-                args.extend(proxy_bridge().iter().cloned());
+                wrapper.extend(proxy_bridge().iter().cloned());
                 if let Some(proxy) = proxy {
-                    args.push("--port".into());
-                    args.push(proxy.port.to_string().into());
-                    args.push("--socket".into());
-                    args.push(INNER_SOCKET.into());
+                    wrapper.push("--port".into());
+                    wrapper.push(proxy.port.to_string().into());
+                    wrapper.push("--socket".into());
+                    wrapper.push(INNER_SOCKET.into());
                 }
                 if ports.is_some() {
-                    args.push("--ports".into());
-                    args.push(INNER_PORTS.into());
+                    wrapper.push("--ports".into());
+                    wrapper.push(INNER_PORTS.into());
                 }
-                args.push("--".into());
+                wrapper.push("--".into());
             }
         } else if let Some(scope) = crate::landlock::host_network_scope(&self.host) {
             // The host's network namespace holds the host's abstract Unix
             // sockets, X11's among them. A bridge scopes the sandbox away
             // from them with Landlock, then becomes the command.
-            args.extend(scope);
+            wrapper = scope;
         }
+        bind_wrapper(&mut args, &wrapper);
+        args.push("--".into());
+        args.extend(wrapper);
         args.push(command.program.clone());
         args.extend(command.args.iter().cloned());
         let with_vars = |mut lowered: EnvCommand| {
@@ -2203,6 +2219,28 @@ mod tests {
         // Only Unix sockets stay limited.
         assert!(!args[1].contains("(remote ip"));
         assert!(args.contains(&"HTTPS_PROXY=http://127.0.0.1:4321".to_owned()));
+    }
+
+    #[test]
+    fn the_bridge_is_bound_where_the_sandbox_replaces_its_directory() {
+        let mut args: Vec<OsString> = vec!["--tmpfs".into(), "/tmp".into()];
+        let bridge: OsString = "/tmp/.mount_abc/usr/bin/cmdterm-proxy-bridge".into();
+        bind_wrapper(&mut args, &[bridge.clone(), "--scope".into()]);
+        assert_eq!(
+            args,
+            [
+                OsString::from("--tmpfs"),
+                "/tmp".into(),
+                "--ro-bind-try".into(),
+                bridge.clone(),
+                bridge
+            ]
+        );
+        // A program found on PATH inside, such as the remote scope's `sh`,
+        // needs no bind.
+        bind_wrapper(&mut args, &["sh".into(), "-c".into()]);
+        bind_wrapper(&mut args, &[]);
+        assert_eq!(args.len(), 5);
     }
 
     #[test]

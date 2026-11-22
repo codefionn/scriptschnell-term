@@ -23,6 +23,7 @@ with the same file names. Use it for a scratch configuration.
 | Data: `CONFIGURATION.md` | This file | The app, on every start |
 | Data: `extensions/` | The shipped extensions, `README.md` (the extension reference) and `types/` | The app, on every start |
 | Data: `remote/` | VM images and disks | Settings page Virtual machines |
+| Data: `bin/` | `cmdterm-remote` and `cmdterm-proxy-bridge`, copied out of the AppImage, which takes them along when it quits and which sandboxes do not see | The app, on every start from an AppImage |
 | Data: `extension-data/` | What extensions keep with `term.store`, one directory per extension and one JSON file per key | Extensions |
 | Data: `project-data/` | What extensions keep per project with `term.project_store`, as `<project id>/<extension>/` | Extensions |
 | State: `state.json` | Projects, worktrees, panel layout per worktree | The app |

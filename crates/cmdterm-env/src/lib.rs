@@ -26,6 +26,7 @@ use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 
+pub mod appimage;
 mod container;
 mod copy;
 pub mod cpu;
@@ -732,6 +733,11 @@ impl EnvCommand {
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
                 }
+                if appimage::strips_runtime_vars() {
+                    for var in appimage::RUNTIME_VARS {
+                        command.env_remove(var);
+                    }
+                }
                 if let Some((key, value)) = git_bash_var() {
                     command.env(key, value);
                 }
@@ -900,6 +906,11 @@ impl EnvCommand {
                 builder.limit_cpu(self.cpu.clone().filter(|_| cpu::by_job(&self.env)));
                 if let Some(cwd) = &self.cwd {
                     builder.cwd(cwd);
+                }
+                if appimage::strips_runtime_vars() {
+                    for var in appimage::RUNTIME_VARS {
+                        builder.env_remove(var);
+                    }
                 }
                 if let Some((key, value)) = git_bash_var() {
                     builder.env(key, value);
