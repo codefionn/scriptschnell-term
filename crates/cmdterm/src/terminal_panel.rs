@@ -425,6 +425,16 @@ impl TerminalPanel {
         label.unwrap_or_else(|| "shell".to_owned())
     }
 
+    /// Whether an agent session runs here and has a title that says more
+    /// than the agent's name.
+    pub fn agent_titled(&self) -> bool {
+        if self.agent_session.borrow().is_none() {
+            return false;
+        }
+        let title = self.agent_title();
+        !title.is_empty() && !crate::agents::generic_title(&title)
+    }
+
     /// The title of the agent session in this terminal, once after it
     /// changed.
     pub fn take_agent_title(&self) -> Option<String> {

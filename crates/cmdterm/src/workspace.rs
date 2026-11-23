@@ -349,6 +349,29 @@ impl LiveWorktree {
         self.pane_panel(self.focused())
     }
 
+    /// The panel that names `tab`: a pane whose agent set a title of its
+    /// own, the focused one first, else the focused pane.
+    pub fn title_panel(&self, tab: &LiveTab) -> Option<&(u64, LivePanel)> {
+        let focused = tab.focused_panel()?;
+        let titled = |id: u64| {
+            self.panel(id).filter(|(_, panel)| {
+                matches!(panel, LivePanel::Terminal(terminal) if terminal.agent_titled())
+            })
+        };
+        if tab.layout.len() > 1 {
+            let agent = titled(focused).or_else(|| {
+                (0..tab.layout.len())
+                    .filter_map(|pane| tab.layout.get(pane))
+                    .filter(|&id| id != NO_PANEL && id != focused)
+                    .find_map(titled)
+            });
+            if agent.is_some() {
+                return agent;
+            }
+        }
+        self.panel(focused)
+    }
+
     /// Index of the tab that holds panel `id`.
     pub fn tab_of(&self, id: u64) -> Option<usize> {
         self.tabs

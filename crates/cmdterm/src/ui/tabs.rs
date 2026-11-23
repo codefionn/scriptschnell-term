@@ -410,15 +410,15 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
             return (Vec::new(), 0, 0, Vec::new());
         };
         let base_title = |tab: &crate::workspace::LiveTab| -> Option<String> {
-            let (_, panel) = live.panel(tab.focused_panel()?)?;
+            let (_, panel) = live.title_panel(tab)?;
             Some(short_title(&panel.title()))
         };
         // Tabs with the same title are told apart by a number from the
         // second on, so the strip, the menu and a screen reader never
         // offer two alike. The number goes by the age of the tab's oldest
         // panel, not by place, so moving a tab does not renumber it. It
-        // goes by the focused pane's title alone, so a tab keeps its number
-        // when a pane joins it.
+        // goes by the naming pane's title alone (a titled agent's, else the
+        // focused pane's), so a tab keeps its number when a pane joins it.
         let bases: Vec<Option<String>> = live.tabs.iter().map(base_title).collect();
         let age = |tab: &crate::workspace::LiveTab| {
             (0..tab.layout.len())
@@ -563,7 +563,7 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
             .take(shown)
             .filter_map(|(index, tab)| {
                 let id = tab.focused_panel()?;
-                let (_, panel) = live.panel(id)?;
+                let (_, panel) = live.title_panel(tab)?;
                 let panes = tab.layout.len();
                 let (icon_name, icon_svg) = kind_icon(panel);
                 let title = title_of(tab)?;
@@ -638,7 +638,7 @@ pub fn tabs(ws: &Workspace, width: f32) -> impl View + use<> {
                 let close = ws.clone();
                 let drag = ws.clone();
                 let drag_end = ws.clone();
-                // An icon before the title says what the focused pane is.
+                // An icon before the title says what the naming pane is.
                 let icon_color = if index == live.active {
                     indicator
                 } else {

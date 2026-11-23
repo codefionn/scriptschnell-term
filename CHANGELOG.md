@@ -55,6 +55,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   Linux and macOS keep the sandbox as the default.
 - The Shells page names PowerShell 7 "PowerShell 7 (pwsh)" and the built-in one
   "Windows PowerShell 5.1", so the two are told apart.
+- A tab with several panes takes its title from an agent in one of them once the
+  agent has titled its session, the focused pane's agent first. Without a titled agent
+  the tab keeps the focused pane's title.
 
 ### Fixed
 

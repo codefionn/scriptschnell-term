@@ -4931,6 +4931,19 @@ fn an_agent_session_in_a_terminal_resumes_after_a_restart() {
         let terminal = ws.active_terminal().unwrap();
         assert_eq!(terminal.title(), "Fix the login form");
         assert_eq!(terminal.agent_title(), "Fix the login form");
+        // A shell split beside it takes focus, but the tab keeps the
+        // agent's title.
+        ws.split_pane(crate::state::SplitAxis::SideBySide);
+        assert_eq!(ws.focused_pane(), 1);
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        app.frame();
+        assert!(
+            app.find_widget(
+                schnellui::a11y::Role::Tab,
+                Some("Fix the login form · 2 panes")
+            )
+            .is_some()
+        );
     }
 
     // A shell the agent ran in gets the command typed once it is ready.
