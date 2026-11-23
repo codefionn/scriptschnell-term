@@ -1,6 +1,7 @@
 //! scriptschnell-term: terminal and browser panels organized by VCS project and
 //! worktree. See SOUL.md for what it is and AGENTS.md for how to work on it.
 
+mod about;
 mod agent_sync;
 mod agents;
 mod blocklists;
@@ -113,7 +114,7 @@ struct Cli {
     palette: Option<String>,
     /// With --screenshot: open the settings at this section (project, font,
     /// color-scheme, keyboard, extensions, accounts, registries, agents, remote, vpn, sandboxing,
-    /// sandbox-files or sandbox-hosts), or at `extensions/<name>` for one
+    /// sandbox-files, sandbox-hosts, changelog or licenses), or at `extensions/<name>` for one
     /// extension's page.
     #[arg(long)]
     settings: Option<String>,
@@ -301,6 +302,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 "sandboxing" => ui::SettingsSection::Sandboxing,
                 "sandbox-files" => ui::SettingsSection::SandboxFiles,
                 "sandbox-hosts" => ui::SettingsSection::SandboxHosts,
+                "changelog" => ui::SettingsSection::Changelog,
+                "licenses" => ui::SettingsSection::Licenses,
                 _ => ui::SettingsSection::Font,
             });
             if extension.is_some() {

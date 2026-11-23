@@ -58,6 +58,10 @@ signal-hook = "0.3.18"
 # The control socket: Unix sockets, which Windows has had since 10 1803.
 uds_windows = "1.2.1"
 
+[build-dependencies]
+# Reads `cargo metadata` for the Licenses page.
+serde_json.workspace = true
+
 [dev-dependencies]
 tempfile.workspace = true
 

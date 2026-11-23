@@ -1,5 +1,5 @@
 //! The settings overlay, opened with Ctrl+, the rail's Settings button or the
-//! palette. A modal dialog with ten sections: the active project (its
+//! palette. A modal dialog with these sections: the active project (its
 //! Jujutsu choice and the folders its sandboxes may use, with Allowed and
 //! Blocked subsections for the launches and guarded requests it allowed or
 //! blocked for good),
@@ -7,7 +7,8 @@
 //! and the bindings in effect), extensions, agents (hooks that let coding
 //! agents report when they wait for the user), remote machines with its VPN
 //! networks subsection, virtual machines, sandboxing with its Files and
-//! Hosts subsections, and language. `ui/machines.rs` builds the project,
+//! Hosts subsections, language, and the About pages: the changelog and the
+//! licenses of the app and its crates. `ui/machines.rs` builds the project,
 //! machine and sandboxing pages. It is its own region; picking a section or
 //! toggling an extension rebuilds only the overlay, while a font, scheme or
 //! language change remounts the app because every region draws with it.
@@ -153,11 +154,12 @@ const NAV_WIDTH: f32 = 184.0;
 /// Room the nav's rows leave for its scrollbar when the pages scroll.
 const NAV_SCROLLBAR: f32 = 12.0;
 /// The pages that start a group in the nav, under a small heading.
-const NAV_GROUPS: [SettingsSection; 4] = [
+const NAV_GROUPS: [SettingsSection; 5] = [
     SettingsSection::Project,
     SettingsSection::Extensions,
     SettingsSection::Remote,
     SettingsSection::Sandboxing,
+    SettingsSection::Changelog,
 ];
 /// How far subsections sit right of their section in the nav.
 const SUB_INDENT: f32 = 16.0;
@@ -237,10 +239,14 @@ pub enum SettingsSection {
     /// The hosts a restricted sandbox may reach, under Sandboxing.
     SandboxHosts,
     Language,
+    /// What changed in each release, from the changelog built into the app.
+    Changelog,
+    /// The app's license and those of the crates built into it.
+    Licenses,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 18] = [
+    pub const ALL: [SettingsSection; 20] = [
         SettingsSection::Project,
         SettingsSection::ProjectAllowed,
         SettingsSection::ProjectBlocked,
@@ -259,6 +265,8 @@ impl SettingsSection {
         SettingsSection::Sandboxing,
         SettingsSection::SandboxFiles,
         SettingsSection::SandboxHosts,
+        SettingsSection::Changelog,
+        SettingsSection::Licenses,
     ];
 
     pub fn title(self, tr: &Strings) -> &'static str {
@@ -281,6 +289,8 @@ impl SettingsSection {
             SettingsSection::SandboxFiles => tr.section_sandbox_files,
             SettingsSection::SandboxHosts => tr.section_sandbox_hosts,
             SettingsSection::Language => tr.section_language,
+            SettingsSection::Changelog => tr.section_changelog,
+            SettingsSection::Licenses => tr.section_licenses,
         }
     }
 
@@ -390,6 +400,9 @@ pub struct SettingsState {
     /// The pages the forward button returns to, latest last. Going to a
     /// page drops them.
     pub forward: Vec<SettingsPlace>,
+    /// The license whose text the Licenses page shows: [`LICENSE_MIT_KEY`],
+    /// [`LICENSE_APACHE_KEY`] or a crate's name and version.
+    pub license: Option<String>,
 }
 
 impl SettingsFocusKey {
@@ -1144,6 +1157,19 @@ impl Workspace {
         inner.dirty.settings = true;
     }
 
+    /// Shows the text of license `key` on the Licenses page, or hides it
+    /// when it shows.
+    pub fn toggle_license(&self, key: &str) {
+        let mut inner = self.borrow_mut();
+        let ui = &mut inner.settings_ui;
+        ui.license = if ui.license.as_deref() == Some(key) {
+            None
+        } else {
+            Some(key.to_owned())
+        };
+        inner.dirty.settings = true;
+    }
+
     /// Closes the open dropdown, as picking an option does.
     pub fn close_picker(&self) {
         let mut inner = self.borrow_mut();
@@ -1415,6 +1441,7 @@ pub fn settings(ws: &Workspace, viewport: Size) -> Box<dyn View> {
             SettingsSection::Extensions => Some(tr.settings_group_integrations),
             SettingsSection::Remote => Some(tr.settings_group_machines),
             SettingsSection::Sandboxing => Some(tr.settings_group_sandbox),
+            SettingsSection::Changelog => Some(tr.settings_group_about),
             _ => None,
         };
         if let Some(group) = group {
@@ -1575,6 +1602,8 @@ pub fn settings(ws: &Workspace, viewport: Size) -> Box<dyn View> {
             Box::new(super::machines::sandbox_hosts_section(ws, scheme))
         }
         SettingsSection::Language => Box::new(language_section(ws, scheme)),
+        SettingsSection::Changelog => Box::new(changelog_section(ws, scheme)),
+        SettingsSection::Licenses => Box::new(licenses_section(ws, scheme)),
     };
 
     let close = ws.clone();
@@ -4551,6 +4580,213 @@ fn language_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         })
 }
 
+/// The key of the app's MIT license on the Licenses page.
+pub const LICENSE_MIT_KEY: &str = "scriptschnell-term MIT";
+/// The key of the app's Apache 2.0 license on the Licenses page.
+pub const LICENSE_APACHE_KEY: &str = "scriptschnell-term Apache-2.0";
+/// How far a nested change sits right of its parent on the Changelog page.
+const CHANGELOG_INDENT: f32 = 18.0;
+/// Width of the bullet in front of a change.
+const BULLET_WIDTH: f32 = 14.0;
+
+/// Text in ink that breaks into lines at `width`.
+fn prose<T: Into<std::borrow::Cow<'static, str>>>(text: T, width: f32) -> impl View + use<T> {
+    Column::new()
+        .width(width)
+        .child(Text::new(text).size(13.0).wrap(WrapMode::Word))
+}
+
+/// The Changelog page: the running version, then each release from the
+/// changelog built into the app, newest first, with its groups of changes.
+fn changelog_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
+    let tr = ws.tr();
+    let width = content_width() - SCROLLBAR_ROOM;
+    let mut page = Column::new().width(width).gap(GAP / 2.0).child(label(
+        scheme,
+        (tr.changelog_running)(env!("CARGO_PKG_VERSION")),
+    ));
+    for block in crate::about::changelog(crate::about::CHANGELOG) {
+        page = match block {
+            crate::about::Block::Release { version, date } => {
+                let version = if version.eq_ignore_ascii_case("unreleased") {
+                    tr.changelog_unreleased.to_owned()
+                } else {
+                    version
+                };
+                let mut heading = Row::new()
+                    .gap(PAD)
+                    .align(Align::End)
+                    .child(section_title(version));
+                if !date.is_empty() {
+                    heading = heading.child(ThemeProvider::new(
+                        scheme.muted_theme(),
+                        Text::new(date).size(12.5),
+                    ));
+                }
+                page.child(heading)
+            }
+            crate::about::Block::Group(group) => page.child(
+                Pad::insets(EdgeInsets {
+                    top: GAP / 2.0,
+                    ..EdgeInsets::default()
+                })
+                .child(ThemeProvider::new(
+                    scheme.muted_theme(),
+                    Text::new(group).size(12.5).bold(),
+                )),
+            ),
+            crate::about::Block::Item { depth, text } => {
+                let indent = depth as f32 * CHANGELOG_INDENT;
+                page.child(
+                    Row::new()
+                        .align(Align::Start)
+                        .child(
+                            Pad::insets(EdgeInsets {
+                                left: indent,
+                                ..EdgeInsets::default()
+                            })
+                            .child(
+                                Column::new().width(BULLET_WIDTH).child(ThemeProvider::new(
+                                    scheme.muted_theme(),
+                                    Text::new("•").size(13.0),
+                                )),
+                            ),
+                        )
+                        .child(prose(text, width - indent - BULLET_WIDTH)),
+                )
+            }
+            crate::about::Block::Paragraph(text) => page.child(prose(text, width)),
+        };
+    }
+    Scroll::new()
+        .label(tr.section_changelog)
+        .restoration_key(tr.section_changelog)
+        .scrollbar(true)
+        .size(content_width(), body_height())
+        .child(bottom_room(page))
+}
+
+/// A license's text indented under its row, its paragraphs joined into lines
+/// that wrap at `width`, so text written for 80 columns fills the page.
+fn license_text(page: Column, scheme: &Scheme, text: &str, width: f32) -> Column {
+    let mut body = Column::new().width(width).gap(GAP / 2.0);
+    for paragraph in text.split("\n\n") {
+        let paragraph = paragraph.split_whitespace().collect::<Vec<_>>().join(" ");
+        if !paragraph.is_empty() {
+            body = body.child(label(scheme, paragraph));
+        }
+    }
+    page.child(
+        Pad::insets(EdgeInsets {
+            left: FORM_INDENT,
+            top: GAP / 2.0,
+            bottom: GAP,
+            ..EdgeInsets::default()
+        })
+        .child(body),
+    )
+}
+
+/// A row on the Licenses page that shows its license text under it when
+/// clicked, marked as selected while it does.
+fn license_row(
+    ws: &Workspace,
+    scheme: &Scheme,
+    title: &'static str,
+    key: String,
+    open: bool,
+    width: f32,
+) -> ListRow {
+    let toggle = ws.clone();
+    list_row(title)
+        .width(width)
+        .selected(open)
+        .height(ROW_HEIGHT)
+        .selected_background(scheme.selected())
+        .on_click(move || toggle.toggle_license(&key))
+}
+
+/// The Licenses page: the app's own licenses, then every third-party crate
+/// built into it with its license. Clicking a row shows its license text
+/// under it, one at a time.
+fn licenses_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
+    let (tr, open) = {
+        let inner = ws.borrow();
+        (inner.tr, inner.settings_ui.license.clone())
+    };
+    let width = content_width() - SCROLLBAR_ROOM;
+    let text_width = width - FORM_INDENT;
+    let open = open.as_deref();
+    let mut page = Column::new()
+        .width(width)
+        .gap(GAP / 2.0)
+        .child(section_title("scriptschnell-term"))
+        .child(label(scheme, tr.licenses_app_hint));
+    for (key, title, text) in [
+        (LICENSE_MIT_KEY, tr.license_mit, crate::about::LICENSE_MIT),
+        (
+            LICENSE_APACHE_KEY,
+            tr.license_apache,
+            crate::about::LICENSE_APACHE,
+        ),
+    ] {
+        let shown = open == Some(key);
+        page = page.child(license_row(ws, scheme, title, key.to_owned(), shown, width));
+        if shown {
+            page = license_text(page, scheme, text, text_width);
+        }
+    }
+    page = page.child(section_title(tr.licenses_third_party));
+    let crates = crate::about::CRATES;
+    if crates.is_empty() {
+        page = page.child(label(scheme, tr.licenses_none));
+    } else {
+        page = page.child(label(scheme, (tr.licenses_third_party_hint)(crates.len())));
+    }
+    for krate in crates {
+        let key = format!("{} {}", krate.name, krate.version);
+        let shown = open == Some(key.as_str());
+        let license = if krate.license.is_empty() {
+            tr.license_in_file
+        } else {
+            krate.license
+        };
+        let mut row = license_row(ws, scheme, krate.name, key, shown, width)
+            .trailing(format!("{} · {license}", krate.version));
+        if !krate.repository.is_empty() {
+            row = row.tooltip(krate.repository);
+        }
+        page = page.child(row);
+        if !shown {
+            continue;
+        }
+        let mut texts = krate.license_texts().peekable();
+        if texts.peek().is_none() {
+            page = page.child(
+                Pad::insets(EdgeInsets {
+                    left: FORM_INDENT,
+                    bottom: GAP,
+                    ..EdgeInsets::default()
+                })
+                .child(wrapped_label_at(
+                    scheme,
+                    (tr.license_no_file)(license),
+                    text_width,
+                )),
+            );
+        }
+        for text in texts {
+            page = license_text(page, scheme, text, text_width);
+        }
+    }
+    Scroll::new()
+        .label(tr.section_licenses)
+        .restoration_key(tr.section_licenses)
+        .scrollbar(true)
+        .size(content_width(), body_height())
+        .child(bottom_room(page))
+}
+
 /// A scrolled page with room under its last item, so it does not touch the
 /// dialog's edge.
 fn bottom_room(page: impl View + 'static) -> Pad {
@@ -5670,6 +5906,60 @@ mod tests {
             visible_options(&app),
             [EN.automatic, "docker", "podman", "nerdctl"]
         );
+    }
+
+    #[test]
+    fn the_about_pages_show_the_changelog_and_open_one_license_at_a_time() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ws = Workspace::new(
+            StateStore::new(root.join("cfg/state.json")),
+            SettingsStore::new(root.join("cfg/settings.json")),
+            &root.join("cfg/extensions"),
+        );
+        ws.open_settings();
+        ws.show_settings_section(SettingsSection::Changelog);
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        ws.take_dirty();
+        let running = (EN.changelog_running)(env!("CARGO_PKG_VERSION"));
+        assert!(app.find_widget(Role::Label, Some(&running)).is_some());
+        assert!(app.find_widget(Role::Label, Some("Added")).is_some());
+
+        ws.show_settings_section(SettingsSection::Licenses);
+        rebuild(&ws, &mut app);
+        let mit = app.find_widget(Role::Button, Some(EN.license_mit)).unwrap();
+        app.dispatch_click(mit);
+        rebuild(&ws, &mut app);
+        assert_eq!(
+            ws.borrow().settings_ui.license.as_deref(),
+            Some(LICENSE_MIT_KEY)
+        );
+        assert!(app.find_widget(Role::Label, Some("MIT License")).is_some());
+
+        // Another row's text replaces the open one.
+        let apache = app
+            .find_widget(Role::Button, Some(EN.license_apache))
+            .unwrap();
+        app.dispatch_click(apache);
+        rebuild(&ws, &mut app);
+        assert_eq!(
+            ws.borrow().settings_ui.license.as_deref(),
+            Some(LICENSE_APACHE_KEY)
+        );
+        assert!(app.find_widget(Role::Label, Some("MIT License")).is_none());
+        let apache = app
+            .find_widget(Role::Button, Some(EN.license_apache))
+            .unwrap();
+        app.dispatch_click(apache);
+        assert_eq!(ws.borrow().settings_ui.license, None);
+
+        // The search finds both pages.
+        assert!(page_matches(SettingsSection::Licenses, "copyright", &EN));
+        assert!(page_matches(
+            SettingsSection::Changelog,
+            "release notes",
+            &EN
+        ));
     }
 
     #[test]

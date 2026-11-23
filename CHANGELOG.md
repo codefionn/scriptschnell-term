@@ -39,6 +39,11 @@ All notable changes to scriptschnell-term are in this file. The format is
   choice it starts the first agent set up on the project's machine.
 - On Windows the first-start setup asks for the shell new terminals start, among the
   shells the app found.
+- Settings has an About group with two pages. Changelog shows the running version and
+  what changed in each release. Licenses shows the app's MIT and Apache 2.0 licenses and
+  every third-party crate built into the app with its version and license; clicking a
+  row shows its license text. `--screenshot` takes `--settings changelog` and
+  `--settings licenses`.
 
 ### Changed
 

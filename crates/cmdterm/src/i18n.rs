@@ -1223,6 +1223,25 @@ pub struct Strings {
     pub settings_group_integrations: &'static str,
     pub settings_group_machines: &'static str,
     pub settings_group_sandbox: &'static str,
+    pub settings_group_about: &'static str,
+    pub section_changelog: &'static str,
+    pub section_licenses: &'static str,
+    /// The line over the changelog, with the running version.
+    pub changelog_running: fn(&str) -> String,
+    /// The changelog's heading for changes not released yet.
+    pub changelog_unreleased: &'static str,
+    pub licenses_app_hint: &'static str,
+    pub license_mit: &'static str,
+    pub license_apache: &'static str,
+    pub licenses_third_party: &'static str,
+    /// How many third-party crates the app is built with.
+    pub licenses_third_party_hint: fn(usize) -> String,
+    /// The build has no list of its crates.
+    pub licenses_none: &'static str,
+    /// A crate that names a license file instead of a license.
+    pub license_in_file: &'static str,
+    /// A crate that ships no license file, with its license.
+    pub license_no_file: fn(&str) -> String,
     pub reset_settings: &'static str,
     pub reset_settings_confirm: &'static str,
     pub reset_settings_hint: &'static str,
@@ -1471,6 +1490,10 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         }
         SettingsSection::SandboxFiles => "Additional writable paths, Hidden paths | files folders",
         SettingsSection::SandboxHosts => "Allowed hosts, Common hosts | domains allowlist proxy",
+        SettingsSection::Changelog => "Changelog | release notes version changes news what's new",
+        SettingsSection::Licenses => {
+            "MIT license, Apache License 2.0, Third-party crates | licence open source copyright notices dependencies"
+        }
     }
 }
 
@@ -1516,6 +1539,12 @@ fn keywords_de(section: SettingsSection) -> &'static str {
             "Zusätzliche beschreibbare Pfade, Verborgene Pfade | dateien ordner"
         }
         SettingsSection::SandboxHosts => "Erlaubte Hosts, Häufige Hosts | domains allowlist proxy",
+        SettingsSection::Changelog => {
+            "Änderungen | changelog versionshinweise version neuigkeiten was ist neu"
+        }
+        SettingsSection::Licenses => {
+            "MIT-Lizenz, Apache License 2.0, Crates anderer Autoren | lizenz open source urheberrecht abhängigkeiten"
+        }
     }
 }
 
@@ -2677,6 +2706,25 @@ pub static EN: Strings = Strings {
     settings_group_integrations: "INTEGRATIONS",
     settings_group_machines: "MACHINES",
     settings_group_sandbox: "SANDBOX",
+    settings_group_about: "ABOUT",
+    section_changelog: "Changelog",
+    section_licenses: "Licenses",
+    changelog_running: |version| format!("You are running version {version}."),
+    changelog_unreleased: "Unreleased",
+    licenses_app_hint: "scriptschnell-term is licensed under the MIT license or the Apache License 2.0, at your option.",
+    license_mit: "MIT license",
+    license_apache: "Apache License 2.0",
+    licenses_third_party: "Third-party crates",
+    licenses_third_party_hint: |count| {
+        format!(
+            "This app is built with {count} crates by other authors. Click one to read its license."
+        )
+    },
+    licenses_none: "This build has no list of the crates it is built with.",
+    license_in_file: "license in its files",
+    license_no_file: |license| {
+        format!("This crate ships no license file. Its license is {license}.")
+    },
     reset_settings: "Reset all settings",
     reset_settings_confirm: "Click again to reset",
     reset_settings_hint: "Restores all settings to their defaults and reopens the initial setup",
@@ -3977,6 +4025,25 @@ pub static DE: Strings = Strings {
     settings_group_integrations: "INTEGRATIONEN",
     settings_group_machines: "MASCHINEN",
     settings_group_sandbox: "SANDBOX",
+    settings_group_about: "ÜBER",
+    section_changelog: "Änderungen",
+    section_licenses: "Lizenzen",
+    changelog_running: |version| format!("Du verwendest Version {version}."),
+    changelog_unreleased: "Noch nicht veröffentlicht",
+    licenses_app_hint: "scriptschnell-term steht nach deiner Wahl unter der MIT-Lizenz oder der Apache License 2.0.",
+    license_mit: "MIT-Lizenz",
+    license_apache: "Apache License 2.0",
+    licenses_third_party: "Crates anderer Autoren",
+    licenses_third_party_hint: |count| {
+        format!(
+            "Diese App enthält {count} Crates anderer Autoren. Klicke auf eines, um seine Lizenz zu lesen."
+        )
+    },
+    licenses_none: "Dieser Build hat keine Liste der Crates, die er enthält.",
+    license_in_file: "Lizenz in seinen Dateien",
+    license_no_file: |license| {
+        format!("Dieses Crate enthält keine Lizenzdatei. Seine Lizenz ist {license}.")
+    },
     reset_settings: "Alles zurücksetzen",
     reset_settings_confirm: "Zum Bestätigen klicken",
     reset_settings_hint: "Setzt alle Einstellungen auf die Standardwerte zurück und öffnet die Ersteinrichtung",
