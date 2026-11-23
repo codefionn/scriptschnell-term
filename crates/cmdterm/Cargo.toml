@@ -54,6 +54,10 @@ url = { version = "2.5.8", optional = true }
 rustix = { version = "1.1.5", features = ["process", "stdio", "termios"] }
 signal-hook = "0.3.18"
 
+[target.'cfg(windows)'.dependencies]
+# The control socket: Unix sockets, which Windows has had since 10 1803.
+uds_windows = "1.2.1"
+
 [dev-dependencies]
 tempfile.workspace = true
 

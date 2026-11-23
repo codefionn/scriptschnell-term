@@ -1479,6 +1479,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml 1.1.8+spec-1.1.0",
  "toml_edit",
+ "uds_windows",
  "unicode-width",
  "ureq",
  "url",
@@ -7161,7 +7162,7 @@ dependencies = [
 [[package]]
 name = "schnellui"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#3bb42a297f85c4ca65310130dd6c3d74dd8197fe"
+source = "git+https://github.com/codefionn/schnellui#73326581966b5e1a273db241c646a8e185963f3a"
 dependencies = [
  "accesskit 0.25.1",
  "accesskit_winit",
@@ -7200,7 +7201,7 @@ dependencies = [
 [[package]]
 name = "schnellui-icons-md"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#3bb42a297f85c4ca65310130dd6c3d74dd8197fe"
+source = "git+https://github.com/codefionn/schnellui#73326581966b5e1a273db241c646a8e185963f3a"
 dependencies = [
  "md-icons",
  "schnellui",
@@ -7209,7 +7210,7 @@ dependencies = [
 [[package]]
 name = "schnellui-macro"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#3bb42a297f85c4ca65310130dd6c3d74dd8197fe"
+source = "git+https://github.com/codefionn/schnellui#73326581966b5e1a273db241c646a8e185963f3a"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7220,7 +7221,7 @@ dependencies = [
 [[package]]
 name = "schnellui-servo"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#3bb42a297f85c4ca65310130dd6c3d74dd8197fe"
+source = "git+https://github.com/codefionn/schnellui#73326581966b5e1a273db241c646a8e185963f3a"
 dependencies = [
  "cookie 0.18.2",
  "dpi",
@@ -7235,7 +7236,7 @@ dependencies = [
 [[package]]
 name = "schnellui-view-parser"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#3bb42a297f85c4ca65310130dd6c3d74dd8197fe"
+source = "git+https://github.com/codefionn/schnellui#73326581966b5e1a273db241c646a8e185963f3a"
 dependencies = [
  "proc-macro2",
  "quote",

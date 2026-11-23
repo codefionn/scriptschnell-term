@@ -157,6 +157,41 @@ impl Probe<'_> {
             .find(|candidate| (self.is_file)(candidate))
     }
 
+    /// The `PATH` for `program` when it is a program from Git's `usr\bin`
+    /// and `path` (the command's, else this process's) lacks that
+    /// directory: Git's `mingw64\bin` and `usr\bin` in front, as Git Bash's
+    /// profile puts them. Started from outside Git Bash, its `sh` otherwise
+    /// finds no `sed` or `base64`, and System32's `find` in place of
+    /// Git's. `None` when nothing needs to change.
+    fn msys_path(&self, program: &Path, path: Option<&OsStr>) -> Option<OsString> {
+        let usr_bin = program.parent()?;
+        let usr = usr_bin.parent()?;
+        let is = |dir: &Path, name: &str| {
+            dir.file_name()
+                .is_some_and(|n| n.eq_ignore_ascii_case(name))
+        };
+        if !is(usr_bin, "bin") || !is(usr, "usr") || !(self.is_file)(&usr_bin.join("msys-2.0.dll"))
+        {
+            return None;
+        }
+        let current = path.map(OsStr::to_os_string).or_else(|| (self.var)("PATH"));
+        let dirs: Vec<PathBuf> = current
+            .as_deref()
+            .map(|path| std::env::split_paths(path).collect())
+            .unwrap_or_default();
+        let same = |dir: &PathBuf| {
+            dir.as_os_str()
+                .to_string_lossy()
+                .trim_end_matches(['\\', '/'])
+                .eq_ignore_ascii_case(&usr_bin.to_string_lossy())
+        };
+        if dirs.iter().any(same) {
+            return None;
+        }
+        let mingw = usr.parent()?.join("mingw64").join("bin");
+        std::env::join_paths([mingw, usr_bin.to_path_buf()].into_iter().chain(dirs)).ok()
+    }
+
     /// Whether `program` runs on the MSYS runtime of Git for Windows, or on
     /// Cygwin's: its folder, or the `usr\bin` beside it as for Git Bash's
     /// `bin\bash.exe`, holds the runtime's DLL. A bare `sh` or `bash` is
@@ -314,8 +349,9 @@ pub(crate) fn git_bash_var() -> Option<(&'static str, &'static OsStr)> {
 /// The program to start for `program` on this machine, with `path` as the
 /// `PATH` the command gets when it sets one. Windows has no `sh` of its
 /// own, and Git for Windows puts only `git` on `PATH`, so there a bare
-/// `sh` or `bash` that `PATH` lacks becomes the one that comes with Git.
-/// The app's scripts need it, as does every `term.run` of `sh`. Other bare
+/// `sh`, `bash` or `tail` that `PATH` lacks becomes the one that comes with
+/// Git. The app's scripts need it, as does every `term.run` of `sh` and the
+/// terminal that follows a starting runtime's log with `tail`. Other bare
 /// names that `PATH` holds only as a batch file, such as `az.cmd` or the
 /// `claude.cmd` of npm, become its full path ([`Probe::path_program`]).
 pub(crate) fn local_program<'a>(program: &'a OsStr, path: Option<&OsStr>) -> Cow<'a, OsStr> {
@@ -324,9 +360,11 @@ pub(crate) fn local_program<'a>(program: &'a OsStr, path: Option<&OsStr>) -> Cow
         use std::sync::OnceLock;
         static GIT_SH: OnceLock<Option<PathBuf>> = OnceLock::new();
         static GIT_BASH: OnceLock<Option<PathBuf>> = OnceLock::new();
+        static GIT_TAIL: OnceLock<Option<PathBuf>> = OnceLock::new();
         let git = match program.to_str() {
             Some("sh") => Some((&GIT_SH, "sh.exe")),
             Some("bash") => Some((&GIT_BASH, "bash.exe")),
+            Some("tail") => Some((&GIT_TAIL, "tail.exe")),
             _ => None,
         };
         if let Some((cell, name)) = git
@@ -341,6 +379,21 @@ pub(crate) fn local_program<'a>(program: &'a OsStr, path: Option<&OsStr>) -> Cow
     #[cfg(not(windows))]
     let _ = path;
     Cow::Borrowed(program)
+}
+
+/// The `PATH` a command that starts `program`, as [`local_program`] gave
+/// it, needs on this machine, with `path` the `PATH` it sets: see
+/// [`Probe::msys_path`]. Always `None` on systems other than Windows.
+pub(crate) fn local_msys_path(program: &OsStr, path: Option<&OsStr>) -> Option<OsString> {
+    #[cfg(windows)]
+    {
+        machine(|probe| probe.msys_path(Path::new(program), path))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = (program, path);
+        None
+    }
 }
 
 /// The `PATH` among a command's variables, which Windows names in any case.
@@ -590,6 +643,34 @@ mod tests {
             let only_npm = path(&["/home", "npm"]);
             assert_eq!(
                 p.path_program("az".as_ref(), Some(only_npm.as_os_str())),
+                None
+            );
+        });
+    }
+
+    #[test]
+    fn gits_sh_gets_gits_tools_on_path() {
+        let sh = path(&["/git", "usr", "bin", "sh.exe"]);
+        let dll = path(&["/git", "usr", "bin", "msys-2.0.dll"]);
+        let usr_bin = path(&["/git", "usr", "bin"]);
+        let mingw = path(&["/git", "mingw64", "bin"]);
+        let win = path(&["/win"]);
+        let system = std::env::join_paths([&win]).unwrap();
+        let system = system.to_str().unwrap();
+        probe_with(&[("PATH", system)], &[sh.clone(), dll], |p| {
+            let expected = std::env::join_paths([&mingw, &usr_bin, &win]).unwrap();
+            assert_eq!(p.msys_path(&sh, None), Some(expected));
+            // A `PATH` with Git's tools stays.
+            let has = std::env::join_paths([&usr_bin, &win]).unwrap();
+            assert_eq!(p.msys_path(&sh, Some(&has)), None);
+            // The command's own `PATH` is the one that grows.
+            let own = std::env::join_paths([path(&["/mine"])]).unwrap();
+            let grown = std::env::join_paths([&mingw, &usr_bin, &path(&["/mine"])]).unwrap();
+            assert_eq!(p.msys_path(&sh, Some(&own)), Some(grown));
+            // Other programs and a `usr\bin` without the runtime stay.
+            assert_eq!(p.msys_path(&path(&["/win", "cmd.exe"]), None), None);
+            assert_eq!(
+                p.msys_path(&path(&["/other", "usr", "bin", "sh.exe"]), None),
                 None
             );
         });

@@ -22,8 +22,29 @@ All notable changes to scriptschnell-term are in this file. The format is
   through the proxy to the app. A localhost port the link names, such as an OAuth
   `redirect_uri`, is forwarded from this machine into the sandbox for 10 minutes, so
   logins like Claude Code's `/login` and `gh auth login --web` complete from a sandbox.
+- The agent integration works on Windows. The control socket is an AF_UNIX socket in
+  `%LOCALAPPDATA%\scriptschnell-term\run`, so agents in the app's terminals join the
+  agent list, message each other, take turns on locks, run `control` commands and
+  reach the debug browser's MCP server. Hooks that cannot write to their terminal, as
+  Claude Code's on Windows, report the agent's state through the new
+  `PUT /v1/uservars/NAME` endpoint instead.
+- The first time Claude Code starts in a Windows sandbox, a notice says that its shell
+  commands fail there, since it runs them through Git Bash, which cannot start in the
+  sandbox.
 
 ### Fixed
+
+- On Windows, Browse… in Open project and in the project's sandbox settings opens the
+  system's folder dialog instead of reporting that there is no folder chooser.
+- On Windows, the app draws on the GPU instead of falling back to the CPU with "no
+  usable GPU (wgpu create_surface failed: the underlying handle is not available)".
+- In Windows sandboxes, `git log` and other git commands that page no longer die with
+  a `CreateFileMapping` error from Git's `less`. The sandbox sets `PAGER=cat` unless
+  `PAGER` is set, and `GIT_PAGER` and `core.pager` still take precedence.
+- On Windows, `sh`, `bash` and `tail` from Git for Windows that the app starts get
+  Git's `usr\bin` and `mingw64\bin` on `PATH`, so extension scripts and the agent hooks
+  find `sed`, `base64` and `find`, and the terminal that shows a starting runtime's log
+  opens when the app was not started from Git Bash.
 
 - On Windows, Sign in on the Accounts page no longer fails with "program not found".
   Forge tokens, project environment variables and the remote machine key go to the

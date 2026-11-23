@@ -457,7 +457,6 @@ mod tests {
 
     /// The tools answer from what the UI thread published, over HTTP and
     /// MCP, and a wait returns once a publish changes the entry.
-    #[cfg(unix)]
     #[test]
     fn agents_read_and_wait_for_change_requests_over_the_socket() {
         use crate::control::call;

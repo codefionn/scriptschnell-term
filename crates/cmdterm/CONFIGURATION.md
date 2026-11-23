@@ -922,6 +922,14 @@ When Git for Windows is installed, every process the app starts gets
 Windows, unless the app has the variable already. A program named `sh` or `bash` that is
 not on `PATH` runs Git's `usr\bin\sh.exe` or `usr\bin\bash.exe`.
 
+Programs on Git's MSYS runtime, such as Git Bash, `sh` and Git's `less`, cannot start in
+the Windows sandbox: its write-restricted token cannot use the shared memory and pipes
+the runtime makes for the user. A sandboxed terminal whose shell is one of them starts
+the first native shell instead and says so once. The sandbox sets `PAGER=cat` unless
+`PAGER` is set, so git prints without a pager; `GIT_PAGER` and `core.pager` still win.
+Claude Code runs its shell commands through Git Bash, so in a Windows sandbox they fail,
+and the app says so the first time Claude Code starts in one.
+
 ### Update checks
 
 - `check_updates`: on by default. Ten seconds after start and every 12 hours, the app
@@ -1146,7 +1154,10 @@ take them for that terminal.
 ## Control socket
 
 The app listens on a Unix socket in `$XDG_RUNTIME_DIR/scriptschnell-term/` (else `run/`
-in the state directory), a directory only your user can open. Agents use it to
+in the state directory), a directory only your user can open. On Windows, which has
+Unix sockets since Windows 10 version 1803, it is in
+`%LOCALAPPDATA%\scriptschnell-term\run\`, in your profile, which only you, SYSTEM and
+administrators can open. Agents use it to
 list, read and change the extensions of the running app, to look up what their sandbox
 lets through and suggest a settings change, such as one more allowed host, and to create
 a worktree in their project with agents started in it. Reads need only the token.
@@ -1198,6 +1209,12 @@ worktree with Claude Code in it, started with that prompt. `--from REV` starts a
 branch at REV, `control worktree --detach --from v2.1 claude` checks out a revision
 without a branch, and `control agents --worktree feature/x codex` starts agents in an
 existing worktree.
+
+The agent hooks tell the terminal their state with OSC 1337 SetUserVar, written to the
+terminal. A hook that finds no terminal, as Claude Code's hooks on Windows, where Git's
+`sh` gets pipes and no console it knows as a terminal, sends the same value to
+`PUT /v1/uservars/cmdterm_agent` (or `cmdterm_session`) instead, with the value as the
+body. Other names get 404.
 
 The dialog for these two asks has Deny and Allow, plus two answers that cover every later
 ask from the same project. "Allow in this session" holds until the app quits. "Always
@@ -1396,4 +1413,7 @@ curl --unix-socket "$SCRIPTSCHNELL_TERM_SOCKET" \
   -X POST http://scriptschnell-term/v1/extensions/hello/apply
 ```
 
-On Windows the app has no control socket yet; terminals get only `SCRIPTSCHNELL_TERM=1`.
+On Windows `SCRIPTSCHNELL_TERM_SOCKET` is a Windows path, such as
+`C:\Users\you\AppData\Local\scriptschnell-term\run\control-1234-0.sock`. The curl of Git
+for Windows and Windows' own `curl.exe` both take it for `--unix-socket`, and the scripts
+the Agents page installs run in Git Bash.

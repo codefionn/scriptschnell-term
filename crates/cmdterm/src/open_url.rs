@@ -456,6 +456,7 @@ mod tests {
         assert_eq!(OPENED.lock().unwrap().len(), 2);
     }
 
+    #[cfg(unix)]
     static THROUGH_PROXY: Mutex<Vec<String>> = Mutex::new(Vec::new());
 
     /// The shim, the app's proxy and the opener together, as a sandbox

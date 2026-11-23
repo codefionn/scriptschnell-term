@@ -4233,7 +4233,6 @@ fn extension_tasks_run_once_per_period_and_remember_it_across_restarts() {
 /// keeps the socket name and the token its shell was started with, so the
 /// shell still reaches the control socket. Saved values that could not
 /// have come from the app are replaced.
-#[cfg(unix)]
 #[test]
 fn remote_sessions_keep_their_control_socket_and_token() {
     use crate::control::{VAR_SOCKET, VAR_TOKEN, call};
@@ -4282,7 +4281,6 @@ fn remote_sessions_keep_their_control_socket_and_token() {
 /// A terminal that waits for its runtime, such as a devcontainer on a
 /// remote machine, keeps the saved session's socket and token with its
 /// name, so a save before the runtime is ready does not lose them.
-#[cfg(unix)]
 #[test]
 fn a_terminal_waiting_for_its_runtime_keeps_its_session_control() {
     use crate::state::{PanelSpec, SessionControl};
@@ -4555,7 +4553,6 @@ fn agents_start_worktrees_with_agents_through_the_control_socket() {
 
 /// "Allow in this session" lets the project's later launches pass without
 /// a question; "Always allow in this project" also keeps that in the state.
-#[cfg(unix)]
 #[test]
 fn launches_can_be_allowed_for_the_session_or_the_project() {
     use crate::control::call;
@@ -4638,7 +4635,6 @@ fn launches_can_be_allowed_for_the_session_or_the_project() {
 
 /// An agent suggests an allowed host; Allow puts it in the settings, on
 /// disk and in what the sandbox report shows.
-#[cfg(unix)]
 #[test]
 fn agents_suggest_settings_through_the_control_socket() {
     use crate::control::call;

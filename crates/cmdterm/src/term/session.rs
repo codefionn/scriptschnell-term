@@ -557,6 +557,18 @@ impl SessionInput {
         self.0.paste(text);
     }
 
+    /// Sets user variable `name` to `value`, as if the program had written
+    /// OSC 1337 SetUserVar. For agent hooks that cannot reach the terminal,
+    /// which they tell through the control socket instead. The caller
+    /// wakes the UI.
+    pub fn set_user_var(&self, name: &str, value: &str) {
+        self.0.attention.apply(Event::UserVar {
+            name: name.to_owned(),
+            value: value.to_owned(),
+        });
+        self.0.revision.fetch_add(1, Ordering::Release);
+    }
+
     /// As [`TerminalSession::revision`].
     pub fn revision(&self) -> u64 {
         self.0.revision.load(Ordering::Acquire)

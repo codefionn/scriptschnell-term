@@ -342,6 +342,10 @@ pub enum SandboxWarning {
     /// Terminals in Windows sandboxes start `with` instead of the shell
     /// `shell`, which runs on the MSYS runtime and cannot start there.
     ShellReplaced { shell: String, with: &'static str },
+    /// Claude Code started in a Windows sandbox. It runs its shell
+    /// commands through Git Bash, which runs on the MSYS runtime and cannot
+    /// start there, so those commands fail.
+    ClaudeWithoutGitBash,
 }
 
 static PENDING: AtomicBool = AtomicBool::new(false);

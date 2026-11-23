@@ -83,7 +83,7 @@ pub use seatbelt::{
     SandboxWarning, sandbox_warnings_pending, take_sandbox_warnings, warm_seatbelt_probe,
 };
 pub use shells::{GIT_BASH_VAR, ShellOption, git_bash, installed_shells, set_default_shell};
-use shells::{git_bash_var, local_program, local_shell, path_var};
+use shells::{git_bash_var, local_msys_path, local_program, local_shell, path_var};
 #[cfg(windows)]
 pub use windows_sandbox::launch_sandboxed;
 
@@ -728,7 +728,9 @@ impl EnvCommand {
         }
         match &self.env {
             Environment::Local => {
-                let mut command = Command::new(local_program(&self.program, path_var(&self.vars)));
+                let program = local_program(&self.program, path_var(&self.vars));
+                let msys_path = local_msys_path(&program, path_var(&self.vars));
+                let mut command = Command::new(program);
                 add_local_args(&mut command, &self.args);
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
@@ -742,6 +744,9 @@ impl EnvCommand {
                     command.env(key, value);
                 }
                 command.envs(self.vars.iter().map(|(k, v)| (k, v)));
+                if let Some(path) = msys_path {
+                    command.env("PATH", path);
+                }
                 command
             }
             Environment::Ssh(target) => {
@@ -901,8 +906,9 @@ impl EnvCommand {
         }
         match &self.env {
             Environment::Local => {
-                let mut builder =
-                    pty::CommandBuilder::new(local_program(&self.program, path_var(&self.vars)));
+                let program = local_program(&self.program, path_var(&self.vars));
+                let msys_path = local_msys_path(&program, path_var(&self.vars));
+                let mut builder = pty::CommandBuilder::new(program);
                 builder.args(&self.args);
                 builder.limit_cpu(self.cpu.clone().filter(|_| cpu::by_job(&self.env)));
                 if let Some(cwd) = &self.cwd {
@@ -918,6 +924,9 @@ impl EnvCommand {
                 }
                 for (key, value) in &self.vars {
                     builder.env(key, value);
+                }
+                if let Some(path) = msys_path {
+                    builder.env("PATH", path);
                 }
                 builder.env("TERM", "xterm-256color");
                 builder

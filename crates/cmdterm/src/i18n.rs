@@ -963,6 +963,9 @@ pub struct Strings {
     /// Terminals in Windows sandboxes start the second shell instead of
     /// the first, which runs on Git's MSYS runtime.
     pub sandbox_shell_replaced: fn(&str, &str) -> String,
+    /// Claude Code started in a Windows sandbox, where Git Bash, which it
+    /// runs its shell commands through, cannot start.
+    pub sandbox_claude_without_bash: &'static str,
     /// A terminal's program exited with an error right after it started:
     /// its exit code (`None` for a signal) and its last line of output.
     pub terminal_failed_start: fn(Option<i32>, &str) -> String,
@@ -2407,6 +2410,7 @@ pub static EN: Strings = Strings {
             "{shell} cannot run in the Windows sandbox because it blocks Git's MSYS shared memory; using {with} instead"
         )
     },
+    sandbox_claude_without_bash: "Claude Code runs its shell commands through Git Bash, which cannot run in the Windows sandbox, so those commands fail there. Run it on the host or in a devcontainer to use them.",
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "signal".to_owned(), |code| format!("code {code}"));
         if output.is_empty() {
@@ -3697,6 +3701,7 @@ pub static DE: Strings = Strings {
              von Gits MSYS-Programmen blockiert; stattdessen wird {with} gestartet"
         )
     },
+    sandbox_claude_without_bash: "Claude Code führt seine Shell-Befehle über Git Bash aus, das nicht in der Windows-Sandbox laufen kann, daher schlagen sie dort fehl. Starte es auf dem Host oder in einem Devcontainer, um sie zu nutzen.",
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "Signal".to_owned(), |code| format!("Code {code}"));
         if output.is_empty() {

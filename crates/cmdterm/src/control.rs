@@ -42,6 +42,12 @@
 //! and queue for locks before heavy jobs ([`bus`]). None of those asks the
 //! user.
 //!
+//! `PUT /v1/uservars/<name>` sets the terminal's `cmdterm_agent` or
+//! `cmdterm_session` user variable, for agent hooks that cannot write OSC
+//! 1337 to their terminal, such as Claude Code's on Windows.
+//!
+//! On Windows the socket is an AF_UNIX socket too ([`windows`]).
+//!
 //! `GET /v1/change-request` reports a worktree's change request as the
 //! app's forge checks last saw it, and with `wait=` waits until it changes
 //! ([`changes`]). The MCP server offers the same as the built-in tools
@@ -73,6 +79,8 @@ use crate::agents::Agent;
 
 mod bus;
 mod changes;
+#[cfg(windows)]
+mod windows;
 
 pub use changes::{ChangeEntry, TOOLS as BUILTIN_TOOLS};
 
@@ -1023,6 +1031,7 @@ impl Control {
             ("POST", ["v1", "agents"]) => self.launch(terminal, &request.body, false),
             ("GET", ["v1", "agents"]) => self.agents(token, &terminal, request),
             (_, ["v1", "agents", "self"]) => self.agent_self(method, token, request),
+            ("PUT", ["v1", "uservars", name]) => self.user_var(token, name, &request.body),
             ("POST", ["v1", "messages"]) => self.send(token, &terminal, &request.body),
             ("GET", ["v1", "messages"]) => self.inbox(token, request),
             ("GET", ["v1", "locks"]) => {
@@ -1516,10 +1525,29 @@ impl Control {
         }
     }
 
+    /// `PUT /v1/uservars/NAME`: sets the agent user variable NAME of the
+    /// terminal to the body, as OSC 1337 SetUserVar does. The agent hooks
+    /// use it where they cannot reach the terminal, such as Claude Code's
+    /// hooks on Windows.
+    fn user_var(&self, token: &str, name: &str, body: &[u8]) -> Response {
+        use crate::term::{AGENT_VAR, SESSION_VAR};
+        if name != AGENT_VAR && name != SESSION_VAR {
+            return Response::error(404, "only cmdterm_agent and cmdterm_session can be set");
+        }
+        let Ok(value) = std::str::from_utf8(body) else {
+            return Response::error(400, "the value is not UTF-8");
+        };
+        let Some(input) = self.lock().bus.input(token).cloned() else {
+            return Response::error(409, "this terminal's session has not started");
+        };
+        input.set_user_var(name, value);
+        (self.wake)();
+        Response::json(200, &json!({ "name": name, "value": value }))
+    }
+
     /// Answers one connection. `POST /v1/locks/NAME` keeps it open while
     /// the lock is held; the others answer once.
-    #[cfg(unix)]
-    fn serve(&self, request: &Request, stream: &mut std::os::unix::net::UnixStream) {
+    fn serve(&self, request: &Request, stream: &mut Stream) {
         let path = request.path.split('?').next().unwrap_or("");
         if request.method == "POST"
             && let Some(name) = path.strip_prefix("/v1/locks/")
@@ -1544,14 +1572,7 @@ impl Control {
     /// `DELETE /v1/locks/NAME` freed it. An empty line follows every
     /// [`LOCK_PULSE`] without other news. The client closing the connection
     /// gives the lock back at once.
-    #[cfg(unix)]
-    fn hold(
-        &self,
-        token: &str,
-        name: &str,
-        body: &[u8],
-        stream: &mut std::os::unix::net::UnixStream,
-    ) {
+    fn hold(&self, token: &str, name: &str, body: &[u8], stream: &mut Stream) {
         use std::io::{Read, Write};
         let request = match lock_request(name, body) {
             Ok(request) => request,
@@ -2031,16 +2052,10 @@ fn percent_decode(text: &str) -> String {
 /// `len` random bytes as hex, from the system's generator.
 pub(crate) fn random_hex(len: usize) -> String {
     let mut bytes = vec![0u8; len];
-    #[cfg(unix)]
-    {
-        use std::io::Read;
-        if let Ok(mut random) = std::fs::File::open("/dev/urandom") {
-            let _ = random.read_exact(&mut bytes);
-        }
-    }
-    // Without /dev/urandom, mix what differs per call. Tokens then only
-    // name a terminal; the socket's directory still keeps others out.
-    if bytes.iter().all(|&b| b == 0) {
+    // The system's generator does not fail on any platform the app runs on;
+    // should it, mix what differs per call. Tokens then only name a
+    // terminal; the socket's directory still keeps others out.
+    if getrandom::fill(&mut bytes).is_err() {
         use std::hash::{BuildHasher, Hasher};
         for chunk in bytes.chunks_mut(8) {
             let mut hasher = std::collections::hash_map::RandomState::new().build_hasher();
@@ -2211,6 +2226,16 @@ impl Response {
     }
 }
 
+/// A connection to the socket, see [`windows`] for Windows.
+#[cfg(unix)]
+type Stream = std::os::unix::net::UnixStream;
+#[cfg(windows)]
+use windows::Stream;
+#[cfg(unix)]
+type Listener = std::os::unix::net::UnixListener;
+#[cfg(windows)]
+use windows::Listener;
+
 /// The directory the socket goes in: the user's runtime directory, else
 /// `run/` in the state directory. Created with mode 0700.
 #[cfg(unix)]
@@ -2221,6 +2246,20 @@ fn socket_dir(state_dir: &Path) -> std::io::Result<PathBuf> {
         .unwrap_or_else(|| state_dir.join("run"));
     std::fs::create_dir_all(&dir)?;
     std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700))?;
+    Ok(dir)
+}
+
+/// The directory the socket goes in on Windows: `scriptschnell-term\run`
+/// in the user's local application data, else `run\` in the state
+/// directory. The profile's folders let only this user, SYSTEM and
+/// administrators in, and the directory inherits that. A short path
+/// matters: a socket's path has to fit in 108 bytes.
+#[cfg(windows)]
+fn socket_dir(state_dir: &Path) -> std::io::Result<PathBuf> {
+    let dir = std::env::var_os("LOCALAPPDATA")
+        .map(|dir| PathBuf::from(dir).join("scriptschnell-term").join("run"))
+        .unwrap_or_else(|| state_dir.join("run"));
+    std::fs::create_dir_all(&dir)?;
     Ok(dir)
 }
 
@@ -2276,21 +2315,23 @@ impl Drop for Server {
 /// Starts the control socket for `extensions_dir`, with its socket in the
 /// runtime directory or else in `state_dir`. `wake` runs on a connection's
 /// thread when a change starts or stops waiting.
-#[cfg(unix)]
 pub fn start(
     extensions_dir: &Path,
     state_dir: &Path,
     wake: impl Fn() + Send + Sync + 'static,
 ) -> std::io::Result<Server> {
-    use std::os::unix::net::UnixListener;
     use std::sync::Arc;
     use std::sync::atomic::AtomicUsize;
     static NEXT: AtomicUsize = AtomicUsize::new(0);
     let dir = socket_dir(state_dir)?;
     let n = NEXT.fetch_add(1, Ordering::Relaxed);
+    #[cfg(windows)]
+    if n == 0 {
+        windows::remove_stale(&dir);
+    }
     let socket = dir.join(format!("control-{}-{n}.sock", std::process::id()));
     let _ = std::fs::remove_file(&socket);
-    let listener = UnixListener::bind(&socket)?;
+    let listener = Listener::bind(&socket)?;
     let control = Arc::new(Control::new(
         socket,
         extensions_dir.to_path_buf(),
@@ -2320,6 +2361,12 @@ pub fn start(
                                 let _ = Response::error(status, &message).write(&mut stream);
                             }
                         }
+                        // The client reads until the end of the stream. On
+                        // Windows a child process started at the moment of
+                        // `accept` may inherit the socket before
+                        // `uds_windows` marks it as not inheritable; then
+                        // dropping it alone would not end the stream.
+                        let _ = stream.shutdown(std::net::Shutdown::Both);
                         open.fetch_sub(1, Ordering::SeqCst);
                     });
             }
@@ -2327,15 +2374,8 @@ pub fn start(
     Ok(Server { control })
 }
 
-#[cfg(not(unix))]
-pub fn start(_: &Path, _: &Path, _: impl Fn() + Send + Sync + 'static) -> std::io::Result<Server> {
-    Err(std::io::Error::other(
-        "the control socket needs Unix sockets",
-    ))
-}
-
 /// Sends one request to `socket` and returns the status and body.
-#[cfg(all(test, unix))]
+#[cfg(test)]
 pub(crate) fn call(
     socket: &Path,
     method: &str,
@@ -2344,7 +2384,7 @@ pub(crate) fn call(
     body: &[u8],
 ) -> (u16, String) {
     use std::io::{Read, Write};
-    let mut stream = std::os::unix::net::UnixStream::connect(socket).unwrap();
+    let mut stream = Stream::connect(socket).unwrap();
     write!(
             stream,
             "{method} {path} HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: {}\r\n\r\n",
@@ -2359,7 +2399,7 @@ pub(crate) fn call(
     (status, body)
 }
 
-#[cfg(all(test, unix))]
+#[cfg(test)]
 mod tests {
     use super::*;
     use std::sync::Arc;
@@ -3003,5 +3043,27 @@ mod tests {
         assert_eq!(status, 400);
         assert!(body.contains("manifest.toml"), "{body}");
         assert!(server.control.pending().is_none());
+    }
+
+    /// Many connections at once each get their whole answer and the end
+    /// of the stream. On Windows a blocking read could miss either.
+    #[test]
+    fn concurrent_connections_all_finish() {
+        let workers: Vec<_> = (0..8)
+            .map(|_| {
+                std::thread::spawn(|| {
+                    let dir = tempfile::tempdir().unwrap();
+                    let server = start(&dir.path().join("extensions"), dir.path(), || {}).unwrap();
+                    let socket = server.control.socket().to_path_buf();
+                    let token = server.control.register(terminal());
+                    for _ in 0..100 {
+                        assert_eq!(call(&socket, "GET", "/v1/ports", &token, b"").0, 404);
+                    }
+                })
+            })
+            .collect();
+        for worker in workers {
+            worker.join().unwrap();
+        }
     }
 }

@@ -286,6 +286,11 @@ impl Bus {
         self.peers.get(token)
     }
 
+    /// Types into the terminal of `token`, once its session started.
+    pub fn input(&self, token: &str) -> Option<&SessionInput> {
+        self.peers.get(token)?.input.as_ref()
+    }
+
     pub fn joined(&self, token: &str) -> bool {
         self.peers.get(token).is_some_and(|p| p.member.is_some())
     }

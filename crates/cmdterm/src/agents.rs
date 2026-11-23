@@ -13,6 +13,9 @@
 //! worktree. Escape sequences pass through SSH, so the same files work on a
 //! remote host; they are read and written through [`Environment`], in the
 //! home directory of the machine the project lives on.
+//! A hook that finds no terminal to write to, as Claude Code's on Windows,
+//! where Git's `sh` runs with pipes and no terminal of its own, sends the
+//! value through the control socket instead (`PUT /v1/uservars/...`).
 //!
 //! Mistral Vibe and Antigravity CLI report their state themselves (OSC 7501,
 //! see `term`), so their integration is only the skills and the debug
@@ -89,6 +92,9 @@ const BROWSER_MCP: &str = r#"#!/bin/sh
 # for the debug browser of the scriptschnell-term app this terminal belongs
 # to. Each message goes to the app's control socket; the app keeps no state
 # per connection. Outside the app it offers no tools.
+# Git's sh on Windows, when a program other than Git Bash starts it, lacks
+# /usr/bin on PATH, where its tools are. Elsewhere PATH stays as it is.
+[ -e /usr/bin/msys-2.0.dll ] && case :$PATH: in *:/usr/bin:*) ;; *) PATH=/usr/bin:$PATH ;; esac
 id_of() {
   printf '%s' "$1" | sed -nE 's/.*"id"[[:space:]]*:[[:space:]]*("[^"]*"|-?[0-9]+).*/\1/p'
 }
@@ -151,6 +157,9 @@ const HELPER: &str = r#"#!/bin/sh
 # `context` and `end` also name the agent and its session in the
 # cmdterm_session user variable, which the app resumes on its next start.
 #   session AGENT [ID]     only that, for agents without session hooks
+# Git's sh on Windows, when a program other than Git Bash starts it, lacks
+# /usr/bin on PATH, where its tools are. Elsewhere PATH stays as it is.
+[ -e /usr/bin/msys-2.0.dll ] && case :$PATH: in *:/usr/bin:*) ;; *) PATH=/usr/bin:$PATH ;; esac
 state=${1:-clear}
 message=${2:-}
 shape=${3:-}
@@ -191,8 +200,19 @@ emit() {
   done
   return 1
 }
+# Sets user variable $1 to $2, and $3 to $4 if given: through the terminal,
+# else through the control socket. Hooks that Claude Code starts on Windows
+# have no terminal for Git's sh, and their parents have no /proc entries.
+tell() {
+  seq=$(uservar "$1" "$2")
+  [ "$#" -lt 4 ] || seq="$seq$(uservar "$3" "$4")"
+  emit "$seq" && return 0
+  reach || return 1
+  sh "$control" hook-uservar "$1" "$2" 2>/dev/null
+  [ "$#" -lt 4 ] || sh "$control" hook-uservar "$3" "$4" 2>/dev/null
+}
 if [ "$state" = session ]; then
-  emit "$(uservar cmdterm_session "$message${shape:+:$shape}")"
+  tell cmdterm_session "$message${shape:+:$shape}"
   exit 0
 fi
 # `context` prints what a starting session should know, as hook JSON, and
@@ -205,7 +225,7 @@ if [ "$state" = context ]; then
   [ -t 0 ] || json=$(cat)
   session=$(field session_id)
   [ -n "$session" ] || session=$(field sessionId)
-  emit "$(uservar cmdterm_session "$message${session:+:$session}")"
+  tell cmdterm_session "$message${session:+:$session}"
   text='This shell runs in a terminal of scriptschnell-term, a terminal workspace organized by project and worktree. The configure-scriptschnell-term skill covers its settings and Lua extensions; the scriptschnell-term-sandbox skill explains its sandbox and what to do when a command fails there.'
   if reach; then
     text="$text This terminal reaches the app's control socket: sh ~/.local/share/cmdterm/control help lists, reads and changes the app's extensions, shows what the sandbox allows (control sandbox), suggests settings changes such as an allowed host (control allow-host) and starts agents in new worktrees. Each change waits until the user allows it in the app, and it applies to the app and the machine it runs on, also when this shell runs on another one."
@@ -250,9 +270,11 @@ after() {
 }
 value=$state
 [ -n "$message" ] && value="$state:$message"
-seq=$(uservar cmdterm_agent "$value")
-[ "$hook" = end ] && seq="$seq$(uservar cmdterm_session '')"
-emit "$seq"
+if [ "$hook" = end ]; then
+  tell cmdterm_agent "$value" cmdterm_session ''
+else
+  tell cmdterm_agent "$value"
+fi
 after
 "#;
 
@@ -261,6 +283,9 @@ const CONTROL: &str = r#"#!/bin/sh
 # Installed by scriptschnell-term (Settings, Agents). Talks to the
 # scriptschnell-term app this terminal belongs to, through its control
 # socket. Every change waits until the user allows it in the app.
+# Git's sh on Windows, when a program other than Git Bash starts it, lacks
+# /usr/bin on PATH, where its tools are. Elsewhere PATH stays as it is.
+[ -e /usr/bin/msys-2.0.dll ] && case :$PATH: in *:/usr/bin:*) ;; *) PATH=/usr/bin:$PATH ;; esac
 usage() {
   cat <<'USAGE'
 Usage: control COMMAND [ARGS]
@@ -544,6 +569,12 @@ case $command in
     max_time=5 call GET "/messages?format=hook&event=$1&shape=${2:-}"
     ;;
   hook-stop) max_time=5 call GET '/messages?format=stop' ;;
+  hook-uservar)
+    # Used by the hooks where the terminal is out of reach: set user
+    # variable NAME of this terminal to VALUE, as OSC 1337 SetUserVar would.
+    need 2 $#
+    max_time=5 call PUT "/uservars/$1" --data-binary "$2" >/dev/null
+    ;;
   who)
     scope=all format='&format=text'
     for arg in "$@"; do
@@ -3820,7 +3851,6 @@ mod tests {
             .collect()
     }
 
-    #[cfg(unix)]
     #[test]
     fn the_browser_mcp_server_offers_tools_only_inside_the_app() {
         let curl = Environment::Local.command("curl").arg("--version").output();
@@ -3890,7 +3920,6 @@ mod tests {
 
     /// The client stages a directory and applies it through a real control
     /// socket; the user's answer comes from this test.
-    #[cfg(unix)]
     #[test]
     fn the_control_client_pushes_an_extension() {
         let curl = Environment::Local.command("curl").arg("--version").output();
@@ -4001,7 +4030,6 @@ mod tests {
 
     /// Two agents find each other, message each other through the hooks
     /// and take turns on a lock, through the client and a real socket.
-    #[cfg(unix)]
     #[test]
     fn agents_join_message_each_other_and_take_turns_on_a_lock() {
         let curl = Environment::Local.command("curl").arg("--version").output();
@@ -4135,7 +4163,8 @@ mod tests {
         let marks = dir.path().join("marks");
         let marks_text = marks.to_string_lossy().into_owned();
         let first = {
-            let script = format!("echo a1 >> {marks_text}; sleep 1; echo a2 >> {marks_text}");
+            // Quoted, so a Windows path keeps its backslashes.
+            let script = format!("echo a1 >> '{marks_text}'; sleep 1; echo a2 >> '{marks_text}'");
             let (dir, socket, token) =
                 (dir.path().to_path_buf(), socket.clone(), tokens[0].clone());
             std::thread::spawn(move || {
@@ -4166,7 +4195,7 @@ mod tests {
                 "cargo",
                 "sh",
                 "-c",
-                &format!("echo b >> {marks_text}; exit 7"),
+                &format!("echo b >> '{marks_text}'; exit 7"),
             ],
         );
         assert_eq!(second.status.code(), Some(7));
@@ -4272,6 +4301,52 @@ cat "$out/second" "$out/second.err"
         )
         .unwrap();
         (dir, session)
+    }
+
+    /// Hooks that cannot reach their terminal, such as Claude Code's on
+    /// Windows, set its user variables through the control socket.
+    #[test]
+    fn hooks_reach_the_terminal_through_the_control_socket() {
+        let curl = Environment::Local.command("curl").arg("--version").output();
+        if !curl.is_ok_and(|out| out.status.success()) {
+            eprintln!("skipped: no curl");
+            return;
+        }
+        // `read` waits without needing a program from PATH.
+        let (dir, session) = helper_terminal("read -r line");
+        std::fs::create_dir_all(dir.path().join(CONTROL_PATH).parent().unwrap()).unwrap();
+        std::fs::write(dir.path().join(CONTROL_PATH), CONTROL).unwrap();
+        let server =
+            crate::control::start(&dir.path().join("extensions"), dir.path(), || {}).unwrap();
+        let control = server.control.clone();
+        let token = control.register(crate::control::Terminal {
+            project_id: None,
+            project: "app".into(),
+            worktree: "/src/app".into(),
+            machine: "local".into(),
+            kind: "local",
+        });
+        control.attach(&token, session.status(), session.input());
+        let socket = control.socket().to_string_lossy().into_owned();
+        let set = |name: &str, value: &str| {
+            run_helper(
+                dir.path(),
+                CONTROL_PATH,
+                &["hook-uservar", name, value],
+                &[
+                    ("SCRIPTSCHNELL_TERM_SOCKET", &socket),
+                    ("SCRIPTSCHNELL_TERM_TOKEN", &token),
+                ],
+            )
+            .status
+            .code()
+        };
+        assert_eq!(set("cmdterm_agent", "permission:Bash"), Some(0));
+        assert_eq!(session.attention(), crate::term::Attention::Permission);
+        assert_eq!(session.attention_message(), "Bash");
+        assert_eq!(set("cmdterm_session", "claude:3f2a-11"), Some(0));
+        assert_eq!(session.agent_session(), "claude:3f2a-11");
+        assert_eq!(set("PATH", "/tmp"), Some(1), "only the agent's variables");
     }
 
     #[test]

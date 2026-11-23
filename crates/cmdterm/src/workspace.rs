@@ -1324,6 +1324,9 @@ impl Workspace {
                 cmdterm_env::SandboxWarning::ShellReplaced { shell, with } => {
                     (inner.tr.sandbox_shell_replaced)(&shell, with)
                 }
+                cmdterm_env::SandboxWarning::ClaudeWithoutGitBash => {
+                    inner.tr.sandbox_claude_without_bash.to_owned()
+                }
             };
             inner.push_notice(text);
         }
@@ -5242,9 +5245,7 @@ impl Inner {
                     self.publish_environment();
                 }
                 Err(error) => {
-                    if cfg!(unix) {
-                        self.push_notice((self.tr.control_failed)(&error.to_string()));
-                    }
+                    self.push_notice((self.tr.control_failed)(&error.to_string()));
                     self.control = Some(None);
                 }
             }

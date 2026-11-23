@@ -815,6 +815,15 @@ impl SandboxPolicy {
             args.push("--set".into());
             args.push(format!("{key}={value}").into());
         }
+        // Git's default pager is the `less` of Git for Windows, which runs on
+        // the MSYS runtime and dies in this sandbox (see
+        // `shells::Probe::sandbox_shell`), so `git log` failed. Git takes a
+        // pager of `cat` as none, after `GIT_PAGER` and `core.pager`, so a
+        // pager the user chose still wins.
+        if !set("PAGER") && std::env::var_os("PAGER").is_none() {
+            args.push("--set".into());
+            args.push("PAGER=cat".into());
+        }
         for (var, pipe) in &self.pipes {
             args.push("--pipe".into());
             args.push(format!("{var}={pipe}").into());
@@ -1384,6 +1393,14 @@ impl SandboxTarget {
         } else {
             command.program.clone()
         };
+        let stem = Path::new(&program).file_stem().unwrap_or_default();
+        if self.host.is_local() && stem.eq_ignore_ascii_case("claude") {
+            use std::sync::atomic::{AtomicBool, Ordering};
+            static TOLD: AtomicBool = AtomicBool::new(false);
+            if !TOLD.swap(true, Ordering::Relaxed) {
+                crate::seatbelt::warn(crate::SandboxWarning::ClaudeWithoutGitBash);
+            }
+        }
         args.push(program);
         args.extend(command.args.iter().cloned());
         self.host.command(launcher()).args(args)
@@ -1988,10 +2005,16 @@ mod tests {
             SandboxLaunch {
                 writable: vec![PathBuf::from("C:/work")],
                 unset: vec!["SSH_AUTH_SOCK".into()],
-                vars: vec![
-                    ("HISTFILE".into(), "C:/h".into()),
-                    ("A".into(), "b=c".into())
-                ],
+                vars: [("HISTFILE", "C:/h")]
+                    .into_iter()
+                    .chain(
+                        std::env::var_os("PAGER")
+                            .is_none()
+                            .then_some(("PAGER", "cat"))
+                    )
+                    .chain([("A", "b=c")])
+                    .map(|(key, value)| (key.into(), value.into()))
+                    .collect(),
                 pipes: vec![("DOCKER_HOST".into(), "docker_engine".into())],
                 readable: vec![],
                 appcontainer: None,
@@ -2004,7 +2027,7 @@ mod tests {
                     percent: 50
                 }),
                 cwd: Some(PathBuf::from("C:/work")),
-                program: "git".into(),
+                program: crate::shells::local_program("git".as_ref(), None).into_owned(),
                 args: vec!["status".into(), "--".into()],
             }
         );
@@ -2049,7 +2072,8 @@ mod tests {
         assert_eq!(launch.readable, [PathBuf::from("C:/Users/me/.cargo")]);
         assert_eq!(launch.appcontainer, Some("cmdterm-sandbox-7".into()));
         assert_eq!(launch.ports_tcp, Some((5555, "abc123".into())));
-        assert_eq!(launch.program, "cargo");
+        let cargo = crate::shells::local_program("cargo".as_ref(), None);
+        assert_eq!(launch.program, cargo);
 
         // Without the setting, none of the AppContainer flags appear, but
         // the proxy variables still do.
@@ -2126,6 +2150,28 @@ mod tests {
         assert_eq!(launch.read_only.len(), 1);
         assert!(launch.hidden.is_empty());
         assert_eq!(launch.profile, Some("cmdterm-sandbox-7".into()));
+    }
+
+    #[test]
+    fn a_windows_sandbox_turns_gits_msys_pager_off_unless_a_pager_is_set() {
+        let mut policy = SandboxPolicy::local(vec![PathBuf::from("C:/work")], &[], true);
+        policy.kind = SandboxKind::Windows;
+        let pager = |command: &EnvCommand| {
+            let lowered =
+                SandboxTarget::new(Environment::Local, policy.clone()).lower(command, true);
+            let launch = SandboxLaunch::parse(lowered.args.iter().cloned()).unwrap();
+            (launch.vars.iter().rev())
+                .find(|(key, _)| key == "PAGER")
+                .map(|(_, value)| value.clone())
+        };
+        if std::env::var_os("PAGER").is_none() {
+            assert_eq!(
+                pager(&Environment::Local.command("git")),
+                Some("cat".into())
+            );
+        }
+        let own = Environment::Local.command("git").var("PAGER", "more");
+        assert_eq!(pager(&own), Some("more".into()));
     }
 
     #[test]
