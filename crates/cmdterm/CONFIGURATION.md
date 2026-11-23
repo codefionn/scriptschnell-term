@@ -910,8 +910,10 @@ through `sh` on the host, so they need a POSIX shell there.
 ### Shells on Windows
 
 Settings, Shells lists the shells the app finds: Git Bash (`git-bash`), PowerShell 7
-(`pwsh`), Windows PowerShell (`powershell`), the Command Prompt (`cmd`) and `wsl`. The page
-is missing on other systems, where terminals start `$SHELL`.
+(`pwsh`, also the Microsoft Store's), Windows PowerShell 5.1 (`powershell`), the Command
+Prompt (`cmd`) and `wsl`. The page is missing on other systems, where terminals start
+`$SHELL`. A tab whose shell titles it with its program's full path, as ConPTY does, shows
+the program's name.
 
 - `shell`: the shell new terminals start on this machine and in its sandboxes. An id from
   the list, a program path, or a list of program and arguments, such as

@@ -261,12 +261,18 @@ impl Probe<'_> {
                 argv: argv(bash, &["--login", "-i"]),
             });
         }
+        // PATH first; then the installs of the MSI and winget, and the
+        // app execution alias of the Microsoft Store's PowerShell, for a
+        // PATH that lacks them.
         let pwsh = (self.on_path("pwsh.exe"))
-            .or_else(|| self.file("ProgramFiles", &["PowerShell", "7", "pwsh.exe"]));
+            .or_else(|| self.file("ProgramFiles", &["PowerShell", "7", "pwsh.exe"]))
+            .or_else(|| self.file("ProgramW6432", &["PowerShell", "7", "pwsh.exe"]))
+            .or_else(|| self.file("ProgramFiles", &["PowerShell", "7-preview", "pwsh.exe"]))
+            .or_else(|| self.file("LOCALAPPDATA", &["Microsoft", "WindowsApps", "pwsh.exe"]));
         if let Some(pwsh) = pwsh {
             out.push(ShellOption {
                 id: "pwsh",
-                name: "PowerShell",
+                name: "PowerShell 7 (pwsh)",
                 argv: argv(pwsh, &["-NoLogo"]),
             });
         }
@@ -274,7 +280,7 @@ impl Probe<'_> {
         if let Some(powershell) = system(&powershell) {
             out.push(ShellOption {
                 id: "powershell",
-                name: "Windows PowerShell",
+                name: "Windows PowerShell 5.1",
                 argv: argv(powershell, &["-NoLogo"]),
             });
         }
@@ -303,8 +309,17 @@ impl Probe<'_> {
 fn machine<T>(read: impl FnOnce(&Probe) -> T) -> T {
     read(&Probe {
         var: &|name| std::env::var_os(name),
-        is_file: &|path| path.is_file(),
+        is_file: &is_program_file,
     })
+}
+
+/// Whether `path` is a file, counting the app execution aliases of
+/// `WindowsApps`, such as the Microsoft Store's `pwsh.exe`.
+/// [`Path::is_file`] follows their reparse point, which fails, though
+/// `CreateProcess` starts them.
+#[cfg(windows)]
+fn is_program_file(path: &Path) -> bool {
+    path.is_file() || std::fs::symlink_metadata(path).is_ok_and(|meta| meta.file_type().is_file())
 }
 
 /// The shells installed on this machine, found once. Empty on systems other
@@ -558,6 +573,38 @@ mod tests {
     }
 
     #[test]
+    fn the_store_powershell_is_found_without_path() {
+        let alias = path(&["/local", "Microsoft", "WindowsApps", "pwsh.exe"]);
+        let shells = probe_with(
+            &[("LOCALAPPDATA", "/local")],
+            std::slice::from_ref(&alias),
+            |p| p.shells(),
+        );
+        assert_eq!(shells[0].id, "pwsh");
+        assert_eq!(shells[0].argv, [OsString::from(alias), "-NoLogo".into()]);
+    }
+
+    /// The Store's alias of `pwsh.exe` is a reparse point that
+    /// [`Path::is_file`] cannot follow; the probe counts it.
+    #[cfg(windows)]
+    #[test]
+    fn app_execution_aliases_count_as_programs() {
+        let Some(local) = std::env::var_os("LOCALAPPDATA") else {
+            return;
+        };
+        let dir = Path::new(&local).join("Microsoft").join("WindowsApps");
+        let Ok(entries) = std::fs::read_dir(&dir) else {
+            return;
+        };
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.extension().is_some_and(|ext| ext == "exe") {
+                assert!(is_program_file(&path), "{}", path.display());
+            }
+        }
+    }
+
+    #[test]
     fn sandboxes_start_a_native_shell_for_one_on_msys() {
         let git_bash = path(&["/pf", "Git", "bin", "bash.exe"]);
         let msys = path(&["/pf", "Git", "usr", "bin", "msys-2.0.dll"]);
@@ -580,7 +627,7 @@ mod tests {
             assert!(!p.is_msys(cmd.as_os_str()));
             let (shell, replaced) = p.sandbox_shell(vec![git_bash.clone().into(), "-i".into()]);
             assert_eq!(shell, [OsString::from(&pwsh), "-NoLogo".into()]);
-            assert_eq!(replaced, Some("PowerShell"));
+            assert_eq!(replaced, Some("PowerShell 7 (pwsh)"));
             let native = vec![cmd.clone().into_os_string()];
             assert_eq!(p.sandbox_shell(native.clone()), (native, None));
         });

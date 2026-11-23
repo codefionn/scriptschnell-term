@@ -41,6 +41,8 @@ All notable changes to scriptschnell-term are in this file. The format is
   in it at all. A devcontainer still isolates a worktree. Worktrees saved in a sandbox
   before this change run on the host too; pick the sandbox again to keep one there.
   Linux and macOS keep the sandbox as the default.
+- The Shells page names PowerShell 7 "PowerShell 7 (pwsh)" and the built-in one
+  "Windows PowerShell 5.1", so the two are told apart.
 
 ### Fixed
 
@@ -85,6 +87,10 @@ All notable changes to scriptschnell-term are in this file. The format is
   and `console.anthropic.com` whenever `api.anthropic.com` is allowed, also with
   settings saved before this change, and a renewed or new login reaches running Claude
   Code sessions in the other sandboxes through that shared file.
+- PowerShell 7 is found on Windows when `PATH` lacks it: in `Program Files`, as a
+  preview, or as the Microsoft Store's app execution alias in `WindowsApps`.
+- Tabs on Windows no longer show a shell's full program path as their title, as ConPTY
+  reports it (`C:\Program Files\WindowsApps\...\pwsh.exe`); they show `pwsh`.
 
 ## [0.1.2] - 2026-11-23
 

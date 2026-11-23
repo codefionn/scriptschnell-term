@@ -410,7 +410,7 @@ impl TerminalPanel {
     pub fn title(&self) -> String {
         let label = self.fixed_title.clone().or_else(|| {
             let term = self.session.lock();
-            let title = term.title().trim();
+            let title = program_title(term.title().trim());
             (!title.is_empty()).then(|| title.to_owned())
         });
         let generic = label
@@ -1079,6 +1079,31 @@ pub fn find_url(line: &str, column: usize) -> Option<&str> {
     (url.len() > "http://".len() && is_web_url(url)).then_some(url)
 }
 
+/// `title` without the folders and extension when it is only the path of a
+/// program, as the console title ConPTY reports on Windows
+/// (`C:\Program Files\WindowsApps\...\pwsh.exe` becomes `pwsh`). Any other
+/// title stays as it is.
+pub(crate) fn program_title(title: &str) -> &str {
+    let windows_path = title.len() > 3
+        && title.as_bytes()[0].is_ascii_alphabetic()
+        && title[1..].starts_with(":\\");
+    if !windows_path {
+        return title;
+    }
+    let name = title.rsplit('\\').next().unwrap_or(title);
+    let Some((stem, ext)) = name.rsplit_once('.') else {
+        return title;
+    };
+    let program = ["exe", "com", "bat", "cmd"]
+        .iter()
+        .any(|known| ext.eq_ignore_ascii_case(known));
+    if program && !stem.is_empty() {
+        stem
+    } else {
+        title
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{Click, click_count, extend_selection, find_url};
@@ -1166,5 +1191,18 @@ mod tests {
         let line = "日本 https://a.org";
         assert_eq!(find_url(line, 3), Some("https://a.org"));
         assert_eq!(find_url(line, 0), None);
+    }
+
+    #[test]
+    fn program_paths_title_tabs_by_the_program() {
+        let store = r"C:\Program Files\WindowsApps\Microsoft.PowerShell_7.7.0.0_x64__8wekyb3d8bbwe\pwsh.exe";
+        assert_eq!(super::program_title(store), "pwsh");
+        assert_eq!(super::program_title(r"C:\WINDOWS\system32\cmd.exe"), "cmd");
+        assert_eq!(
+            super::program_title(r"C:\Users\me\repo"),
+            r"C:\Users\me\repo"
+        );
+        assert_eq!(super::program_title("vim notes.md"), "vim notes.md");
+        assert_eq!(super::program_title("MINGW64:/c/Users"), "MINGW64:/c/Users");
     }
 }
