@@ -4944,6 +4944,9 @@ fn an_agent_session_in_a_terminal_resumes_after_a_restart() {
             )
             .is_some()
         );
+        // Closed again, so the restart below has the agent's pane alone.
+        ws.close_pane();
+        assert_eq!(ws.focused_pane(), 0);
     }
 
     // A shell the agent ran in gets the command typed once it is ready.
