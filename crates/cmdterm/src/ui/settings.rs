@@ -5142,6 +5142,10 @@ mod tests {
         );
         ws.borrow_mut().state.active_project = Some(id);
         ws.borrow_mut().dirty.settings = true;
+        // Windows runs worktrees on the host unless asked.
+        if let Some(project) = ws.borrow_mut().state.project_mut(id) {
+            project.worktree_mut(&root.join("repo")).runtime = crate::state::Runtime::Sandbox;
+        }
         let mut app = crate::build_app(&ws, VIEWPORT);
         assert!(
             app.find_widget(Role::TextInput, Some(EN.sandbox_path))

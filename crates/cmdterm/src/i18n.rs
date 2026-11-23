@@ -1199,6 +1199,9 @@ pub struct Strings {
     pub setup_runtime_intro: &'static str,
     pub setup_runtime_note: &'static str,
     pub setup_sandbox_note: &'static str,
+    /// The sandbox note of the setup and the runtime settings on Windows,
+    /// where the sandbox is not recommended.
+    pub setup_sandbox_note_windows: &'static str,
     pub setup_devcontainer_note: &'static str,
     pub setup_host_note: &'static str,
     pub setup_recommended: &'static str,
@@ -2410,7 +2413,7 @@ pub static EN: Strings = Strings {
             "{shell} cannot run in the Windows sandbox because it blocks Git's MSYS shared memory; using {with} instead"
         )
     },
-    sandbox_claude_without_bash: "Claude Code runs its shell commands through Git Bash, which cannot run in the Windows sandbox, so those commands fail there. Run it on the host or in a devcontainer to use them.",
+    sandbox_claude_without_bash: "Claude Code cannot start programs in the Windows sandbox: its hooks, shell commands and tools fail with \"operation not permitted\". Run it on the host or in a devcontainer instead.",
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "signal".to_owned(), |code| format!("code {code}"));
         if output.is_empty() {
@@ -2644,6 +2647,7 @@ pub static EN: Strings = Strings {
     setup_runtime_intro: "Choose the default environment for terminals in newly opened worktrees.",
     setup_runtime_note: "To change it for one worktree, open Settings › Sandboxing.",
     setup_sandbox_note: "Restricts writes to the worktree and filters network access through a proxy.",
+    setup_sandbox_note_windows: "Not recommended on Windows: Claude Code and other Node.js programs cannot start programs there, and Git Bash cannot start at all. Use a devcontainer to isolate a worktree.",
     setup_devcontainer_note: "Uses the worktree's devcontainer.json if present, otherwise falls back to the sandbox.",
     setup_host_note: "Runs directly on this machine with your full user permissions.",
     setup_recommended: "Recommended",
@@ -3701,7 +3705,7 @@ pub static DE: Strings = Strings {
              von Gits MSYS-Programmen blockiert; stattdessen wird {with} gestartet"
         )
     },
-    sandbox_claude_without_bash: "Claude Code führt seine Shell-Befehle über Git Bash aus, das nicht in der Windows-Sandbox laufen kann, daher schlagen sie dort fehl. Starte es auf dem Host oder in einem Devcontainer, um sie zu nutzen.",
+    sandbox_claude_without_bash: "Claude Code kann in der Windows-Sandbox keine Programme starten: Seine Hooks, Shell-Befehle und Werkzeuge schlagen mit \"operation not permitted\" fehl. Starte es stattdessen auf dem Host oder in einem Devcontainer.",
     terminal_failed_start: |code, output| {
         let status = code.map_or_else(|| "Signal".to_owned(), |code| format!("Code {code}"));
         if output.is_empty() {
@@ -3936,6 +3940,7 @@ pub static DE: Strings = Strings {
     setup_runtime_intro: "Wähle die Standardumgebung für Terminals in neu geöffneten Worktrees.",
     setup_runtime_note: "Für einen einzelnen Worktree änderst du das unter Einstellungen › Sandboxing.",
     setup_sandbox_note: "Beschränkt Schreibzugriffe auf den Worktree und filtert Netzwerkzugriffe über einen Proxy.",
+    setup_sandbox_note_windows: "Unter Windows nicht empfohlen: Claude Code und andere Node.js-Programme können dort keine Programme starten, und Git Bash startet gar nicht. Nutze einen Devcontainer, um einen Worktree abzuschotten.",
     setup_devcontainer_note: "Nutzt die devcontainer.json des Worktrees, falls vorhanden, sonst die Sandbox.",
     setup_host_note: "Läuft direkt auf diesem Rechner mit deinen vollen Benutzerrechten.",
     setup_recommended: "Empfohlen",

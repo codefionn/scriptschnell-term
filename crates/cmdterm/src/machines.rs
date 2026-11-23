@@ -1519,7 +1519,6 @@ impl Workspace {
     pub fn pick_runtime(&self, runtime: Runtime) {
         self.close_picker();
         self.set_runtime(runtime);
-        self.save();
         self.borrow_mut().dirty.settings = true;
     }
 

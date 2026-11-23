@@ -28,12 +28,26 @@ All notable changes to scriptschnell-term are in this file. The format is
   reach the debug browser's MCP server. Hooks that cannot write to their terminal, as
   Claude Code's on Windows, report the agent's state through the new
   `PUT /v1/uservars/NAME` endpoint instead.
-- The first time Claude Code starts in a Windows sandbox, a notice says that its shell
-  commands fail there, since it runs them through Git Bash, which cannot start in the
-  sandbox.
+- The first time Claude Code starts in a Windows sandbox, a notice says that it cannot
+  start programs there, so its hooks, shell commands and tools fail with "operation not
+  permitted" (`EPERM`). Node.js names the pipes it gives a child, and Windows lets only
+  the user, not the sandbox's restricted token, write to such a pipe.
+
+### Changed
+
+- On Windows, worktrees run on the host by default instead of in a sandbox, and the
+  setup and the runtime settings say why the sandbox is not recommended there: Claude
+  Code and other Node.js programs cannot start programs in it, and Git Bash cannot start
+  in it at all. A devcontainer still isolates a worktree. Worktrees saved in a sandbox
+  before this change run on the host too; pick the sandbox again to keep one there.
+  Linux and macOS keep the sandbox as the default.
 
 ### Fixed
 
+- Switching where a worktree's terminals run from the command palette is saved, and so is
+  the fall back to the host when a worktree picked for a devcontainer has no
+  `devcontainer.json`. Before, only the settings page saved the choice, so the next start
+  went back to the old runtime.
 - On Windows, Browse… in Open project and in the project's sandbox settings opens the
   system's folder dialog instead of reporting that there is no folder chooser.
 - On Windows, the app draws on the GPU instead of falling back to the CPU with "no

@@ -4795,12 +4795,13 @@ fn watch(project: &crate::state::Project, jj: bool) -> Job {
 /// Where a new worktree goes: `<repo>-<suffix>` beside the main worktree.
 /// The runtime of a worktree seen for the first time: the default from the
 /// settings, except that a devcontainer default without a
-/// `devcontainer.json` falls back to the sandbox.
+/// `devcontainer.json` falls back to [`Runtime::default`], the sandbox
+/// except on Windows.
 fn new_worktree_runtime(default: Runtime, env: &Environment, path: &Path) -> Runtime {
     match default {
         Runtime::Devcontainer => match crate::container::find(env, path) {
             Ok(Some(_)) => Runtime::Devcontainer,
-            _ => Runtime::Sandbox,
+            _ => Runtime::default(),
         },
         runtime => runtime,
     }

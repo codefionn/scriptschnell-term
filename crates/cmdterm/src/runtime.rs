@@ -2221,6 +2221,9 @@ impl Workspace {
             project.worktree_mut(&path).runtime = runtime;
             inner.dirty.status = true;
         }
+        // Every caller, the palette as well as the settings, keeps the
+        // choice across restarts.
+        self.save();
         if runtime == Runtime::Devcontainer {
             let host = self.borrow().state.project(id).map(|p| p.env.clone());
             if let Some(host) = host
@@ -2230,6 +2233,7 @@ impl Workspace {
                 if let Some(project) = self.borrow_mut().state.project_mut(id) {
                     project.worktree_mut(&path).runtime = Runtime::Host;
                 }
+                self.save();
                 return;
             }
         }

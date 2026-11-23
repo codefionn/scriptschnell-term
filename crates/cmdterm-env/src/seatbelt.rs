@@ -342,9 +342,10 @@ pub enum SandboxWarning {
     /// Terminals in Windows sandboxes start `with` instead of the shell
     /// `shell`, which runs on the MSYS runtime and cannot start there.
     ShellReplaced { shell: String, with: &'static str },
-    /// Claude Code started in a Windows sandbox. It runs its shell
-    /// commands through Git Bash, which runs on the MSYS runtime and cannot
-    /// start there, so those commands fail.
+    /// Claude Code started in a Windows sandbox. Node gives each child pipes
+    /// it creates by name, and the default access list of such a pipe lets
+    /// only the user write to it, so every program Claude Code starts there
+    /// fails with `EPERM`: its hooks, shell commands and tools.
     ClaudeWithoutGitBash,
 }
 

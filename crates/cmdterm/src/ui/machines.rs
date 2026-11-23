@@ -1275,6 +1275,9 @@ pub fn sandbox_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
             );
         }
         column = column.child(focused(scheme, dropdown, open, focus));
+        if cfg!(windows) && runtime == Runtime::Sandbox {
+            column = column.child(label(scheme, tr.setup_sandbox_note_windows));
+        }
         if runtime == Runtime::Devcontainer && preparing {
             column = column.child(label(scheme, tr.runtime_starting));
         }

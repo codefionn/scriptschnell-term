@@ -406,6 +406,15 @@ fn group(title: &'static str) -> Column {
     Column::new().width(INNER).gap(8.0).child(label(title))
 }
 
+/// What the sandbox option says: on Windows, why it is not recommended.
+pub(crate) fn sandbox_note(tr: &'static Strings) -> &'static str {
+    if cfg!(windows) {
+        tr.setup_sandbox_note_windows
+    } else {
+        tr.setup_sandbox_note
+    }
+}
+
 /// Where new worktrees run their terminals, and the sandbox's network.
 fn runtime(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View + use<> {
     let (current, network, restrict) = {
@@ -419,7 +428,7 @@ fn runtime(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View +
     };
     let mut list = Column::new().width(INNER);
     for (runtime, title, subtitle) in [
-        (Runtime::Sandbox, tr.run_in_sandbox, tr.setup_sandbox_note),
+        (Runtime::Sandbox, tr.run_in_sandbox, sandbox_note(tr)),
         (
             Runtime::Devcontainer,
             tr.run_in_devcontainer,
@@ -446,7 +455,8 @@ fn runtime(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View +
                 TRANSPARENT
             })
             .on_click(move || pick.set_default_runtime(runtime));
-        if runtime == Runtime::Sandbox {
+        // The Windows sandbox breaks too many tools to recommend it.
+        if runtime == Runtime::Sandbox && !cfg!(windows) {
             row = row
                 .trailing(tr.setup_recommended)
                 .trailing_pill(scheme.theme().accent);
@@ -682,6 +692,9 @@ mod tests {
             )
         };
         let first = ws();
+        // The hosts stage shows only for sandboxes, which Windows does not
+        // pick by default.
+        first.borrow_mut().settings.default_runtime = Runtime::Sandbox;
         first.open_setup_if_unanswered();
         assert!(first.setup_is_open());
         assert!(first.take_dirty().setup);
@@ -740,6 +753,8 @@ mod tests {
             SettingsStore::new(root.join("cfg/settings.json")),
             &root.join("cfg/extensions"),
         );
+        // Windows starts on the host already, so start from the sandbox.
+        ws.borrow_mut().settings.default_runtime = Runtime::Sandbox;
         ws.open_setup();
         ws.take_dirty();
         let mut app = crate::build_app(&ws, VIEWPORT);

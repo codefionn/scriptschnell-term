@@ -217,9 +217,13 @@ after force pushes.
 A worktree's terminals run on the host, in its devcontainer, or in a sandbox. Pick one in
 the palette; the worktree keeps the choice in `state.json`.
 
-- `default_runtime`: where a worktree the app opens for the first time runs: `sandbox`
-  (the default), `devcontainer` or `host`. With `devcontainer`, a worktree without a
-  `devcontainer.json` uses the sandbox. The first-start setup asks for it.
+- `default_runtime`: where a worktree the app opens for the first time runs: `sandbox`,
+  `devcontainer` or `host`. The default is `sandbox`, except on Windows, where it is
+  `host` (see "Why Windows runs on the host" below). With `devcontainer`, a worktree without a
+  `devcontainer.json` uses that default. The first-start setup asks for it. A worktree
+  keeps its runtime in `state.json` only when it differs from that default, so on
+  Windows a worktree saved in a sandbox before this default changed now runs on the host;
+  pick the sandbox for it again in its runtime menu to keep it there.
 
 - `container_engine`: `docker`, `podman` or a path. Leave it out for docker when
   installed, else podman.
@@ -922,13 +926,25 @@ When Git for Windows is installed, every process the app starts gets
 Windows, unless the app has the variable already. A program named `sh` or `bash` that is
 not on `PATH` runs Git's `usr\bin\sh.exe` or `usr\bin\bash.exe`.
 
+### Why Windows runs on the host
+
+On Windows, new worktrees run on the host unless you pick a sandbox or a devcontainer,
+and the setup does not recommend the sandbox there. Its write-restricted token breaks
+too many common tools:
+
 Programs on Git's MSYS runtime, such as Git Bash, `sh` and Git's `less`, cannot start in
 the Windows sandbox: its write-restricted token cannot use the shared memory and pipes
 the runtime makes for the user. A sandboxed terminal whose shell is one of them starts
 the first native shell instead and says so once. The sandbox sets `PAGER=cat` unless
 `PAGER` is set, so git prints without a pager; `GIT_PAGER` and `core.pager` still win.
-Claude Code runs its shell commands through Git Bash, so in a Windows sandbox they fail,
-and the app says so the first time Claude Code starts in one.
+Node.js programs cannot start other programs in the Windows sandbox either. Node gives
+each child pipes it creates by name, and the default access list Windows puts on such a
+pipe lets only the user write to it, not the sandbox's restricted token, so every start
+fails with `EPERM`. Claude Code is such a program: its hooks, shell commands and tools
+fail there with "operation not permitted", and the app says so the first time Claude
+Code starts in one. Run it on the host or in a devcontainer instead.
+
+A devcontainer isolates a worktree on Windows without these limits.
 
 ### Update checks
 

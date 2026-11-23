@@ -190,9 +190,9 @@ pub struct WorktreeConfig {
     /// Extra environment variables for terminals opened in this worktree.
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
     pub env_vars: Vec<(String, String)>,
-    /// Where this worktree's terminals run, a sandbox unless chosen
-    /// otherwise. VCS work always runs in the project's environment.
-    #[serde(default, skip_serializing_if = "Runtime::is_sandbox")]
+    /// Where this worktree's terminals run, [`Runtime::default`] unless
+    /// chosen otherwise. VCS work always runs in the project's environment.
+    #[serde(default, skip_serializing_if = "Runtime::is_default")]
     pub runtime: Runtime,
     /// Titles of the last agent sessions in this worktree's terminals,
     /// oldest first, at most [`MAX_AGENT_TITLES`]. The rail can name the
@@ -257,7 +257,7 @@ impl AgentRecord {
 }
 
 /// Where a worktree's terminals run.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum Runtime {
     /// In the project's environment, like VCS work.
@@ -266,14 +266,28 @@ pub enum Runtime {
     Devcontainer,
     /// In a sandbox that may write only the worktree, set up by
     /// [`SandboxSettings`]: bubblewrap on Linux, Seatbelt on macOS, a
-    /// restricted token on Windows. The default.
-    #[default]
+    /// restricted token on Windows. The default except on Windows.
     Sandbox,
 }
 
+/// A sandbox, except on Windows, where it is the host: Node.js programs
+/// such as Claude Code cannot start other programs under the restricted
+/// token, and programs on Git's MSYS runtime, Git Bash among them, cannot
+/// start there at all.
+impl Default for Runtime {
+    fn default() -> Self {
+        if cfg!(windows) {
+            Runtime::Host
+        } else {
+            Runtime::Sandbox
+        }
+    }
+}
+
 impl Runtime {
-    pub fn is_sandbox(&self) -> bool {
-        *self == Runtime::Sandbox
+    /// Whether this is [`Runtime::default`], which state files leave out.
+    pub fn is_default(&self) -> bool {
+        *self == Runtime::default()
     }
 }
 
@@ -422,7 +436,7 @@ impl WorktreeConfig {
             }],
             active_tab: 0,
             env_vars: Vec::new(),
-            runtime: Runtime::Sandbox,
+            runtime: Runtime::default(),
             agent_titles: Vec::new(),
             agent_sessions: Vec::new(),
             active_panel: 0,
@@ -828,7 +842,7 @@ pub struct Settings {
     pub language: String,
     /// Where the terminals of a worktree the app has not seen yet run.
     /// The first-start setup asks for it.
-    #[serde(skip_serializing_if = "Runtime::is_sandbox")]
+    #[serde(skip_serializing_if = "Runtime::is_default")]
     pub default_runtime: Runtime,
     /// What sandboxed worktrees may reach.
     pub sandbox: SandboxSettings,
@@ -1610,7 +1624,7 @@ impl Default for Settings {
             keymap: DEFAULT_KEYMAP.to_owned(),
             keybindings: BTreeMap::new(),
             language: SYSTEM_LANGUAGE.to_owned(),
-            default_runtime: Runtime::Sandbox,
+            default_runtime: Runtime::default(),
             sandbox: SandboxSettings::default(),
             container_engine: None,
             remote: RemoteSettings::default(),
@@ -2035,16 +2049,25 @@ mod tests {
     }
 
     #[test]
-    fn terminals_run_in_a_sandbox_unless_the_host_is_chosen() {
+    fn worktrees_take_the_platform_default_runtime_unless_another_is_chosen() {
+        // Windows runs terminals on the host unless a sandbox is chosen.
+        let (default, other) = if cfg!(windows) {
+            (Runtime::Host, Runtime::Sandbox)
+        } else {
+            (Runtime::Sandbox, Runtime::Host)
+        };
         let config: WorktreeConfig = serde_json::from_str(r#"{"path":"/a"}"#).unwrap();
-        assert_eq!(config.runtime, Runtime::Sandbox);
-        assert_eq!(WorktreeConfig::new("/a".into()).runtime, Runtime::Sandbox);
+        assert_eq!(config.runtime, default);
+        assert_eq!(WorktreeConfig::new("/a".into()).runtime, default);
+        assert_eq!(Settings::default().default_runtime, default);
 
-        let mut config = config;
-        config.runtime = Runtime::Host;
-        let json = serde_json::to_string(&config).unwrap();
-        let back: WorktreeConfig = serde_json::from_str(&json).unwrap();
-        assert_eq!(back.runtime, Runtime::Host, "{json}");
+        for runtime in [other, Runtime::Devcontainer] {
+            let mut config = config.clone();
+            config.runtime = runtime;
+            let json = serde_json::to_string(&config).unwrap();
+            let back: WorktreeConfig = serde_json::from_str(&json).unwrap();
+            assert_eq!(back.runtime, runtime, "{json}");
+        }
     }
 
     #[test]

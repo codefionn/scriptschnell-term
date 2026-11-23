@@ -3414,7 +3414,37 @@ fn new_worktrees_take_the_default_runtime() {
     git(&other, &["init", "-q"]);
     ws.set_default_runtime(Runtime::Devcontainer);
     add_project_and_wait(&ws, &other);
-    assert_eq!(ws.borrow().active_runtime(), Runtime::Sandbox);
+    assert_eq!(ws.borrow().active_runtime(), Runtime::default());
+}
+
+#[test]
+fn a_runtime_switch_is_saved() {
+    use crate::state::Runtime;
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    let ws = workspace(dir.path());
+    add_project_and_wait(&ws, &repo);
+    let saved = || {
+        let state = StateStore::new(dir.path().join("cfg/state.json"))
+            .load()
+            .unwrap();
+        state.projects[0].worktrees[0].runtime
+    };
+    // The palette switches with `set_runtime` alone, without the
+    // settings dropdown's `pick_runtime`.
+    let other = if Runtime::default() == Runtime::Host {
+        Runtime::Sandbox
+    } else {
+        Runtime::Host
+    };
+    ws.set_runtime(other);
+    assert_eq!(saved(), other);
+    ws.set_runtime(Runtime::default());
+    assert_eq!(saved(), Runtime::default());
+    // A devcontainer without a devcontainer.json falls back to the host.
+    ws.set_runtime(Runtime::Sandbox);
+    ws.set_runtime(Runtime::Devcontainer);
+    assert_eq!(saved(), Runtime::Host);
 }
 
 #[test]
