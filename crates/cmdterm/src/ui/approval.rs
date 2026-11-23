@@ -5,7 +5,7 @@
 //! suggests, such as one more allowed host, or a new worktree and agents to
 //! start there, which an agent asked for the same way. A guarded request
 //! and a launch can be allowed for the project until the app quits or for
-//! good. It is its own region and shows the
+//! good, and a guarded request blocked for good. It is its own region and shows the
 //! oldest question, guards first; answering it shows the next one.
 //! Dismissing it refuses, and so does Enter, since the refusing button has
 //! the focus. A change a coding agent made to its settings in a sandbox
@@ -24,7 +24,7 @@ use schnellui::widgets::{
 
 use super::theme::Scheme;
 use super::{Closed, truncate};
-use crate::state::AlwaysAllowed;
+use crate::state::{GuardEntry, Project};
 
 use crate::control::{FileChange, Outcome, SettingOp, Target};
 use crate::workspace::Workspace;
@@ -37,9 +37,11 @@ impl Workspace {
         inner.dirty.approval = true;
     }
 
-    /// Allows question `id` and, for good, its guard and host in the
-    /// project it came from. The project keeps them in the state.
-    pub fn allow_approval_always(&self, id: u64) {
+    /// Answers question `id` and keeps the answer for good for its guard
+    /// and host in the project it came from: in the project's always
+    /// allowed list, or with `allow` false in its always blocked one. The
+    /// project keeps them in the state.
+    pub fn remember_approval(&self, id: u64, allow: bool) {
         {
             let mut inner = self.borrow_mut();
             let inner = &mut *inner;
@@ -50,20 +52,30 @@ impl Workspace {
             if let (Some(question), Some(project)) = (question, project)
                 && let Some(project) = inner.state.project_mut(project)
             {
-                let entry = AlwaysAllowed {
+                let entry = GuardEntry {
                     guard: question.guard,
                     host: question.host,
                 };
-                if !project.always_allowed.contains(&entry) {
-                    project.always_allowed.push(entry);
-                }
+                put_answer(project, entry, !allow);
                 inner.runtimes.share_always_allowed(project);
             }
-            inner.runtimes.approvals.answer(id, true);
+            inner.runtimes.approvals.answer(id, allow);
             inner.dirty.approval = true;
             inner.dirty.settings = true;
         }
         self.save();
+    }
+
+    /// Allows question `id` and, for good, its guard and host in the
+    /// project it came from.
+    pub fn allow_approval_always(&self, id: u64) {
+        self.remember_approval(id, true);
+    }
+
+    /// Blocks question `id` and, for good, its guard and host in the
+    /// project it came from.
+    pub fn block_approval_always(&self, id: u64) {
+        self.remember_approval(id, false);
     }
 
     /// Allows question `id`, and its guard and host for requests from the
@@ -76,20 +88,107 @@ impl Workspace {
 
     /// Takes back entry `index` of what project `project` allowed for good.
     pub fn revoke_always_allowed(&self, project: u64, index: usize) {
+        self.remove_project_answer(project, false, index);
+    }
+
+    /// Changes the always allowed and blocked lists of project `project`
+    /// with `change`, which says whether it changed them, then hands them to
+    /// the approvals and saves.
+    fn change_project_answers(&self, project: u64, change: impl FnOnce(&mut Project) -> bool) {
         {
             let mut inner = self.borrow_mut();
             let inner = &mut *inner;
             let Some(project) = inner.state.project_mut(project) else {
                 return;
             };
-            if index >= project.always_allowed.len() {
+            if !change(project) {
                 return;
             }
-            project.always_allowed.remove(index);
             inner.runtimes.share_always_allowed(project);
             inner.dirty.settings = true;
         }
         self.save();
+    }
+
+    /// Takes back entry `index` of the always allowed list of project
+    /// `project`, or with `blocked` of its always blocked list.
+    pub fn remove_project_answer(&self, project: u64, blocked: bool, index: usize) {
+        self.change_project_answers(project, |project| {
+            let list = project.answers_mut(blocked);
+            if index >= list.len() {
+                return false;
+            }
+            list.remove(index);
+            true
+        });
+    }
+
+    /// Moves entry `index` of the always allowed list of project `project`
+    /// to its always blocked list, or with `blocked` the other way round.
+    pub fn move_project_answer(&self, project: u64, blocked: bool, index: usize) {
+        self.change_project_answers(project, |project| {
+            let list = project.answers_mut(blocked);
+            if index >= list.len() {
+                return false;
+            }
+            let entry = list.remove(index);
+            put_answer(project, entry, !blocked);
+            true
+        });
+    }
+
+    /// Picks the guard the Allowed and Blocked pages add an entry for.
+    pub fn set_project_answer_guard(&self, guard: &str) {
+        let mut inner = self.borrow_mut();
+        inner.settings_ui.machines.form.project_guard = Some(guard.to_owned());
+        inner.settings_ui.picker = None;
+        inner.dirty.settings = true;
+    }
+
+    /// Adds the guard picked and the host typed on the Allowed page to the
+    /// active project's always allowed list, or with `blocked` on the
+    /// Blocked page to its always blocked list. An entry is in one list at
+    /// most, so it leaves the other one.
+    pub fn add_project_answer(&self, blocked: bool) {
+        let (project, entry) = {
+            let mut inner = self.borrow_mut();
+            let Some(project) = inner.state.active().map(|p| p.id) else {
+                return;
+            };
+            let guard = match inner.settings_ui.machines.form.project_guard.clone() {
+                Some(guard) => guard,
+                None => {
+                    let guards = crate::runtime::all_guards(inner.ext.sandbox_rules());
+                    let Some(first) = guards.into_iter().next() else {
+                        return;
+                    };
+                    first.id
+                }
+            };
+            let typed = inner.settings_ui.machines.form.project_answer_host.trim();
+            if typed.is_empty() {
+                return;
+            }
+            // The proxy compares host names in lowercase; a secret's label
+            // and a settings file keep their case.
+            let host = if [
+                cmdterm_env::KEYRING_GUARD,
+                cmdterm_env::AGENT_SETTINGS_GUARD,
+            ]
+            .contains(&guard.as_str())
+            {
+                typed.to_owned()
+            } else {
+                typed.to_ascii_lowercase()
+            };
+            inner.settings_ui.machines.form.project_answer_host.clear();
+            inner.dirty.settings = true;
+            (project, GuardEntry { guard, host })
+        };
+        self.change_project_answers(project, |project| {
+            put_answer(project, entry, blocked);
+            true
+        });
     }
 
     pub fn approval_is_open(&self) -> bool {
@@ -428,7 +527,7 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         (request, tr.approval_note)
     };
     let (allow, block, dismiss, always) = (ws.clone(), ws.clone(), ws.clone(), ws.clone());
-    let session = ws.clone();
+    let (session, never) = (ws.clone(), ws.clone());
     let mut body = Column::new()
         .width(width)
         .gap(6.0)
@@ -465,6 +564,9 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         lasting.push(lasting_button(tr.approval_always, move || {
             always.allow_approval_always(id)
         }));
+        lasting.push(lasting_button(tr.approval_never, move || {
+            never.block_approval_always(id)
+        }));
     }
     let body = body.child(note(scheme, note_text));
     let footer = footer(
@@ -477,6 +579,18 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         dialog(tr.approval_dialog, scheme, width, body, footer)
             .on_dismiss(move || dismiss.answer_approval(id, false)),
     )
+}
+
+/// Puts `entry` into the always allowed list of `project`, or with
+/// `blocked` into its always blocked list, and takes it out of the other.
+fn put_answer(project: &mut Project, entry: GuardEntry, blocked: bool) {
+    project
+        .answers_mut(!blocked)
+        .retain(|known| *known != entry);
+    let list = project.answers_mut(blocked);
+    if !list.contains(&entry) {
+        list.push(entry);
+    }
 }
 
 // --- layout ------------------------------------------------------------------

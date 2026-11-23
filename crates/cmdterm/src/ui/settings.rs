@@ -1,6 +1,8 @@
 //! The settings overlay, opened with Ctrl+, the rail's Settings button or the
 //! palette. A modal dialog with ten sections: the active project (its
-//! Jujutsu and launch choices and the folders its sandboxes may use),
+//! Jujutsu choice and the folders its sandboxes may use, with Allowed and
+//! Blocked subsections for the launches and guarded requests it allowed or
+//! blocked for good),
 //! terminal font (size and family), color scheme, keyboard (keymap preset
 //! and the bindings in effect), extensions, agents (hooks that let coding
 //! agents report when they wait for the user), remote machines with its VPN
@@ -205,6 +207,12 @@ const FONT_POPUP_HEIGHT: f32 = 8.0 * 33.0 + 1.0;
 pub enum SettingsSection {
     /// Settings of the active project, with its sandbox folders.
     Project,
+    /// What the active project's sandboxes may do without asking, under
+    /// Project.
+    ProjectAllowed,
+    /// What the active project's sandboxes are refused without asking,
+    /// under Project.
+    ProjectBlocked,
     #[default]
     Font,
     ColorScheme,
@@ -232,8 +240,10 @@ pub enum SettingsSection {
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 16] = [
+    pub const ALL: [SettingsSection; 18] = [
         SettingsSection::Project,
+        SettingsSection::ProjectAllowed,
+        SettingsSection::ProjectBlocked,
         SettingsSection::Font,
         SettingsSection::ColorScheme,
         SettingsSection::Keyboard,
@@ -254,6 +264,8 @@ impl SettingsSection {
     pub fn title(self, tr: &Strings) -> &'static str {
         match self {
             SettingsSection::Project => tr.section_project,
+            SettingsSection::ProjectAllowed => tr.section_project_allowed,
+            SettingsSection::ProjectBlocked => tr.section_project_blocked,
             SettingsSection::Font => tr.section_font,
             SettingsSection::ColorScheme => tr.section_color_scheme,
             SettingsSection::Keyboard => tr.section_keyboard,
@@ -279,6 +291,9 @@ impl SettingsSection {
             SettingsSection::SandboxFiles | SettingsSection::SandboxHosts => {
                 Some(SettingsSection::Sandboxing)
             }
+            SettingsSection::ProjectAllowed | SettingsSection::ProjectBlocked => {
+                Some(SettingsSection::Project)
+            }
             SettingsSection::Vpn => Some(SettingsSection::Remote),
             SettingsSection::Registries => Some(SettingsSection::Accounts),
             _ => None,
@@ -303,6 +318,8 @@ pub enum Picker {
     Shell,
     /// The forge to add an account on another host for.
     ForgeHost,
+    /// The guard of a new entry on the project's Allowed or Blocked page.
+    ProjectGuard,
 }
 
 /// What the overlay is showing.
@@ -1525,6 +1542,12 @@ pub fn settings(ws: &Workspace, viewport: Size) -> Box<dyn View> {
             .child(label(scheme, (tr.settings_no_match)(needle.trim()))),
         ),
         SettingsSection::Project => Box::new(super::machines::project_section(ws, scheme)),
+        SettingsSection::ProjectAllowed => {
+            Box::new(super::machines::project_answers_section(ws, scheme, false))
+        }
+        SettingsSection::ProjectBlocked => {
+            Box::new(super::machines::project_answers_section(ws, scheme, true))
+        }
         SettingsSection::Font => Box::new(font_section(ws, scheme)),
         SettingsSection::ColorScheme => Box::new(scheme_section(ws, scheme)),
         SettingsSection::Keyboard => Box::new(keyboard_section(ws, scheme)),
@@ -5181,12 +5204,148 @@ mod tests {
         app.dispatch_click(remove);
         assert!(saved().writable.is_empty());
 
+        // The launches switch is on the Allowed page.
+        let app = crate::build_app(&ws, VIEWPORT);
+        assert!(
+            app.find_widget(Role::Switch, Some(EN.project_launches))
+                .is_none()
+        );
+        ws.show_settings_section(SettingsSection::ProjectAllowed);
         let mut app = crate::build_app(&ws, VIEWPORT);
         let launches = app
             .find_widget(Role::Switch, Some(EN.project_launches))
             .unwrap();
         app.dispatch_click(launches);
         assert!(ws.borrow().state.project(id).unwrap().allows_launches);
+    }
+
+    #[test]
+    fn the_allowed_and_blocked_pages_edit_what_the_project_answered_for_good() {
+        use crate::state::GuardEntry;
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ws = Workspace::new(
+            StateStore::new(root.join("cfg/state.json")),
+            SettingsStore::new(root.join("cfg/settings.json")),
+            &root.join("cfg/extensions"),
+        );
+        let id = ws.borrow_mut().state.add_project(
+            "demo".into(),
+            cmdterm_env::Environment::Local,
+            root.join("repo"),
+            crate::vcs::VcsKind::Git,
+            None,
+        );
+        ws.borrow_mut().state.active_project = Some(id);
+        let guard = cmdterm_env::builtin_guards()[0].clone();
+        assert_eq!(guard.id, "cmdterm.git-push");
+        let approvals = std::sync::Arc::clone(&ws.borrow().runtimes.approvals);
+        let scope = id.to_string();
+        let ask = |host: &str| {
+            let (approvals, guard, scope, host) = (
+                std::sync::Arc::clone(&approvals),
+                guard.clone(),
+                scope.clone(),
+                host.to_owned(),
+            );
+            std::thread::spawn(move || approvals.ask(&guard, Some(&scope), &host, "POST", "/r"))
+        };
+        let saved = || StateStore::new(root.join("cfg/state.json")).load().unwrap();
+        let entry = |host: &str| GuardEntry {
+            guard: guard.id.clone(),
+            host: host.to_owned(),
+        };
+
+        // The Blocked page adds an entry for the first guard, in lowercase.
+        ws.open_settings();
+        ws.show_settings_section(SettingsSection::ProjectBlocked);
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        assert!(app.a11y_json().contains("refused without a question"));
+        let host = app
+            .find_widget(Role::TextInput, Some(EN.project_answer_host))
+            .unwrap();
+        assert!(app.set_text_value(host, " Example.ORG "));
+        let add = app
+            .find_widget(Role::Button, Some(EN.project_answer_add))
+            .unwrap();
+        app.dispatch_click(add);
+        assert_eq!(saved().projects[0].always_blocked, [entry("example.org")]);
+        assert!(
+            ws.borrow()
+                .settings_ui
+                .machines
+                .form
+                .project_answer_host
+                .is_empty()
+        );
+        // Blocked requests are refused without a question.
+        assert!(!ask("example.org").join().unwrap());
+        assert!(!ws.approval_is_open());
+
+        // Moved to the Allowed page, it passes without a question.
+        ws.take_dirty();
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        let allow = format!("{}: git push: example.org", EN.project_answer_to_allowed);
+        let allow = app.find_widget(Role::Button, Some(&allow)).unwrap();
+        app.dispatch_click(allow);
+        let project = saved().projects[0].clone();
+        assert!(project.always_blocked.is_empty());
+        assert_eq!(project.always_allowed, [entry("example.org")]);
+        assert!(ask("example.org").join().unwrap());
+
+        // Adding it as blocked takes it off the allowed list.
+        ws.show_settings_section(SettingsSection::ProjectAllowed);
+        ws.set_machine_text(
+            crate::machines::MachineText::ProjectAnswerHost,
+            "example.org",
+        );
+        ws.add_project_answer(true);
+        let project = saved().projects[0].clone();
+        assert!(project.always_allowed.is_empty());
+        assert_eq!(project.always_blocked, [entry("example.org")]);
+
+        // Another guard can be picked; the keyring keeps a label's case.
+        ws.set_project_answer_guard(cmdterm_env::KEYRING_GUARD);
+        ws.set_machine_text(
+            crate::machines::MachineText::ProjectAnswerHost,
+            "GitHub token",
+        );
+        ws.add_project_answer(false);
+        assert_eq!(
+            saved().projects[0].always_allowed,
+            [GuardEntry {
+                guard: cmdterm_env::KEYRING_GUARD.into(),
+                host: "GitHub token".into(),
+            }]
+        );
+        ws.take_dirty();
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        // The keyring guard is a built-in one on Linux only.
+        let title = (cmdterm_env::builtin_guards().into_iter())
+            .find(|g| g.id == cmdterm_env::KEYRING_GUARD)
+            .map_or_else(|| cmdterm_env::KEYRING_GUARD.to_owned(), |g| g.title);
+        let remove = format!("Remove {title}: GitHub token");
+        let remove = app.find_widget(Role::Button, Some(&remove)).unwrap();
+        app.dispatch_click(remove);
+        assert!(saved().projects[0].always_allowed.is_empty());
+
+        // The Blocked page removes its entry, and the guard asks again.
+        ws.show_settings_section(SettingsSection::ProjectBlocked);
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        let remove = app
+            .find_widget(Role::Button, Some("Remove git push: example.org"))
+            .unwrap();
+        app.dispatch_click(remove);
+        assert!(saved().projects[0].always_blocked.is_empty());
+        let asking = ask("example.org");
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+        while !ws.approval_is_open() {
+            assert!(std::time::Instant::now() < deadline, "no question came");
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        let question = ws.borrow().pending_approval().unwrap().id;
+        ws.answer_approval(question, false);
+        assert!(!asking.join().unwrap());
     }
 
     #[test]
@@ -5733,11 +5892,20 @@ type = "bool"
                 .always_allowed
                 .is_empty()
         );
+        // Taken back, it asks again. Always block keeps the refusal, and
+        // the next request is refused without a question.
         let asking = ask(Some(id));
-        wait_for_question();
-        let question = ws.borrow().pending_approval().unwrap().id;
-        ws.answer_approval(question, false);
+        let mut app = wait_for_question();
+        let never = app
+            .find_widget(Role::Button, Some(EN.approval_never))
+            .unwrap();
+        app.dispatch_click(never);
         assert!(!asking.join().unwrap());
+        let project = ws.borrow().state.project(id).unwrap().clone();
+        assert_eq!(project.always_blocked.len(), 1);
+        assert!(project.always_allowed.is_empty());
+        assert!(!ask(Some(id)).join().unwrap());
+        assert!(!ws.approval_is_open());
     }
 
     #[test]

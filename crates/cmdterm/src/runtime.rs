@@ -459,13 +459,19 @@ impl Runtimes {
         (self.agent_sync).set_mode(settings.guard_mode(cmdterm_env::AGENT_SETTINGS_GUARD, None));
     }
 
-    /// Hands the questions `project` allowed for good to the approvals,
-    /// scoped to its id.
+    /// Hands the questions `project` allowed or blocked for good to the
+    /// approvals, scoped to its id.
     pub fn share_always_allowed(&self, project: &Project) {
-        let always = (project.always_allowed.iter())
-            .map(|a| (a.guard.clone(), a.host.clone()))
-            .collect();
-        self.approvals.set_always(&project.id.to_string(), always);
+        let pairs = |list: &[crate::state::GuardEntry]| {
+            (list.iter())
+                .map(|a| (a.guard.clone(), a.host.clone()))
+                .collect()
+        };
+        let scope = project.id.to_string();
+        self.approvals
+            .set_blocked(&scope, pairs(&project.always_blocked));
+        self.approvals
+            .set_always(&scope, pairs(&project.always_allowed));
     }
 
     /// Where sandboxed shells of project `id` keep their history.
@@ -487,6 +493,7 @@ impl Runtimes {
     /// Deletes what sandboxed shells of a removed project wrote.
     pub fn forget_project(&self, id: u64) {
         self.approvals.set_always(&id.to_string(), Vec::new());
+        self.approvals.set_blocked(&id.to_string(), Vec::new());
         self.agent_sync.forget(id);
         let _ = std::fs::remove_dir_all(self.shell_dir(id));
     }

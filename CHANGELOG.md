@@ -6,6 +6,17 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Added
+
+- Settings, Project has two new pages, Allowed and Blocked, that list the guarded
+  requests the active project answered for good, such as a `git push` to a host or a
+  keyring secret. Remove takes an entry back, "Block instead" and "Allow instead" move
+  it to the other page, and a form adds one for a guard and a host. The switch that lets
+  agents open worktrees without asking moved to the Allowed page.
+- The approval dialog offers "Always block in this project". The project keeps the
+  answer in `state.json` (`always_blocked`), and later requests for that guard and host
+  are refused without a question.
+
 ### Fixed
 
 - Agents the app starts itself, from a launch, the palette or a saved layout, no

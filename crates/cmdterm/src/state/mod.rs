@@ -87,7 +87,12 @@ pub struct Project {
     /// Guarded requests the user allowed for good in this project's
     /// sandboxes, from the approval dialog's "Always allow".
     #[serde(default, skip_serializing_if = "Vec::is_empty")]
-    pub always_allowed: Vec<AlwaysAllowed>,
+    pub always_allowed: Vec<GuardEntry>,
+    /// Guarded requests the user refused for good in this project's
+    /// sandboxes, from the approval dialog's "Always block" or the
+    /// project's Blocked settings page. They win over `always_allowed`.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub always_blocked: Vec<GuardEntry>,
     /// Whether agents in this project may create and open worktrees and
     /// start agents there without asking, from the launch dialog's "Always
     /// allow in this project".
@@ -158,9 +163,10 @@ impl ProjectSandbox {
     }
 }
 
-/// A guard and a host (or a keyring secret's label) allowed for good.
+/// A guard and a host (or a keyring secret's label) allowed or blocked
+/// for good.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub struct AlwaysAllowed {
+pub struct GuardEntry {
     /// The guard's id, such as `cmdterm.git-push` or `cmdterm.keyring`.
     pub guard: String,
     /// The host the request went to, or the secret's label.
@@ -536,6 +542,15 @@ impl WorktreeConfig {
 }
 
 impl Project {
+    /// The always allowed list, or with `blocked` the always blocked one.
+    pub fn answers_mut(&mut self, blocked: bool) -> &mut Vec<GuardEntry> {
+        if blocked {
+            &mut self.always_blocked
+        } else {
+            &mut self.always_allowed
+        }
+    }
+
     /// The saved config for `path`, if any.
     pub fn worktree(&self, path: &Path) -> Option<&WorktreeConfig> {
         self.worktrees.iter().find(|config| config.path == path)
@@ -655,6 +670,7 @@ impl AppState {
             active_worktree: None,
             worktrees: Vec::new(),
             always_allowed: Vec::new(),
+            always_blocked: Vec::new(),
             allows_launches: false,
             jj: None,
             base: None,

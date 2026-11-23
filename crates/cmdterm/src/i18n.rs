@@ -257,6 +257,7 @@ pub struct Strings {
     /// Which project a question comes from, with its name.
     pub approval_project: fn(&str) -> String,
     pub approval_always: &'static str,
+    pub approval_never: &'static str,
     pub always_heading: &'static str,
     pub always_note: &'static str,
     /// A guard's title and host in the list of standing answers.
@@ -1228,6 +1229,17 @@ pub struct Strings {
     pub project_jj: &'static str,
     pub project_jj_note: &'static str,
     pub project_launches: &'static str,
+    pub section_project_allowed: &'static str,
+    pub section_project_blocked: &'static str,
+    pub project_allowed_note: &'static str,
+    pub project_blocked_note: &'static str,
+    pub project_answers_remote_note: &'static str,
+    pub project_answer_to_blocked: &'static str,
+    pub project_answer_to_allowed: &'static str,
+    pub project_answer_add_heading: &'static str,
+    pub project_answer_guard: &'static str,
+    pub project_answer_host: &'static str,
+    pub project_answer_add: &'static str,
     pub project_launches_note: &'static str,
     pub project_base: &'static str,
     /// The reference branch field's hint.
@@ -1402,6 +1414,12 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         SettingsSection::Project => {
             "Environment variables, Sandbox folders, Jujutsu, Reset all settings | project jj env secrets keyring"
         }
+        SettingsSection::ProjectAllowed => {
+            "Guarded requests, Allow agents to open worktrees without asking, Add an entry | always allowed approvals answers git push keyring launches"
+        }
+        SettingsSection::ProjectBlocked => {
+            "Guarded requests, Add an entry | always blocked approvals answers deny refuse git push keyring"
+        }
         SettingsSection::Font => "Terminal font, Terminal font size | text ligatures family",
         SettingsSection::ColorScheme => "Color scheme, Follow the system | colour theme dark light",
         SettingsSection::Keyboard => "Keymap, Key bindings | keys shortcuts record",
@@ -1436,6 +1454,12 @@ fn keywords_de(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Project => {
             "Umgebungsvariablen, Sandbox-Ordner, Jujutsu, Alle Einstellungen zurücksetzen | projekt jj env geheimnisse schlüsselbund"
+        }
+        SettingsSection::ProjectAllowed => {
+            "Geschützte Anfragen, Agenten dürfen Worktrees ohne Nachfrage öffnen, Eintrag hinzufügen | immer erlaubt freigaben antworten git push schlüsselbund"
+        }
+        SettingsSection::ProjectBlocked => {
+            "Geschützte Anfragen, Eintrag hinzufügen | immer blockiert freigaben antworten ablehnen git push schlüsselbund"
         }
         SettingsSection::Font => {
             "Terminalschrift, Schriftgröße im Terminal | text ligaturen font schriftart"
@@ -1637,6 +1661,7 @@ pub static EN: Strings = Strings {
     approval_note: "Your choice applies to this host for one minute.",
     approval_project: |name| format!("From project {name}"),
     approval_always: "Always allow in this project",
+    approval_never: "Always block in this project",
     always_heading: "Always allowed",
     always_note: "Actions permanently allowed for a project in approval dialogs, including sandbox requests and agents creating worktrees or starting other agents.",
     always_entry: |title, host| format!("{title}: {host}"),
@@ -2658,6 +2683,17 @@ pub static EN: Strings = Strings {
     project_jj: "Use Jujutsu",
     project_jj_note: "When the project contains a jj repository",
     project_launches: "Allow agents to open worktrees without asking",
+    section_project_allowed: "Allowed",
+    section_project_blocked: "Blocked",
+    project_allowed_note: "Requests from this project's sandboxes that pass without a question. \"Always allow in this project\" in the approval dialog adds them here.",
+    project_blocked_note: "Requests from this project's sandboxes that are refused without a question. \"Always block in this project\" in the approval dialog adds them here.",
+    project_answers_remote_note: "Only sandboxes of projects on this machine use these entries.",
+    project_answer_to_blocked: "Block instead",
+    project_answer_to_allowed: "Allow instead",
+    project_answer_add_heading: "Add an entry",
+    project_answer_guard: "Guarded request",
+    project_answer_host: "Host, or the secret's label for the keyring",
+    project_answer_add: "Add",
     project_launches_note: "Lets agents create worktrees and start new agent sessions automatically",
     project_base: "Reference branch",
     project_base_hint: "Leave empty to auto-detect (origin/HEAD, main, master, or trunk)",
@@ -2877,6 +2913,7 @@ pub static DE: Strings = Strings {
     approval_note: "Deine Wahl gilt eine Minute lang für diesen Host.",
     approval_project: |name| format!("Aus dem Projekt {name}"),
     approval_always: "In diesem Projekt immer erlauben",
+    approval_never: "In diesem Projekt immer blockieren",
     always_heading: "Immer erlaubt",
     always_note: "Aktionen, die in Dialogen dauerhaft für ein Projekt erlaubt wurden, darunter Sandbox-Anfragen sowie das Anlegen von Worktrees und Starten von Agenten.",
     always_entry: |title, host| format!("{title}: {host}"),
@@ -3934,6 +3971,17 @@ pub static DE: Strings = Strings {
     project_jj: "Jujutsu verwenden",
     project_jj_note: "Wenn das Projekt ein jj-Repository enthält",
     project_launches: "Agenten dürfen Worktrees ohne Nachfrage öffnen",
+    section_project_allowed: "Erlaubt",
+    section_project_blocked: "Blockiert",
+    project_allowed_note: "Anfragen aus den Sandboxen dieses Projekts, die ohne Nachfrage durchgehen. \"In diesem Projekt immer erlauben\" im Freigabedialog fügt sie hier hinzu.",
+    project_blocked_note: "Anfragen aus den Sandboxen dieses Projekts, die ohne Nachfrage abgelehnt werden. \"In diesem Projekt immer blockieren\" im Freigabedialog fügt sie hier hinzu.",
+    project_answers_remote_note: "Nur Sandboxen von Projekten auf dieser Maschine verwenden diese Einträge.",
+    project_answer_to_blocked: "Stattdessen blockieren",
+    project_answer_to_allowed: "Stattdessen erlauben",
+    project_answer_add_heading: "Eintrag hinzufügen",
+    project_answer_guard: "Geschützte Anfrage",
+    project_answer_host: "Host, beim Schlüsselbund der Name des Geheimnisses",
+    project_answer_add: "Hinzufügen",
     project_launches_note: "Erlaubt Agenten, Worktrees anzulegen und dort automatisch Agenten zu starten",
     project_base: "Referenz-Branch",
     project_base_hint: "Leer für automatische Erkennung (origin/HEAD, main, master oder trunk)",

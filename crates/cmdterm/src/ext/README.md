@@ -481,7 +481,8 @@ extension's guards on its page, and a built-in guard for npm, Cargo, NuGet, PyPI
 `git push` on the page of the shipped extension for it while that is installed. Modes are saved
 under `sandbox.guards` in `settings.json`. Ask is the default: a dialog shows the
 request with Block, Allow and Allow in this session, and, for a request from a local
-project, Always allow in this project. Allow holds for one minute for the guard, the
+project, Always allow in this project and Always block in this project. The project's
+Allowed and Blocked pages in the settings list those answers and change them. Allow holds for one minute for the guard, the
 host and what the dialog showed: the same repository, package or image (the path
 without its query, up to `/info/refs`, `/git-receive-pack`, `/blobs/` or `/manifests/`),
 and the same body when the guard read one. A push that takes two requests asks once,

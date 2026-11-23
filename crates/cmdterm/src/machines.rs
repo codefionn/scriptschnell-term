@@ -100,6 +100,9 @@ pub enum MachineText {
     ProjectEnvName,
     /// The value of a per-project environment variable, on the Project page.
     ProjectEnvValue,
+    /// The host or secret label of a new entry on the project's Allowed or
+    /// Blocked page.
+    ProjectAnswerHost,
     Vm(VmField),
 }
 
@@ -136,6 +139,11 @@ pub struct MachineForm {
     pub project_env_value: String,
     /// Why the last project environment variable Add was refused.
     pub project_env_error: Option<String>,
+    /// The guard picked for a new entry on the project's Allowed or Blocked
+    /// page. `None` stands for the first guard.
+    pub project_guard: Option<String>,
+    /// The host or secret label typed for that entry.
+    pub project_answer_host: String,
     /// The Firecracker fields in [`VmField::ALL`] order. Empty until the
     /// first read of `server.json` fills them.
     pub vm: Vec<String>,
@@ -152,6 +160,7 @@ impl MachineForm {
             MachineText::ProjectPath => &mut self.project_path,
             MachineText::ProjectEnvName => &mut self.project_env_name,
             MachineText::ProjectEnvValue => &mut self.project_env_value,
+            MachineText::ProjectAnswerHost => &mut self.project_answer_host,
             MachineText::Vm(field) => {
                 if self.vm.len() < VmField::ALL.len() {
                     self.vm.resize(VmField::ALL.len(), String::new());

@@ -1833,6 +1833,141 @@ pub fn sandbox_files_section(ws: &Workspace, scheme: &Scheme) -> impl View + use
 
 /// The Project page: settings of the active project, with the folders its
 /// sandboxes may use besides the worktree.
+/// The active project's Allowed page, or with `blocked` its Blocked page:
+/// the guarded requests its sandboxes send or are refused without a
+/// question, each of which can be removed or moved to the other page, and a
+/// form that adds one. The Allowed page also has the switch for launches.
+pub fn project_answers_section(
+    ws: &Workspace,
+    scheme: &Scheme,
+    blocked: bool,
+) -> impl View + use<> {
+    let inner = ws.borrow();
+    let tr = inner.tr;
+    let title = if blocked {
+        tr.section_project_blocked
+    } else {
+        tr.section_project_allowed
+    };
+    let mut column = Column::new().width(page_width()).gap(GAP / 2.0);
+    let Some(project) = inner.state.active().cloned() else {
+        drop(inner);
+        column = column.child(note(scheme, tr.project_none));
+        return page(title, column);
+    };
+    let guards = crate::runtime::all_guards(inner.ext.sandbox_rules());
+    let form = &inner.settings_ui.machines.form;
+    let picked = (form.project_guard.clone())
+        .or_else(|| guards.first().map(|g| g.id.clone()))
+        .unwrap_or_default();
+    let host = form.project_answer_host.clone();
+    let open = inner.settings_ui.picker == Some(Picker::ProjectGuard);
+    let focus = inner.regions.settings_focus;
+    drop(inner);
+
+    let id = project.id;
+    column = column
+        .child(section_title(project.name.clone()))
+        .child(note(
+            scheme,
+            if blocked {
+                tr.project_blocked_note
+            } else {
+                tr.project_allowed_note
+            },
+        ));
+    if !project.env.is_local() {
+        column = column.child(note(scheme, tr.project_answers_remote_note));
+    }
+    if !blocked {
+        let toggle = ws.clone();
+        column = column.child(switch(
+            scheme,
+            tr.project_launches,
+            tr.project_launches_note.to_owned(),
+            project.allows_launches,
+            move |on| toggle.set_project_launches(id, on),
+        ));
+    }
+    column = column.child(section_title(tr.ext_guards_heading));
+    let list = if blocked {
+        &project.always_blocked
+    } else {
+        &project.always_allowed
+    };
+    if list.is_empty() {
+        column = column.child(label(scheme, tr.no_project_folders));
+    }
+    let move_display = if blocked {
+        tr.project_answer_to_allowed
+    } else {
+        tr.project_answer_to_blocked
+    };
+    let move_width = super::text_button_width(move_display, 13.0).max(BUTTON_WIDTH);
+    for (index, entry) in list.iter().enumerate() {
+        let guard = (guards.iter())
+            .find(|g| g.id == entry.guard)
+            .map_or(entry.guard.as_str(), |g| g.title.as_str());
+        let named = (tr.always_entry)(guard, &entry.host);
+        let (shift, remove) = (ws.clone(), ws.clone());
+        column = column.child(item(
+            guard.to_owned(),
+            entry.host.clone(),
+            vec![
+                Box::new(
+                    quiet_button(format!("{move_display}: {named}"), move_display)
+                        .on_click(move || shift.move_project_answer(id, blocked, index)),
+                ),
+                Box::new(
+                    remove_icon((tr.remove_named)(&named))
+                        .on_click(move || remove.remove_project_answer(id, blocked, index)),
+                ),
+            ],
+            move_width + CONTROL_GAP + REMOVE_WIDTH,
+        ));
+    }
+
+    column = column.child(section_title(tr.project_answer_add_heading));
+    let toggle = ws.clone();
+    let mut dropdown = Dropdown::new(tr.project_answer_guard)
+        .min_width(SELECT_WIDTH)
+        .text_size(INPUT_TEXT_SIZE)
+        .open(open)
+        .on_toggle(move || toggle.toggle_picker(Picker::ProjectGuard));
+    for guard in &guards {
+        let pick = ws.clone();
+        let guard_id = guard.id.clone();
+        dropdown = dropdown.option(
+            DropdownOption::new(guard.title.clone())
+                .selected(guard.id == picked)
+                .on_select(move || pick.set_project_answer_guard(&guard_id)),
+        );
+    }
+    column = column.child(focused(scheme, dropdown, open, focus));
+    let add = ws.clone();
+    let add_width = super::text_button_width(tr.project_answer_add, 13.0).max(BUTTON_WIDTH);
+    column = column.child(
+        Row::new()
+            .gap(GAP)
+            .align(Align::Center)
+            .child(hinted(
+                scheme,
+                input(
+                    ws,
+                    MachineText::ProjectAnswerHost,
+                    tr.project_answer_host,
+                    host,
+                    page_width() - add_width - GAP,
+                ),
+            ))
+            .child(
+                button(tr.project_answer_add, tr.project_answer_add)
+                    .on_click(move || add.add_project_answer(blocked)),
+            ),
+    );
+    page(title, column)
+}
+
 pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
     let inner = ws.borrow();
     let tr = inner.tr;
@@ -1880,15 +2015,7 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .child(Fill::new(1.0, 6.0, schnellui::scene::Color::TRANSPARENT));
     // The switches sit together under the project's name, before the
     // titled sections, so none reads as part of the section above it.
-    let toggle = ws.clone();
     let id = project.id;
-    column = column.child(switch(
-        scheme,
-        tr.project_launches,
-        tr.project_launches_note.to_owned(),
-        project.allows_launches,
-        move |on| toggle.set_project_launches(id, on),
-    ));
     if !project.is_global() {
         let toggle = ws.clone();
         let id = project.id;

@@ -17,7 +17,9 @@
 //! The scope names where a request comes from, such as a project, when the
 //! proxy or the keyring bus knows it. Within a scope a guard and host can
 //! be allowed for good ([`Approvals::set_always`]); the app keeps that list
-//! and hands it over. A guard and host can also be allowed until the app
+//! and hands it over. A guard and host can also be refused for good
+//! ([`Approvals::set_blocked`]), which wins over every other answer and
+//! never asks. A guard and host can also be allowed until the app
 //! quits ([`Approvals::allow_for_session`]), within the question's scope.
 
 use std::collections::HashMap;
@@ -31,6 +33,16 @@ use super::rules::{GuardRule, normalize_target};
 pub const REMEMBER: Duration = Duration::from_secs(60);
 /// How long a request waits for an answer before it is refused.
 pub const TIMEOUT: Duration = Duration::from_secs(120);
+
+/// Ends the cover of the answers given in `scope`. Requests still waiting
+/// for one of them read it by id, so the answers themselves stay.
+fn forget_answers(state: &mut State, scope: &str) {
+    for answer in &mut state.answers {
+        if answer.scope.as_deref() == Some(scope) {
+            answer.reuse = false;
+        }
+    }
+}
 
 /// A request waiting for the user.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -94,6 +106,10 @@ struct Answer {
     subject: String,
     allow: bool,
     at: Instant,
+    /// Whether the answer still covers later requests within [`REMEMBER`].
+    /// A change to the standing answers of its scope ends that, but the
+    /// answer stays for the requests still waiting for it.
+    reuse: bool,
 }
 
 #[derive(Default)]
@@ -103,6 +119,9 @@ struct State {
     answers: Vec<Answer>,
     /// Per scope, the guards and hosts allowed for good.
     always: HashMap<String, Vec<(String, String)>>,
+    /// Per scope, the guards and hosts refused for good. They win over
+    /// every other answer.
+    blocked: HashMap<String, Vec<(String, String)>>,
     /// `(scope, guard, host)` allowed until the app quits.
     session: Vec<(Option<String>, String, String)>,
 }
@@ -183,6 +202,11 @@ impl Approvals {
         timeout: Duration,
     ) -> bool {
         let mut state = self.lock();
+        if let Some(blocked) = scope.and_then(|scope| state.blocked.get(scope))
+            && blocked.iter().any(|(g, h)| *g == guard.id && h == host)
+        {
+            return false;
+        }
         if let Some(always) = scope.and_then(|scope| state.always.get(scope))
             && always.iter().any(|(g, h)| *g == guard.id && h == host)
         {
@@ -199,7 +223,8 @@ impl Approvals {
             .retain(|a| now.duration_since(a.at) < REMEMBER);
         let about = subject(target, detail.as_deref(), body);
         if let Some(answer) = (state.answers.iter()).find(|a| {
-            a.guard == guard.id
+            a.reuse
+                && a.guard == guard.id
                 && a.scope.as_deref() == scope
                 && a.host == host
                 && a.subject == about
@@ -275,6 +300,7 @@ impl Approvals {
             host: pending.host,
             allow,
             at: Instant::now(),
+            reuse: true,
         });
         drop(state);
         self.answered.notify_all();
@@ -310,7 +336,7 @@ impl Approvals {
     /// `(guard id, host)`. Waiting questions they cover are allowed.
     pub fn set_always(&self, scope: &str, always: Vec<(String, String)>) {
         let mut state = self.lock();
-        if state.always.get(scope) == Some(&always) {
+        if state.always.get(scope).map_or(&[][..], Vec::as_slice) == always.as_slice() {
             return;
         }
         let covered: Vec<u64> = (state.pending.iter())
@@ -324,10 +350,35 @@ impl Approvals {
             state.always.insert(scope.to_owned(), always);
         }
         // A revoked guard asks again, also within the remembered minute.
-        state.answers.retain(|a| a.scope.as_deref() != Some(scope));
+        forget_answers(&mut state, scope);
         drop(state);
         for id in covered {
             self.answer(id, true);
+        }
+    }
+
+    /// Replaces the guards and hosts refused for good in `scope`, as
+    /// `(guard id, host)`. Waiting questions they cover are refused.
+    pub fn set_blocked(&self, scope: &str, blocked: Vec<(String, String)>) {
+        let mut state = self.lock();
+        if state.blocked.get(scope).map_or(&[][..], Vec::as_slice) == blocked.as_slice() {
+            return;
+        }
+        let covered: Vec<u64> = (state.pending.iter())
+            .filter(|p| p.scope.as_deref() == Some(scope))
+            .filter(|p| blocked.iter().any(|(g, h)| *g == p.guard && *h == p.host))
+            .map(|p| p.id)
+            .collect();
+        if blocked.is_empty() {
+            state.blocked.remove(scope);
+        } else {
+            state.blocked.insert(scope.to_owned(), blocked);
+        }
+        // An unblocked guard asks again, also within the remembered minute.
+        forget_answers(&mut state, scope);
+        drop(state);
+        for id in covered {
+            self.answer(id, false);
         }
     }
 
@@ -608,5 +659,38 @@ mod tests {
         assert_eq!(approvals.pending()[0].scope.as_deref(), Some("7"));
         approvals.set_always("7", vec![("git.push".into(), "example.org".into())]);
         assert!(waiting.join().unwrap());
+    }
+
+    #[test]
+    fn blocked_answers_refuse_without_asking_and_win_over_allowed_ones() {
+        let approvals = Arc::new(Approvals::new(|| {}));
+        let waiting = {
+            let approvals = Arc::clone(&approvals);
+            thread::spawn(move || approvals.ask(&guard(), Some("5"), "example.org", "POST", "/"))
+        };
+        while approvals.pending().is_empty() {
+            thread::yield_now();
+        }
+        let entry = vec![("git.push".to_owned(), "example.org".to_owned())];
+        approvals.set_blocked("5", entry.clone());
+        assert!(!waiting.join().unwrap());
+        // No question waits for it, even when the same entry is allowed too.
+        approvals.set_always("5", entry);
+        assert!(!approvals.ask(&guard(), Some("5"), "example.org", "POST", "/"));
+        assert!(approvals.pending().is_empty());
+        // Another project still asks; unblocked, the allowed entry holds.
+        let short = Duration::from_millis(20);
+        assert!(!approvals.ask_within(
+            &guard(),
+            Some("6"),
+            "example.org",
+            "POST",
+            "/",
+            None,
+            None,
+            short
+        ));
+        approvals.set_blocked("5", Vec::new());
+        assert!(approvals.ask(&guard(), Some("5"), "example.org", "POST", "/"));
     }
 }

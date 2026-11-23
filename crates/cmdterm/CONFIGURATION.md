@@ -566,10 +566,15 @@ the palette; the worktree keeps the choice in `state.json`.
   requests without an entry here follows `sandbox.change_requests`.
   In `ask` mode the dialog offers "Allow in this session", which holds for the guard and
   host for requests from the same project until the app quits, and "Always allow in this
-  project" for requests from a local project's sandboxes. That answer holds for the guard
-  and host (or keyring secret) in that project only, and the project keeps it in
-  `state.json` (`always_allowed`).
-  Settings, Extensions, scriptschnell-term lists these answers, and Remove takes one back.
+  project" and "Always block in this project" for requests from a local project's
+  sandboxes. That answer holds for the guard and host (or keyring secret) in that project
+  only, and the project keeps it in `state.json` (`always_allowed` or `always_blocked`).
+  A blocked entry refuses the request without a question and wins over every other answer.
+  Settings, Project, Allowed and Blocked list the active project's entries: Remove takes
+  one back, "Block instead" and "Allow instead" move it to the other page, and the form at
+  the end adds one for a guard and a host (or a keyring secret's label). Host names are
+  kept in lowercase. Settings, Extensions, scriptschnell-term lists the allowed entries of
+  every project.
   On Linux, `cmdterm.keyring` covers this machine's keyring. Sandboxes don't see the
   session bus. Instead `DBUS_SESSION_BUS_ADDRESS` points to a stand-in that reaches only
   the Secret Service (`org.freedesktop.secrets`, such as gnome-keyring or KWallet), and
@@ -941,6 +946,8 @@ process the app starts for it, where other users of this machine can read them w
 so keep secrets out of them. On Unix the app writes `state.json` and `settings.json` with
 mode 0600. `allows_launches` is true for a project whose agents
 may create worktrees and start agents through the control socket without asking.
+`always_allowed` and `always_blocked` hold a project's guarded requests answered for good,
+each entry a `guard` id and a `host` (or a keyring secret's label).
 `jj` is `true` or `false` for a project that chose for itself whether it reads its jj
 repository with `jj`, and missing for one that follows the `jj` setting.
 `base` is a project's reference branch, the branch or revision its reviews compare
@@ -1177,8 +1184,9 @@ existing worktree.
 
 The dialog for these two asks has Deny and Allow, plus two answers that cover every later
 ask from the same project. "Allow in this session" holds until the app quits. "Always
-allow in this project" is saved in `state.json` (`allows_launches`); Settings,
-Extensions, scriptschnell-term lists it under "Always allowed", where Remove takes it back.
+allow in this project" is saved in `state.json` (`allows_launches`). Settings, Project,
+Allowed has the switch for it, and Settings, Extensions, scriptschnell-term lists it under
+"Always allowed", where Remove takes it back.
 
 ### Debug browser tools
 
