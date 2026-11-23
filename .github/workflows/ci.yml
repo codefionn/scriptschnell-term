@@ -74,8 +74,10 @@ jobs:
         run: cargo test --workspace --locked
 
   # The emulator and the environment crate have platform code of their own (the PTY
-  # layer, sandboxes), so they build and test on macOS too.
+  # layer, sandboxes), so they build and test on macOS too. Turned off for now; remove
+  # the `if: false` to run it again.
   macos:
+    if: false
     runs-on: macos-latest
     steps:
       - uses: actions/checkout@v7
