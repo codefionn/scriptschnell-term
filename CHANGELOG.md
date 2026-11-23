@@ -58,6 +58,15 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- On Windows, Claude Code, Mistral Vibe and other agents start when their folder is
+  missing from the `PATH` the app started with. The app also looks in
+  `%USERPROFILE%\.local\bin`, winget's links, npm's global folder and the folders of
+  winget packages, where winget may install Claude Code without a link. The Agents
+  page counts an agent found there as installed before it ever ran.
+- On Windows, the debug browser's MCP server connects in Mistral Vibe, Claude Code and
+  the other agents. Their entry started `sh`, which Windows does not have, and now
+  starts Git's `sh.exe` by its full path. The Agents page marks existing entries as
+  outdated until you update them.
 - On Windows, an agent saved with a terminal whose session no longer exists, such as a
   deleted Claude Code or Codex session, starts a new session instead of failing to
   resume the old one. The app now looks for the session in the agent's store without

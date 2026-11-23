@@ -58,7 +58,8 @@ pub const BROWSER_MCP_PATH: &str = ".local/share/cmdterm/browser-mcp";
 /// The name agents list the debug browser's tools under.
 const MCP_NAME: &str = "scriptschnell-term-browser";
 /// How agents start [`BROWSER_MCP_PATH`]: through `sh`, so `$HOME` is the
-/// home of wherever the agent runs.
+/// home of wherever the agent runs. On Windows `sh` is Git's, by its full
+/// path ([`Home::mcp_sh`]).
 const MCP_COMMAND: [&str; 3] = [
     "sh",
     "-c",
@@ -1645,7 +1646,8 @@ impl Agent {
 
     /// The debug browser's server entry in [`Self::mcp_config`], for the
     /// JSON ones.
-    fn mcp_entry(self) -> Value {
+    fn mcp_entry(self, sh: &str) -> Value {
+        let command = [sh, MCP_COMMAND[1], MCP_COMMAND[2]];
         let style = match self {
             Agent::Custom(agent) => agent.mcp.map_or(McpStyle::Stdio, |(_, _, style)| style),
             Agent::OpenCode => McpStyle::Local,
@@ -1654,23 +1656,23 @@ impl Agent {
         };
         match (self, style) {
             (_, McpStyle::Local) => {
-                json!({ "type": "local", "command": MCP_COMMAND, "enabled": true })
+                json!({ "type": "local", "command": command, "enabled": true })
             }
             (Agent::Copilot, _) => json!({
                 "type": "local",
-                "command": MCP_COMMAND[0],
-                "args": &MCP_COMMAND[1..],
+                "command": command[0],
+                "args": &command[1..],
                 "env": {},
                 "tools": ["*"],
             }),
             (_, McpStyle::Command) => json!({
-                "command": MCP_COMMAND[0],
-                "args": &MCP_COMMAND[1..],
+                "command": command[0],
+                "args": &command[1..],
             }),
             _ => json!({
                 "type": "stdio",
-                "command": MCP_COMMAND[0],
-                "args": &MCP_COMMAND[1..],
+                "command": command[0],
+                "args": &command[1..],
                 "env": {},
             }),
         }
@@ -1686,12 +1688,12 @@ impl Agent {
     }
 
     /// The server's table for the agents whose MCP config is TOML.
-    fn mcp_toml(self) -> Option<String> {
+    fn mcp_toml(self, sh: &str) -> Option<String> {
         let args: Vec<String> = MCP_COMMAND[1..]
             .iter()
             .map(|a| json!(a).to_string())
             .collect();
-        let (command, args) = (json!(MCP_COMMAND[0]), args.join(", "));
+        let (command, args) = (json!(sh), args.join(", "));
         match self {
             // Codex gives a tool 60 seconds unless told otherwise; the
             // control socket's waits take up to 840.
@@ -1818,6 +1820,24 @@ impl Home {
             return None;
         }
         self.home.clone().or_else(std::env::home_dir)
+    }
+
+    /// The `sh` agents start the debug browser's server with: Git's
+    /// `sh.exe` by its full path on this Windows machine, which has no
+    /// `sh` on `PATH`, else `sh`.
+    fn mcp_sh(&self) -> String {
+        match cmdterm_env::git_sh().filter(|_| self.env.is_local()) {
+            Some(sh) => sh.to_string_lossy().into_owned(),
+            None => MCP_COMMAND[0].to_owned(),
+        }
+    }
+
+    /// Whether `agent`'s program is installed on this Windows machine.
+    /// False elsewhere, and in tests, which give a home of their own.
+    fn has_program(&self, agent: Agent) -> bool {
+        self.home.is_none()
+            && self.env.is_local()
+            && cmdterm_env::find_program(agent.program()).is_some()
     }
 
     fn exists(&self, dir: &str) -> Result<bool, String> {
@@ -2157,11 +2177,11 @@ fn mcp_registered(home: &Home, agent: Agent) -> Result<bool, String> {
         return Ok(true);
     };
     let text = home.read(path)?.unwrap_or_default();
-    if let Some(block) = agent.mcp_toml() {
+    if let Some(block) = agent.mcp_toml(&home.mcp_sh()) {
         return Ok(has_block(&text, &block, MCP_END));
     }
     let root = parse_json(Some(text))?;
-    Ok(root[agent.mcp_key()][MCP_NAME] == agent.mcp_entry())
+    Ok(root[agent.mcp_key()][MCP_NAME] == agent.mcp_entry(&home.mcp_sh()))
 }
 
 /// Whether the debug browser's server has an entry, from this version or
@@ -2171,7 +2191,7 @@ fn mcp_present(home: &Home, agent: Agent) -> Result<bool, String> {
         return Ok(false);
     };
     let text = home.read(path)?.unwrap_or_default();
-    if agent.mcp_toml().is_some() {
+    if agent.mcp_toml(&home.mcp_sh()).is_some() {
         return Ok(text.lines().any(|line| line.trim_end() == MCP_BEGIN));
     }
     let root = parse_json(Some(text))?;
@@ -2184,7 +2204,7 @@ fn add_mcp(home: &Home, agent: Agent) -> Result<(), String> {
         return Ok(());
     };
     let text = home.read(path)?;
-    if let Some(block) = agent.mcp_toml() {
+    if let Some(block) = agent.mcp_toml(&home.mcp_sh()) {
         let text = put_block(&text.unwrap_or_default(), &block, MCP_BEGIN, MCP_END);
         return home.write(path, &text, false);
     }
@@ -2201,7 +2221,7 @@ fn add_mcp(home: &Home, agent: Agent) -> Result<(), String> {
         .or_insert_with(|| Value::Object(Map::new()))
         .as_object_mut()
         .ok_or_else(|| format!("\"{}\" in {path} is not an object", agent.mcp_key()))?
-        .insert(MCP_NAME.into(), agent.mcp_entry());
+        .insert(MCP_NAME.into(), agent.mcp_entry(&home.mcp_sh()));
     home.write(path, &to_json(&root), false)
 }
 
@@ -2212,7 +2232,7 @@ fn remove_mcp(home: &Home, agent: Agent) -> Result<(), String> {
     let Some(text) = home.read(path)? else {
         return Ok(());
     };
-    if let Some(block) = agent.mcp_toml() {
+    if let Some(block) = agent.mcp_toml(&home.mcp_sh()) {
         if let Some(stripped) = take_block(&text, &block, MCP_BEGIN, MCP_END) {
             home.write(path, &stripped, false)?;
         }
@@ -2231,7 +2251,9 @@ fn remove_mcp(home: &Home, agent: Agent) -> Result<(), String> {
 }
 
 fn check(home: &Home, agent: Agent) -> Result<Status, String> {
-    if !home.exists(agent.config_dir())? {
+    // An agent that never ran has no folder yet; on Windows its program
+    // shows that it is installed.
+    if !home.exists(agent.config_dir())? && !home.has_program(agent) {
         return Ok(Status::NotFound);
     }
     let status = match agent.integration() {
@@ -2868,9 +2890,8 @@ fn store_has(dir: &std::path::Path, id: &str, by_name: bool, depth: usize) -> bo
         }
         !by_name
             && kind.is_file()
-            && std::fs::read(entry.path()).is_ok_and(|bytes| {
-                (bytes.windows(id.len())).any(|window| window == id.as_bytes())
-            })
+            && std::fs::read(entry.path())
+                .is_ok_and(|bytes| (bytes.windows(id.len())).any(|window| window == id.as_bytes()))
     })
 }
 
@@ -3418,6 +3439,12 @@ mod tests {
     use super::*;
     use std::path::Path;
 
+    /// The `sh` the debug browser's server entries name on this machine.
+    fn mcp_sh() -> String {
+        cmdterm_env::git_sh()
+            .map_or_else(|| "sh".to_owned(), |sh| sh.to_string_lossy().into_owned())
+    }
+
     fn home() -> (tempfile::TempDir, Home) {
         let dir = tempfile::tempdir().unwrap();
         let home = Home {
@@ -3528,7 +3555,7 @@ mod tests {
             let root: Value =
                 serde_json::from_str(&std::fs::read_to_string(&settings).unwrap()).unwrap();
             assert_eq!(root["theme"], "dark");
-            assert_eq!(root["mcpServers"][MCP_NAME]["command"], "sh");
+            assert_eq!(root["mcpServers"][MCP_NAME]["command"], mcp_sh());
             assert!(dir.path().join(agent.skill()).is_file());
             uninstall(&home, agent).unwrap();
             assert_eq!(check(&home, agent), Ok(Status::Off), "{agent:?}");
@@ -3636,7 +3663,7 @@ mod tests {
         assert_eq!(check(&home, Agent::Antigravity), Ok(Status::On));
         let root: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
         assert_eq!(root["mcpServers"]["mine"]["command"], "x");
-        assert_eq!(root["mcpServers"][MCP_NAME]["command"], "sh");
+        assert_eq!(root["mcpServers"][MCP_NAME]["command"], mcp_sh());
         let skill = dir.path().join(Agent::Antigravity.skill());
         assert!(skill.starts_with(dir.path().join(".gemini/antigravity-cli/skills")));
         assert!(skill.is_file());
@@ -3705,9 +3732,10 @@ mod tests {
             text.starts_with("active_model = \"devstral\"\n\n"),
             "{text}"
         );
-        assert!(text.contains(
-            "[[mcp_servers]]\nname = \"scriptschnell-term-browser\"\ntransport = \"stdio\"\ncommand = \"sh\"\n"
-        ));
+        assert!(text.contains(&format!(
+            "[[mcp_servers]]\nname = \"scriptschnell-term-browser\"\ntransport = \"stdio\"\ncommand = {}\n",
+            json!(mcp_sh())
+        )));
         assert!(dir.path().join(Agent::Vibe.skill()).is_file());
         std::fs::remove_file(dir.path().join(Agent::Vibe.skill())).unwrap();
         assert_eq!(check(&home, Agent::Vibe), Ok(Status::Outdated));
@@ -3899,7 +3927,7 @@ mod tests {
         )
         .unwrap();
         assert_eq!(claude["numStartups"], 3);
-        assert_eq!(claude["mcpServers"][MCP_NAME]["command"], "sh");
+        assert_eq!(claude["mcpServers"][MCP_NAME]["command"], mcp_sh());
         let opencode: Value = serde_json::from_str(
             &std::fs::read_to_string(dir.path().join(".config/opencode/opencode.json")).unwrap(),
         )
@@ -3910,7 +3938,10 @@ mod tests {
             toml.starts_with("model = \"o3\"\n[profiles.fast]\n"),
             "{toml}"
         );
-        assert!(toml.contains("[mcp_servers.scriptschnell-term-browser]\ncommand = \"sh\"\n"));
+        assert!(toml.contains(&format!(
+            "[mcp_servers.scriptschnell-term-browser]\ncommand = {}\n",
+            json!(mcp_sh())
+        )));
         assert!(
             toml.contains(r#"args = ["-c", "exec \"$HOME/.local/share/cmdterm/browser-mcp\""]"#)
         );
@@ -4656,7 +4687,7 @@ cat "$out/second" "$out/second.err"
             &std::fs::read_to_string(dir.path().join(".ext-hooked/mcp.json")).unwrap(),
         )
         .unwrap();
-        assert_eq!(mcp["servers"][MCP_NAME]["command"], "sh");
+        assert_eq!(mcp["servers"][MCP_NAME]["command"], mcp_sh());
         assert!(dir.path().join(agent.skill()).is_file());
         assert_eq!(
             follow_up(&home, agent, &Status::On),

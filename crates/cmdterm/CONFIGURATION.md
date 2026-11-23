@@ -917,7 +917,10 @@ through `sh` on the host, so they need a POSIX shell there.
   `PATH` of the user's login shell (`$SHELL -l`), on every Unix and whatever
   `agents_use_bash` says. An app started from the desktop often lacks what a shell
   profile adds, such as `~/.local/bin`, where uv, pipx and npm install Mistral Vibe,
-  Kimi Code and other agents.
+  Kimi Code and other agents. On Windows a program the app's `PATH` lacks is looked
+  for in `%USERPROFILE%\.local\bin`, winget's `Links` folder, npm's `%APPDATA%\npm`
+  and the folders of the packages winget installed for you, such as Claude Code's. The
+  Agents page counts an agent found there as installed before it first ran.
 
 ### Shells on Windows
 
@@ -1262,7 +1265,8 @@ register it as `scriptschnell-term-browser` with Claude Code (`~/.claude.json`),
 (`~/.codex/config.toml`), opencode (`~/.config/opencode/opencode.json`), Copilot CLI
 (`~/.copilot/mcp-config.json`), Qwen Code (`~/.qwen/settings.json`), Gemini CLI
 (`~/.gemini/settings.json`), Antigravity CLI (`~/.gemini/config/mcp_config.json`), Kimi
-Code (`~/.kimi-code/mcp.json`) and Mistral Vibe (`~/.vibe/config.toml`). pi has no MCP support. Gemini CLI with
+Code (`~/.kimi-code/mcp.json`) and Mistral Vibe (`~/.vibe/config.toml`). On Windows the
+entry starts Git's `sh.exe` by its full path, since Windows has no `sh`. pi has no MCP support. Gemini CLI with
 `security.enableEnvironmentVariableRedaction` on hides `SCRIPTSCHNELL_TERM_TOKEN` from
 the server and from hooks, so neither reaches the app. Outside a scriptschnell-term terminal the server offers no tools.
 

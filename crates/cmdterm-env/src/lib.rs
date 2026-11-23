@@ -82,7 +82,9 @@ pub use sandbox::{SandboxKind, SandboxLaunch, SandboxPolicy, SandboxTarget, set_
 pub use seatbelt::{
     SandboxWarning, sandbox_warnings_pending, take_sandbox_warnings, warm_seatbelt_probe,
 };
-pub use shells::{GIT_BASH_VAR, ShellOption, git_bash, installed_shells, set_default_shell};
+pub use shells::{
+    GIT_BASH_VAR, ShellOption, find_program, git_bash, git_sh, installed_shells, set_default_shell,
+};
 use shells::{git_bash_var, local_msys_path, local_program, local_shell, path_var};
 #[cfg(windows)]
 pub use windows_sandbox::launch_sandboxed;

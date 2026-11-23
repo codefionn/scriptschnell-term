@@ -37,6 +37,8 @@ pub const GIT_BASH_VAR: &str = "CLAUDE_CODE_GIT_BASH_PATH";
 pub(crate) struct Probe<'a> {
     pub var: &'a dyn Fn(&str) -> Option<OsString>,
     pub is_file: &'a dyn Fn(&Path) -> bool,
+    /// The folders in a folder.
+    pub subdirs: &'a dyn Fn(&Path) -> Vec<PathBuf>,
 }
 
 impl Probe<'_> {
@@ -95,6 +97,48 @@ impl Probe<'_> {
             .find(|path| (self.is_file)(path))
     }
 
+    /// Git's `bin\sh.exe`, which sets up `PATH` like Git Bash's `bash.exe`,
+    /// else its `usr\bin\sh.exe`.
+    fn git_sh(&self) -> Option<PathBuf> {
+        self.git_roots().into_iter().find_map(|root| {
+            [
+                root.join("bin").join("sh.exe"),
+                root.join("usr").join("bin").join("sh.exe"),
+            ]
+            .into_iter()
+            .find(|path| (self.is_file)(path))
+        })
+    }
+
+    /// Where installers put programs for one user without the folder
+    /// always being on the `PATH` the app started with: the native
+    /// installer of Claude Code and uv's tools such as Mistral Vibe
+    /// (`~\.local\bin`), winget's links, npm's global folder, and the
+    /// folders of packages winget installed for the user without a link,
+    /// as it may for Claude Code.
+    fn user_program_dirs(&self) -> Vec<PathBuf> {
+        let mut dirs = Vec::new();
+        for (base, rest) in [
+            ("USERPROFILE", &[".local", "bin"][..]),
+            ("LOCALAPPDATA", &["Microsoft", "WinGet", "Links"][..]),
+            ("APPDATA", &["npm"][..]),
+        ] {
+            if let Some(base) = (self.var)(base) {
+                let mut dir = PathBuf::from(base);
+                dir.extend(rest);
+                dirs.push(dir);
+            }
+        }
+        if let Some(local) = (self.var)("LOCALAPPDATA") {
+            let packages = Path::new(&local)
+                .join("Microsoft")
+                .join("WinGet")
+                .join("Packages");
+            dirs.extend((self.subdirs)(&packages));
+        }
+        dirs
+    }
+
     /// `name` from Git's `usr\bin`, unless `PATH` has it already.
     fn git_unix_tool(&self, name: &str) -> Option<PathBuf> {
         if self.on_path(name).is_some() {
@@ -109,8 +153,9 @@ impl Probe<'_> {
     /// The full path of `name` where Windows' own search misses it: a bare
     /// name, such as `az` or `claude`, that `PATH` (`path`, else this
     /// process's) holds only as a batch file such as `az.cmd`, which npm and
-    /// the Azure CLI install. Windows looks only for `name.exe`; this tries
-    /// every extension of `PATHEXT` in each directory, as the shells do. A
+    /// the Azure CLI install, or that only a folder of
+    /// [`Self::user_program_dirs`] holds. Windows looks only for
+    /// `name.exe`; this tries every extension of `PATHEXT` in each directory, as the shells do. A
     /// name with an extension of `PATHEXT` is looked for as it is. `None` for
     /// a path, and for a program of the Windows directories, which Windows
     /// searches before `PATH`.
@@ -152,9 +197,14 @@ impl Probe<'_> {
             Some(path) => std::env::split_paths(path).collect(),
             None => self.path_dirs(),
         };
-        dirs.iter()
-            .flat_map(|dir| candidates.iter().map(move |name| dir.join(name)))
-            .find(|candidate| (self.is_file)(candidate))
+        // `PATH` first, then the folders installers use for one user,
+        // which a `PATH` from before the install lacks.
+        let find = |dirs: &[PathBuf]| {
+            dirs.iter()
+                .flat_map(|dir| candidates.iter().map(move |name| dir.join(name)))
+                .find(|candidate| (self.is_file)(candidate))
+        };
+        find(&dirs).or_else(|| find(&self.user_program_dirs()))
     }
 
     /// The `PATH` for `program` when it is a program from Git's `usr\bin`
@@ -310,6 +360,16 @@ fn machine<T>(read: impl FnOnce(&Probe) -> T) -> T {
     read(&Probe {
         var: &|name| std::env::var_os(name),
         is_file: &is_program_file,
+        subdirs: &|dir| {
+            std::fs::read_dir(dir)
+                .map(|entries| {
+                    (entries.flatten())
+                        .filter(|entry| entry.file_type().is_ok_and(|kind| kind.is_dir()))
+                        .map(|entry| entry.path())
+                        .collect()
+                })
+                .unwrap_or_default()
+        },
     })
 }
 
@@ -343,6 +403,36 @@ pub fn git_bash() -> Option<&'static Path> {
     {
         static BASH: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
         BASH.get_or_init(|| machine(|probe| probe.git_bash()))
+            .as_deref()
+    }
+    #[cfg(not(windows))]
+    {
+        None
+    }
+}
+
+/// The full path of program `name` on this Windows machine, as the app
+/// starts it: from `PATH`, else from the folders installers use for one
+/// user. Always `None` on other systems.
+pub fn find_program(name: &str) -> Option<PathBuf> {
+    #[cfg(windows)]
+    {
+        machine(|probe| probe.path_program(name.as_ref(), None))
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = name;
+        None
+    }
+}
+
+/// Git's `sh.exe`, found once, which programs that start a bare `sh` do
+/// not find on Windows. Always `None` on systems other than Windows.
+pub fn git_sh() -> Option<&'static Path> {
+    #[cfg(windows)]
+    {
+        static SH: std::sync::OnceLock<Option<PathBuf>> = std::sync::OnceLock::new();
+        SH.get_or_init(|| machine(|probe| probe.git_sh()))
             .as_deref()
     }
     #[cfg(not(windows))]
@@ -524,9 +614,21 @@ mod tests {
             .collect();
         let var = |name: &str| vars.get(name).cloned();
         let is_file = |path: &Path| files.iter().any(|file| file == path);
+        let subdirs = |dir: &Path| {
+            let mut found: Vec<PathBuf> = (files.iter())
+                .filter_map(|file| {
+                    let rest = file.strip_prefix(dir).ok()?;
+                    let first = rest.components().next()?;
+                    (rest.components().count() > 1).then(|| dir.join(first))
+                })
+                .collect();
+            found.dedup();
+            found
+        };
         read(&Probe {
             var: &var,
             is_file: &is_file,
+            subdirs: &subdirs,
         })
     }
 
@@ -692,6 +794,36 @@ mod tests {
                 p.path_program("az".as_ref(), Some(only_npm.as_os_str())),
                 None
             );
+        });
+    }
+
+    #[test]
+    fn user_installs_are_found_without_path() {
+        let vibe = path(&["/home", ".local", "bin", "vibe.exe"]);
+        let claude = path(&[
+            "/local",
+            "Microsoft",
+            "WinGet",
+            "Packages",
+            "Anthropic.ClaudeCode_Source",
+            "claude.exe",
+        ]);
+        let on_path = path(&["/bin", "claude.exe"]);
+        let vars = [
+            ("PATH", "/bin"),
+            ("PATHEXT", ".EXE;.CMD"),
+            ("USERPROFILE", "/home"),
+            ("LOCALAPPDATA", "/local"),
+        ];
+        probe_with(&vars, &[vibe.clone(), claude.clone()], |p| {
+            let find = |name: &str| p.path_program(name.as_ref(), None);
+            assert_eq!(find("vibe"), Some(vibe.clone()));
+            assert_eq!(find("claude"), Some(claude.clone()));
+            assert_eq!(find("missing"), None);
+        });
+        // `PATH` comes first.
+        probe_with(&vars, &[claude, on_path.clone()], |p| {
+            assert_eq!(p.path_program("claude".as_ref(), None), Some(on_path));
         });
     }
 
