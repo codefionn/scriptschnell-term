@@ -2696,20 +2696,21 @@ pub struct SessionCheck {
     program: &'static str,
     dir: &'static str,
     by_name: bool,
+    /// The agent runs on this Windows machine, which has no `sh`: the app
+    /// looks at the store itself.
+    native: bool,
 }
 
 impl SessionCheck {
     /// The check for `agent` in `env`, with the terminal's `vars`. `None`
-    /// when the agent named no session, the app does not know where it
-    /// keeps them, or `env` is this Windows machine, which has no `sh`.
+    /// when the agent named no session or the app does not know where it
+    /// keeps them.
     pub fn new(
         env: &Environment,
         vars: &[(String, String)],
         agent: &crate::state::AgentSession,
     ) -> Option<Self> {
-        if cfg!(windows) && env.base().is_local() {
-            return None;
-        }
+        let native = cfg!(windows) && env.base().is_local();
         let id = agent.session.as_deref().filter(|id| valid_session_id(id))?;
         let (dir, by_name) = (SESSION_STORES.iter())
             .find(|(name, ..)| *name == agent.agent)
@@ -2722,7 +2723,27 @@ impl SessionCheck {
             program: program_of(agent)?,
             dir,
             by_name,
+            native,
         })
+    }
+
+    /// [`Self::gone`] without `sh`: expands the store directory with the
+    /// terminal's variables, then the app's, and looks through it.
+    fn gone_here(&self) -> bool {
+        let lookup = |name: &str| -> Option<String> {
+            let found = (self.vars.iter())
+                .find(|(key, _)| key == name)
+                .map(|(_, value)| value.clone())
+                .or_else(|| std::env::var(name).ok());
+            match (name, found) {
+                (_, Some(value)) if !value.is_empty() => Some(value),
+                // Windows has no `HOME`; agents keep their files in the profile.
+                ("HOME", _) => std::env::var("USERPROFILE").ok(),
+                _ => None,
+            }
+        };
+        let dir = std::path::PathBuf::from(expand_vars(self.dir, &lookup));
+        dir.is_dir() && !store_has(&dir, &self.id, self.by_name, 8)
     }
 
     /// A `sh` condition that holds when the session `$id` names is gone.
@@ -2738,6 +2759,9 @@ impl SessionCheck {
     /// Whether the session is gone. False when the check could not run.
     /// Blocking: starts a process in the environment.
     pub fn gone(&self) -> bool {
+        if self.native {
+            return self.gone_here();
+        }
         let script = format!("id=$1; if {}; then echo gone; fi", self.script());
         let mut command =
             (self.env.command("sh")).args(["-c", script.as_str(), "sh", self.id.as_str()]);
@@ -2752,7 +2776,14 @@ impl SessionCheck {
     /// The command that runs `argv`, which resumes the session, while the
     /// session exists, and else `argv`'s program alone, which starts a new
     /// one. `exec` leaves the agent itself as the process group leader.
+    /// Without `sh` the app checks right away, which blocks.
     pub fn wrap(&self, argv: &[String]) -> Vec<String> {
+        if self.native {
+            return match (self.gone_here(), argv.first()) {
+                (true, Some(program)) => vec![program.clone()],
+                _ => argv.to_vec(),
+            };
+        }
         let script = format!(
             "id=$1; shift; if {}; then exec \"$1\"; fi; exec \"$@\"",
             self.script(),
@@ -2768,6 +2799,79 @@ impl SessionCheck {
     pub fn fresh_line(&self) -> String {
         self.program.to_owned()
     }
+}
+
+/// Expands `$NAME`, `${NAME}` and `${NAME:-default}` in `text` the way `sh`
+/// does for the store directories in [`SESSION_STORES`]; `lookup` gives a
+/// variable's value, `None` for an unset or empty one.
+fn expand_vars(text: &str, lookup: &dyn Fn(&str) -> Option<String>) -> String {
+    let is_name = |c: char| c.is_ascii_alphanumeric() || c == '_';
+    let mut out = String::new();
+    let mut rest = text;
+    while let Some(at) = rest.find('$') {
+        out.push_str(&rest[..at]);
+        rest = &rest[at + 1..];
+        if let Some(braced) = rest.strip_prefix('{') {
+            // The closing brace that matches, past nested `${...}`.
+            let mut depth = 1;
+            let end = braced.char_indices().find_map(|(i, c)| {
+                match c {
+                    '{' => depth += 1,
+                    '}' => depth -= 1,
+                    _ => {}
+                }
+                (depth == 0).then_some(i)
+            });
+            let Some(end) = end else {
+                out.push('$');
+                continue;
+            };
+            let inner = &braced[..end];
+            rest = &braced[end + 1..];
+            match inner.split_once(":-") {
+                Some((name, default)) => match lookup(name) {
+                    Some(value) => out.push_str(&value),
+                    None => out.push_str(&expand_vars(default, lookup)),
+                },
+                None => out.push_str(&lookup(inner).unwrap_or_default()),
+            }
+        } else {
+            let len = rest.find(|c: char| !is_name(c)).unwrap_or(rest.len());
+            if len == 0 {
+                out.push('$');
+                continue;
+            }
+            out.push_str(&lookup(&rest[..len]).unwrap_or_default());
+            rest = &rest[len..];
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Whether the store at `dir` holds session `id`: a file or directory whose
+/// name contains it (`by_name`), else a file that contains it, at most
+/// `depth` directories down. Blocking: reads the directory tree.
+fn store_has(dir: &std::path::Path, id: &str, by_name: bool, depth: usize) -> bool {
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return false;
+    };
+    entries.flatten().any(|entry| {
+        let Ok(kind) = entry.file_type() else {
+            return false;
+        };
+        if by_name && entry.file_name().to_string_lossy().contains(id) {
+            return true;
+        }
+        if kind.is_dir() {
+            return depth > 0 && store_has(&entry.path(), id, by_name, depth - 1);
+        }
+        !by_name
+            && kind.is_file()
+            && std::fs::read(entry.path()).is_ok_and(|bytes| {
+                (bytes.windows(id.len())).any(|window| window == id.as_bytes())
+            })
+    })
 }
 
 /// The program that resumes `agent`, such as `claude`.
@@ -4576,16 +4680,24 @@ cat "$out/second" "$out/second.err"
         );
         assert!(first_prompt(agent, "fix it", Some(PromptVia::Paste)).is_err());
         assert!(!agent.supports(Capability::Messages));
-        // The app looks for them in the directory it named.
-        if cfg!(unix) {
+        // The app looks for them in the directory it named, on Windows
+        // without `sh` too.
+        {
             let vars = [("HOME".to_owned(), dir.path().to_str().unwrap().to_owned())];
             let check = SessionCheck::new(&Environment::Local, &vars, &session).unwrap();
             assert!(!check.gone(), "no directory: resumes without checking");
             let sessions = dir.path().join(".ext-hooked/sessions");
             std::fs::create_dir_all(&sessions).unwrap();
             assert!(check.gone());
+            let argv = resume_command(&session).unwrap();
+            if cfg!(windows) {
+                assert_eq!(check.wrap(&argv), ["ext-hooked"]);
+            }
             std::fs::write(sessions.join("abc-1.jsonl"), "").unwrap();
             assert!(!check.gone());
+            if cfg!(windows) {
+                assert_eq!(check.wrap(&argv), argv);
+            }
             assert_eq!(check.fresh_line(), "ext-hooked");
         }
         assert!(generic_title("Test ext-hooked"));
@@ -4602,6 +4714,39 @@ cat "$out/second" "$out/second.err"
         set_custom(owner, &[]);
         assert_eq!(Agent::find("ext-hooked"), None);
         assert_eq!(parse_session("ext-hooked:abc-1"), None);
+    }
+
+    #[test]
+    fn session_stores_expand_like_sh() {
+        let lookup = |name: &str| match name {
+            "HOME" => Some("/home/me".to_owned()),
+            "CODEX_HOME" => Some("/opt/codex".to_owned()),
+            _ => None,
+        };
+        assert_eq!(
+            expand_vars("${CLAUDE_CONFIG_DIR:-$HOME/.claude}/projects", &lookup),
+            "/home/me/.claude/projects"
+        );
+        assert_eq!(
+            expand_vars("${CODEX_HOME:-$HOME/.codex}/sessions", &lookup),
+            "/opt/codex/sessions"
+        );
+        assert_eq!(expand_vars("$HOME/.qwen", &lookup), "/home/me/.qwen");
+        assert_eq!(expand_vars("${UNSET}/x$", &lookup), "/x$");
+    }
+
+    #[test]
+    fn session_stores_are_searched_by_name_or_contents() {
+        let dir = tempfile::tempdir().unwrap();
+        let nested = dir.path().join("a/b");
+        std::fs::create_dir_all(&nested).unwrap();
+        assert!(!store_has(dir.path(), "s-1", true, 8));
+        std::fs::write(nested.join("chat.json"), r#"{"sessionId": "s-1"}"#).unwrap();
+        assert!(!store_has(dir.path(), "s-1", true, 8));
+        assert!(store_has(dir.path(), "s-1", false, 8));
+        assert!(!store_has(dir.path(), "s-1", false, 0), "too deep");
+        std::fs::write(nested.join("s-1.jsonl"), "").unwrap();
+        assert!(store_has(dir.path(), "s-1", true, 8));
     }
 
     #[test]

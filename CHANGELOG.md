@@ -58,6 +58,10 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- On Windows, an agent saved with a terminal whose session no longer exists, such as a
+  deleted Claude Code or Codex session, starts a new session instead of failing to
+  resume the old one. The app now looks for the session in the agent's store without
+  `sh`, as it already did on Linux and macOS.
 - Switching where a worktree's terminals run from the command palette is saved, and so is
   the fall back to the host when a worktree picked for a devcontainer has no
   `devcontainer.json`. Before, only the settings page saved the choice, so the next start
