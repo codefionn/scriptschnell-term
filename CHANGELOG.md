@@ -32,6 +32,13 @@ All notable changes to scriptschnell-term are in this file. The format is
   start programs there, so its hooks, shell commands and tools fail with "operation not
   permitted" (`EPERM`). Node.js names the pipes it gives a child, and Windows lets only
   the user, not the sandbox's restricted token, write to such a pipe.
+- A default agent and a New agent tab action (`new_agent`) that starts it in a new tab.
+  The presets bind it to Ctrl+Shift+A (scriptschnell-term, VS Code, Cursor), Ctrl+B A
+  (tmux) and Alt+Shift+A (Windows Terminal, Konsole), and the palette lists it. The
+  first-start setup and Settings, Agents pick the agent (`default_agent`); without a
+  choice it starts the first agent set up on the project's machine.
+- On Windows the first-start setup asks for the shell new terminals start, among the
+  shells the app found.
 
 ### Changed
 

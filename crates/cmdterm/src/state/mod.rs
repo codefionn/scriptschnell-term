@@ -875,6 +875,12 @@ pub struct Settings {
     /// Agents run their tool commands in `$SHELL`, and many expect a POSIX
     /// shell there.
     pub agents_use_bash: bool,
+    /// The agent New agent tab starts, by program or name as
+    /// `Agent::find` takes it (`claude`, `codex`, an extension agent's
+    /// name). `None` starts the first agent with an integration on the
+    /// project's machine.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub default_agent: Option<String>,
     /// Which terminals get the control socket agents use to read and change
     /// extensions, with the user's approval for every change.
     pub agent_control: AgentControl,
@@ -1634,6 +1640,7 @@ impl Default for Settings {
             freeze_idle_agents: 15,
             cpu_mode: CpuModes::default(),
             agents_use_bash: true,
+            default_agent: None,
             agent_control: AgentControl::Host,
             debug_browser: DebugBrowserSettings::default(),
             worktree_titles: WorktreeTitles::Agent,

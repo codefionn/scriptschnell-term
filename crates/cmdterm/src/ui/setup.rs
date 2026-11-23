@@ -1,11 +1,12 @@
 //! The setup overlay. The first start walks through its stages: language,
-//! keymap and color scheme; where new worktrees run their terminals; which
-//! coding agents get hooks; and, while sandboxes reach only allowed hosts,
+//! keymap and color scheme; on Windows, the shell new terminals start;
+//! where new worktrees run their terminals; which coding agents get hooks
+//! and which one New agent tab starts; and, while sandboxes reach only allowed hosts,
 //! which common hosts they may reach, one switch per [`HOST_GROUPS`] entry.
 //! The containers page opens the hosts stage alone. Every choice applies at
 //! once; Done and dismissing both finish the setup, so it does not come back.
 
-use crate::state::{HOST_GROUPS, Runtime, SYSTEM_LANGUAGE, SYSTEM_SCHEME, Settings};
+use crate::state::{HOST_GROUPS, Runtime, SYSTEM_LANGUAGE, SYSTEM_SCHEME, Settings, ShellChoice};
 use cmdterm_env::Environment;
 use schnellui::scene::{Color, Size};
 use schnellui::widgets::{
@@ -40,15 +41,20 @@ const ROW_WIDTH: f32 = INNER - super::settings::SCROLLBAR_ROOM;
 const ROW_HEIGHT: f32 = 28.0;
 /// An agent's row with its status line, and the gap below it.
 const AGENT_ROW_HEIGHT: f32 = 48.0;
+/// What the agents stage keeps free under its list for the default agent.
+const DEFAULT_AGENT_ROOM: f32 = 170.0;
 
 /// A page of the setup overlay.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SetupStage {
     /// Language, keymap and color scheme.
     Appearance,
+    /// The shell new terminals start, where the app finds shells: on
+    /// Windows.
+    Shell,
     /// Where new worktrees run their terminals.
     Runtime,
-    /// Which coding agents get hooks.
+    /// Which coding agents get hooks, and which one New agent tab starts.
     Agents,
     /// Which common hosts sandboxes may reach.
     Hosts,
@@ -63,21 +69,23 @@ pub struct Setup {
 }
 
 impl Setup {
-    /// The stages this setup shows, in order. The hosts stage shows only
-    /// when new worktrees run in sandboxes that reach allowed hosts only.
-    fn stages(self, settings: &Settings) -> &'static [SetupStage] {
-        use SetupStage::{Agents, Appearance, Hosts};
+    /// The stages this setup shows, in order. The shell stage shows only
+    /// where the app found shells (`shells`), the hosts stage only when new
+    /// worktrees run in sandboxes that reach allowed hosts only.
+    fn stages(self, settings: &Settings, shells: bool) -> &'static [SetupStage] {
+        use SetupStage::{Agents, Appearance, Hosts, Shell};
         if !self.full {
             return &[Hosts];
         }
         let sandbox = &settings.sandbox;
-        if settings.default_runtime == Runtime::Sandbox
+        let hosts = settings.default_runtime == Runtime::Sandbox
             && sandbox.network
-            && sandbox.restrict_network
-        {
-            &[Appearance, SetupStage::Runtime, Agents, Hosts]
-        } else {
-            &[Appearance, SetupStage::Runtime, Agents]
+            && sandbox.restrict_network;
+        match (shells, hosts) {
+            (true, true) => &[Appearance, Shell, SetupStage::Runtime, Agents, Hosts],
+            (true, false) => &[Appearance, Shell, SetupStage::Runtime, Agents],
+            (false, true) => &[Appearance, SetupStage::Runtime, Agents, Hosts],
+            (false, false) => &[Appearance, SetupStage::Runtime, Agents],
         }
     }
 }
@@ -156,7 +164,7 @@ impl Workspace {
             let Some(setup) = inner.setup.as_mut() else {
                 return true;
             };
-            let stages = setup.stages(&inner.settings);
+            let stages = setup.stages(&inner.settings, !inner.shells.is_empty());
             let at = stages.iter().position(|s| *s == setup.stage).unwrap_or(0);
             let Some(&stage) = at.checked_add_signed(delta).and_then(|at| stages.get(at)) else {
                 return false;
@@ -220,7 +228,7 @@ pub fn setup(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         return Box::new(Closed);
     };
     let (scheme, tr, focus) = (inner.scheme, inner.tr, inner.regions.setup_focus);
-    let stages = setup.stages(&inner.settings);
+    let stages = setup.stages(&inner.settings, !inner.shells.is_empty());
     drop(inner);
     let at = stages.iter().position(|s| *s == setup.stage).unwrap_or(0);
     let last = at + 1 == stages.len();
@@ -231,6 +239,11 @@ pub fn setup(ws: &Workspace, viewport: Size) -> Box<dyn View> {
             tr.setup_appearance_intro,
             Box::new(appearance(ws, scheme, tr)),
         ),
+        SetupStage::Shell => (
+            tr.setup_shell,
+            tr.setup_shell_intro,
+            Box::new(shell(ws, scheme, tr)),
+        ),
         SetupStage::Runtime => (
             tr.setup_runtime,
             tr.setup_runtime_intro,
@@ -239,7 +252,7 @@ pub fn setup(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         SetupStage::Agents => (
             tr.setup_agents,
             tr.setup_agents_intro,
-            Box::new(agents(ws, viewport, tr)),
+            Box::new(agents(ws, scheme, viewport, tr)),
         ),
         SetupStage::Hosts => (
             tr.host_setup_dialog,
@@ -415,6 +428,50 @@ pub(crate) fn sandbox_note(tr: &'static Strings) -> &'static str {
     }
 }
 
+/// The shell new terminals start: the system's, or one the app found.
+fn shell(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View + use<> {
+    let (current, shells) = {
+        let inner = ws.borrow();
+        (inner.settings.shell.clone(), inner.shells.clone())
+    };
+    let options = std::iter::once((None, tr.default_shell_system, String::new())).chain(
+        shells.iter().map(|shell| {
+            let program = (shell.argv.iter())
+                .map(|arg| arg.to_string_lossy())
+                .collect::<Vec<_>>()
+                .join(" ");
+            (
+                Some(ShellChoice::Name(shell.id.to_owned())),
+                shell.name,
+                program,
+            )
+        }),
+    );
+    let mut list = Column::new().width(INNER);
+    for (choice, title, program) in options {
+        let chosen = current == choice;
+        let pick = ws.clone();
+        // A dot in front of each option, filled in the accent for the
+        // chosen one, as on the runtime stage.
+        let mut row = ListRow::new(title)
+            .width(INNER)
+            .dot(if chosen {
+                scheme.lanes[0]
+            } else {
+                scheme.theme().media
+            })
+            .selected(chosen)
+            .selected_background(scheme.selected())
+            .accent_bar(if chosen { scheme.lanes[0] } else { TRANSPARENT })
+            .on_click(move || pick.in_setup(|ws| ws.pick_default_shell(choice.clone())));
+        if !program.is_empty() {
+            row = row.subtitle(truncate(&program, 72));
+        }
+        list = list.child(row);
+    }
+    list
+}
+
 /// Where new worktrees run their terminals, and the sandbox's network.
 fn runtime(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View + use<> {
     let (current, network, restrict) = {
@@ -488,12 +545,20 @@ fn runtime(ws: &Workspace, scheme: &Scheme, tr: &'static Strings) -> impl View +
 }
 
 /// A checkbox per coding agent on this machine. Checking one installs its
-/// hooks, unchecking removes them.
-fn agents(ws: &Workspace, viewport: Size, tr: &'static Strings) -> impl View + use<> {
+/// hooks, unchecking removes them. Below, the agent New agent tab starts.
+fn agents(
+    ws: &Workspace,
+    scheme: &Scheme,
+    viewport: Size,
+    tr: &'static Strings,
+) -> impl View + use<> {
     let rows: Vec<_> = (ws.borrow().settings_ui.agents.rows().into_iter())
         .filter(|row| row.env.is_local())
         .collect();
-    let height = (rows.len() as f32 * AGENT_ROW_HEIGHT).min(list_height(viewport));
+    // Room under the list for the default agent's choices.
+    let height = (rows.len() as f32 * AGENT_ROW_HEIGHT)
+        .min(list_height(viewport) - DEFAULT_AGENT_ROOM)
+        .max(AGENT_ROW_HEIGHT * 2.0);
     let mut list = Column::new().width(ROW_WIDTH).gap(4.0);
     for row in rows {
         let name = row.agent.name();
@@ -521,11 +586,47 @@ fn agents(ws: &Workspace, viewport: Size, tr: &'static Strings) -> impl View + u
             ),
         );
     }
-    Scroll::new()
+    let list = Scroll::new()
         .label(tr.agent_list)
         .scrollbar(true)
         .size(INNER, height)
-        .child(list)
+        .child(list);
+
+    let (current, choices) = super::settings::default_agent_choices(ws);
+    let pick = ws.clone();
+    let first = choice(
+        scheme,
+        tr.default_agent_first,
+        current.is_none(),
+        move || pick.set_default_agent(None),
+    );
+    let mut buttons: Vec<ThemeProvider> = vec![first];
+    for agent in choices {
+        let pick = ws.clone();
+        // The agent's row above has its name already.
+        buttons.push(named_choice(
+            scheme,
+            (tr.default_agent_named)(agent.name()),
+            agent.name(),
+            current == Some(agent),
+            move || pick.set_default_agent(Some(agent)),
+        ));
+    }
+    // Three to a row, as the keymaps.
+    let mut grid = Column::new().gap(CHOICE_GAP);
+    let mut buttons = buttons.into_iter().peekable();
+    while buttons.peek().is_some() {
+        let mut row = Row::new().gap(CHOICE_GAP);
+        for button in buttons.by_ref().take(3) {
+            row = row.child(button);
+        }
+        grid = grid.child(row);
+    }
+    Column::new().width(INNER).gap(GROUP_GAP).child(list).child(
+        group(tr.default_agent)
+            .child(grid)
+            .child(note(scheme, tr.default_agent_note)),
+    )
 }
 
 /// A switch per [`HOST_GROUPS`] entry.
@@ -589,18 +690,33 @@ fn choice(
     on: bool,
     pick: impl FnMut() + 'static,
 ) -> ThemeProvider {
+    let text = text.into();
+    named_choice(scheme, text.clone(), text, on, pick)
+}
+
+/// [`choice`] with an accessible `name` other than its `text`, for an
+/// option whose text another widget of the stage has too.
+fn named_choice(
+    scheme: &Scheme,
+    name: impl Into<std::borrow::Cow<'static, str>>,
+    text: impl Into<std::borrow::Cow<'static, str>>,
+    on: bool,
+    pick: impl FnMut() + 'static,
+) -> ThemeProvider {
     // Every option has a frame, so the ones not chosen still read as
     // buttons. The chosen one takes the selected rows' tint inside an
     // accent frame, so it never looks like the solid Next button.
     let mut theme = scheme.theme();
     let text = text.into();
-    let mut button = Button::new(text.clone());
+    let mut button = Button::new(name);
     if on {
         theme.surface = scheme.selected();
         theme.outline = scheme.lanes[0];
         // A check mark too, as on the settings' chosen segments, so the
         // pick does not rest on color alone.
         button = button.display(format!("✓ {text}"));
+    } else {
+        button = button.display(text);
     }
     ThemeProvider::new(
         theme,
@@ -695,6 +811,8 @@ mod tests {
         // The hosts stage shows only for sandboxes, which Windows does not
         // pick by default.
         first.borrow_mut().settings.default_runtime = Runtime::Sandbox;
+        // Only Windows finds shells; their stage has a test of its own.
+        first.borrow_mut().shells = Vec::new();
         first.open_setup_if_unanswered();
         assert!(first.setup_is_open());
         assert!(first.take_dirty().setup);
@@ -755,6 +873,7 @@ mod tests {
         );
         // Windows starts on the host already, so start from the sandbox.
         ws.borrow_mut().settings.default_runtime = Runtime::Sandbox;
+        ws.borrow_mut().shells = Vec::new();
         ws.open_setup();
         ws.take_dirty();
         let mut app = crate::build_app(&ws, VIEWPORT);
@@ -777,6 +896,61 @@ mod tests {
             .load()
             .unwrap();
         assert_eq!(saved.default_runtime, Runtime::Host);
+    }
+
+    #[test]
+    fn the_setup_picks_the_shell_and_the_default_agent() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ws = Workspace::new(
+            StateStore::new(root.join("cfg/state.json")),
+            SettingsStore::new(root.join("cfg/settings.json")),
+            &root.join("cfg/extensions"),
+        );
+        {
+            let mut inner = ws.borrow_mut();
+            inner.settings.default_runtime = Runtime::Host;
+            inner.shells = ["pwsh", "cmd"]
+                .map(|id| cmdterm_env::ShellOption {
+                    id,
+                    name: if id == "pwsh" {
+                        "PowerShell 7 (pwsh)"
+                    } else {
+                        "Command Prompt"
+                    },
+                    argv: vec![format!("{id}.exe").into()],
+                })
+                .to_vec();
+        }
+        ws.open_setup();
+        ws.take_dirty();
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        app.frame();
+        click(&ws, &mut app, Role::Button, EN.setup_next);
+        assert_eq!(ws.setup_stage(), Some(SetupStage::Shell));
+        click(&ws, &mut app, Role::Button, "PowerShell 7 (pwsh)");
+        assert_eq!(
+            ws.borrow().settings.shell,
+            Some(ShellChoice::Name("pwsh".into()))
+        );
+        click(&ws, &mut app, Role::Button, EN.setup_next);
+        assert_eq!(ws.setup_stage(), Some(SetupStage::Runtime));
+        click(&ws, &mut app, Role::Button, EN.setup_next);
+        assert_eq!(ws.setup_stage(), Some(SetupStage::Agents));
+        assert_eq!(ws.default_agent(), None, "no agent is set up here");
+        click(
+            &ws,
+            &mut app,
+            Role::Button,
+            &(EN.default_agent_named)("Codex"),
+        );
+        assert_eq!(ws.default_agent(), Some(Agent::Codex));
+        click(&ws, &mut app, Role::Button, EN.host_setup_done);
+        let saved = SettingsStore::new(root.join("cfg/settings.json"))
+            .load()
+            .unwrap();
+        assert_eq!(saved.shell, Some(ShellChoice::Name("pwsh".into())));
+        assert_eq!(saved.default_agent.as_deref(), Some("codex"));
     }
 
     #[test]

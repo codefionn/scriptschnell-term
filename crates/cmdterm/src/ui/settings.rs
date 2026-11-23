@@ -316,6 +316,8 @@ pub enum Picker {
     /// The CPU mode of terminals at a place.
     Cpu(crate::cpu::Place),
     Shell,
+    /// The agent New agent tab starts.
+    DefaultAgent,
     /// The forge to add an account on another host for.
     ForgeHost,
     /// The guard of a new entry on the project's Allowed or Blocked page.
@@ -1207,6 +1209,12 @@ impl Workspace {
     pub fn pick_agent_control(&self, mode: AgentControl) {
         self.close_picker();
         self.set_agent_control(mode);
+    }
+
+    /// Picks the agent New agent tab starts and closes the dropdown.
+    pub fn pick_default_agent(&self, agent: Option<Agent>) {
+        self.close_picker();
+        self.set_default_agent(agent);
     }
 
     /// Picks the CPU mode of the terminals at `place` and closes the
@@ -4354,6 +4362,9 @@ fn agent_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .width(row_width)
         .gap(GAP / 2.0)
         .child(list)
+        .child(section_title(tr.default_agent))
+        .child(label(scheme, tr.default_agent_note))
+        .child(default_agent_dropdown(ws, scheme))
         .child(section_title(tr.agent_control))
         .child(label(scheme, tr.agent_control_note))
         .child(control)
@@ -4383,6 +4394,74 @@ fn agent_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .scrollbar(true)
         .size(content_width(), body_height())
         .child(bottom_room(page))
+}
+
+/// The agents New agent tab can start: those installed on this machine,
+/// every agent while no check has found any, and the chosen one.
+pub(crate) fn default_agent_choices(ws: &Workspace) -> (Option<Agent>, Vec<Agent>) {
+    let inner = ws.borrow();
+    let current = (inner.settings.default_agent.as_deref()).and_then(Agent::find);
+    let rows = inner.settings_ui.agents.rows();
+    let mut agents: Vec<Agent> = Agent::all()
+        .into_iter()
+        .filter(|agent| {
+            rows.iter().any(|row| {
+                row.agent == *agent
+                    && row.env.is_local()
+                    && !matches!(row.status, Status::NotFound | Status::Checking)
+            })
+        })
+        .collect();
+    if agents.is_empty() {
+        agents = Agent::all();
+    }
+    if let Some(agent) = current
+        && !agents.contains(&agent)
+    {
+        agents.push(agent);
+    }
+    (current, agents)
+}
+
+/// The dropdown of the agent New agent tab starts.
+fn default_agent_dropdown(ws: &Workspace, scheme: &Scheme) -> Box<dyn View> {
+    let (current, agents) = default_agent_choices(ws);
+    let (open, focus, tr) = {
+        let inner = ws.borrow();
+        (
+            inner.settings_ui.picker == Some(Picker::DefaultAgent),
+            inner.regions.settings_focus,
+            inner.tr,
+        )
+    };
+    let toggle = ws.clone();
+    let pick = ws.clone();
+    let mut dropdown = Dropdown::new(tr.default_agent)
+        .min_width(SELECT_WIDTH)
+        .text_size(super::machines::INPUT_TEXT_SIZE)
+        .open(open)
+        .on_toggle(move || toggle.toggle_picker(Picker::DefaultAgent))
+        .option(
+            DropdownOption::new(tr.default_agent_first)
+                .selected(current.is_none())
+                .on_select(move || pick.pick_default_agent(None)),
+        );
+    for agent in agents {
+        let pick = ws.clone();
+        dropdown = dropdown.option(
+            DropdownOption::new(agent.name())
+                .selected(current == Some(agent))
+                .on_select(move || pick.pick_default_agent(Some(agent))),
+        );
+    }
+    if open {
+        Box::new(ThemeProvider::new(
+            scheme.control_theme(),
+            dropdown.with_ref(focus),
+        ))
+    } else {
+        Box::new(ThemeProvider::new(scheme.control_theme(), dropdown))
+    }
 }
 
 /// The dropdown of the CPU mode at `place`, each mode named with what it

@@ -271,6 +271,10 @@ pub enum Action {
     /// Moves focus through the same stops the other way round.
     FocusBack,
     NewTerminal,
+    /// Starts the default agent in a new tab ([`Settings::default_agent`]).
+    ///
+    /// [`Settings::default_agent`]: crate::state::Settings::default_agent
+    NewAgent,
     /// Opens the file explorer of the shown worktree.
     Files,
     /// Opens the history of the shown worktree.
@@ -316,7 +320,7 @@ pub enum Action {
 pub const PANE_STEP: i32 = 50;
 
 /// Actions that take no argument, by their name in `settings.json`.
-const SIMPLE_ACTIONS: [(&str, Action); 24] = [
+const SIMPLE_ACTIONS: [(&str, Action); 25] = [
     ("palette", Action::Palette),
     ("settings", Action::Settings),
     ("search_worktrees", Action::SearchWorktrees),
@@ -324,6 +328,7 @@ const SIMPLE_ACTIONS: [(&str, Action); 24] = [
     ("focus_tabs", Action::FocusTabs),
     ("focus_back", Action::FocusBack),
     ("new_terminal", Action::NewTerminal),
+    ("new_agent", Action::NewAgent),
     ("files", Action::Files),
     ("explore", Action::Explore),
     ("review", Action::Review),
@@ -423,6 +428,7 @@ const VSCODE: &[(&str, &str)] = &[
     ("f6", "focus_tabs"),
     ("shift+f6", "focus_back"),
     ("ctrl+shift+`", "new_terminal"),
+    ("ctrl+shift+a", "new_agent"),
     ("ctrl+shift+e", "files"),
     ("ctrl+shift+g", "explore"),
     ("ctrl+f4", "close_tab"),
@@ -462,6 +468,7 @@ pub const PRESETS: [Preset; 6] = [
             ("f6", "focus_tabs"),
             ("shift+f6", "focus_back"),
             ("ctrl+shift+t", "new_terminal"),
+            ("ctrl+shift+a", "new_agent"),
             ("ctrl+shift+f", "files"),
             ("ctrl+shift+h", "explore"),
             ("ctrl+shift+r", "review"),
@@ -486,6 +493,7 @@ pub const PRESETS: [Preset; 6] = [
             ("ctrl+b :", "palette"),
             ("ctrl+,", "settings"),
             ("ctrl+b c", "new_terminal"),
+            ("ctrl+b a", "new_agent"),
             ("ctrl+b f", "files"),
             ("ctrl+b g", "explore"),
             ("ctrl+b r", "review"),
@@ -534,6 +542,7 @@ pub const PRESETS: [Preset; 6] = [
             ("ctrl+shift+p", "palette"),
             ("ctrl+,", "settings"),
             ("ctrl+shift+t", "new_terminal"),
+            ("alt+shift+a", "new_agent"),
             ("ctrl+shift+w", "close_pane"),
             ("alt+shift+plus", "split_side_by_side"),
             ("alt+shift+minus", "split_stacked"),
@@ -562,6 +571,7 @@ pub const PRESETS: [Preset; 6] = [
             ("ctrl+alt+i", "palette"),
             ("ctrl+,", "settings"),
             ("ctrl+shift+t", "new_terminal"),
+            ("alt+shift+a", "new_agent"),
             ("ctrl+shift+w", "close_panel"),
             ("ctrl+(", "split_side_by_side"),
             ("ctrl+*", "split_side_by_side"),
@@ -1108,6 +1118,7 @@ impl Workspace {
             Action::FocusTabs => self.focus_tabs(),
             Action::FocusBack => self.focus_chrome_back(),
             Action::NewTerminal => self.open_terminal(None, None),
+            Action::NewAgent => self.open_default_agent(),
             Action::Files => self.open_files(),
             Action::Explore => self.open_explore(false),
             Action::Review => self.open_explore(true),
@@ -1284,6 +1295,21 @@ mod tests {
         assert_eq!(keymap.press(&key(ch("t"), ch("t"), "c")), Press::Ignored);
         let press = keymap.press(&key(ch(","), ch(","), "c"));
         assert_eq!(action(&keymap, press), Some(Action::Settings));
+        let press = keymap.press(&key(ch("a"), ch("A"), "cs"));
+        assert_eq!(action(&keymap, press), Some(Action::NewAgent));
+        assert_eq!(Action::parse("new_agent"), Ok(Action::NewAgent));
+        assert_eq!(Action::NewAgent.settings_name(), "new_agent");
+    }
+
+    #[test]
+    fn every_preset_binds_new_agent() {
+        for preset in &PRESETS {
+            assert!(
+                preset.entries().any(|(_, action)| *action == "new_agent"),
+                "{} has no new_agent binding",
+                preset.id
+            );
+        }
     }
 
     #[test]

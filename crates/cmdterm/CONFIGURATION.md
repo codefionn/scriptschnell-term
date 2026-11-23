@@ -96,6 +96,7 @@ stays hidden there. Windows sandboxes cannot hide it, so there it is read-only.
   "freeze_idle_agents": 15,
   "cpu_mode": { "local": "balanced", "remote": "off", "efficiency_cores": true },
   "agents_use_bash": true,
+  "default_agent": "claude",
   "agent_control": "host",
   "debug_browser": { "browser": "auto", "headless": true, "agents": "local" }
 }
@@ -162,7 +163,7 @@ Down move the marked worktree, Enter opens it and clears the field, Escape clear
   is a sequence such as `"ctrl+alt+g"` or `"ctrl+b g"` (two strokes). The value is an
   action, or `null` to remove a binding.
 
-Actions: `palette`, `settings`, `search_worktrees`, `toggle_sidebar`, `focus_tabs`, `focus_back`, `new_terminal`, `files`, `explore`, `review`, `monitor`,
+Actions: `palette`, `settings`, `search_worktrees`, `toggle_sidebar`, `focus_tabs`, `focus_back`, `new_terminal`, `new_agent`, `files`, `explore`, `review`, `monitor`,
 `tasks`, `debug_browser`, `close_panel`, `close_pane`, `close_tab`, `move_pane_to_tab`, `split_side_by_side`,
 `split_stacked`, `focus_next_pane`, `focus_previous_pane`, `grow_pane`, `shrink_pane`, `next_tab`, `previous_tab`,
 `tab_1` to `tab_9`, `pane_1` to `pane_8`, `send_text:<text>` and
@@ -891,6 +892,17 @@ hidden agents reach it through the channel `cmdterm-remote:cpu`. A server from b
 CPU modes starts terminals unlimited. SSH hosts and custom environments run the script
 through `sh` on the host, so they need a POSIX shell there.
 
+### Default agent
+
+- `default_agent`: the agent the `new_agent` action (New agent tab) starts in a new tab,
+  by its program or name: `claude`, `codex`, `opencode`, `pi`, `copilot`, `qwen`,
+  `gemini`, `kimi`, `vibe`, `agy`, or the name of an agent an extension registers. Leave
+  it out to start the first agent with an integration on the project's machine; without
+  one the action opens the new panel list at its agents. The first-start setup and
+  Settings, Agents pick it. The keymap presets bind `new_agent` to Ctrl+Shift+A
+  (scriptschnell-term, VS Code, Cursor), Ctrl+B A (tmux) and Alt+Shift+A (Windows
+  Terminal, Konsole).
+
 ### Agent shell
 
 - `agents_use_bash`: on by default, Linux only. A terminal that runs an agent itself, such
@@ -911,9 +923,9 @@ through `sh` on the host, so they need a POSIX shell there.
 
 Settings, Shells lists the shells the app finds: Git Bash (`git-bash`), PowerShell 7
 (`pwsh`, also the Microsoft Store's), Windows PowerShell 5.1 (`powershell`), the Command
-Prompt (`cmd`) and `wsl`. The page is missing on other systems, where terminals start
-`$SHELL`. A tab whose shell titles it with its program's full path, as ConPTY does, shows
-the program's name.
+Prompt (`cmd`) and `wsl`. The first-start setup asks for the default shell among them. The
+page is missing on other systems, where terminals start `$SHELL`. A tab whose shell
+titles it with its program's full path, as ConPTY does, shows the program's name.
 
 - `shell`: the shell new terminals start on this machine and in its sandboxes. An id from
   the list, a program path, or a list of program and arguments, such as

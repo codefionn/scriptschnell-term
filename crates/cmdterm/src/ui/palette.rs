@@ -301,6 +301,8 @@ pub enum Action {
     },
     /// Starts a coding agent in a new terminal.
     StartAgent(Agent),
+    /// Starts the default agent in a new terminal.
+    NewAgent,
     Files,
     Explore,
     Review,
@@ -571,6 +573,7 @@ pub fn entries(inner: &Inner) -> Vec<Entry> {
     // Agents get their own group, so the agents a project uses are one
     // glance away from the project commands.
     let agents = out.len();
+    out.push(plain(tr.new_agent, Action::NewAgent));
     out.extend(start_agents);
     group(&mut out, agents, Group::Agents);
     let panels = out.len();
@@ -892,6 +895,7 @@ fn subsequence(label: &str, wanted: &[char]) -> Option<(usize, usize)> {
 fn bound(action: &Action) -> Option<keymap::Action> {
     Some(match action {
         Action::NewShell => keymap::Action::NewTerminal,
+        Action::NewAgent => keymap::Action::NewAgent,
         Action::Files => keymap::Action::Files,
         Action::Explore => keymap::Action::Explore,
         Action::Review => keymap::Action::Review,
@@ -978,6 +982,59 @@ impl Workspace {
         {
             inner.palette.highlight = index;
         }
+    }
+
+    /// Starts `agent` in a new terminal of the shown worktree.
+    pub fn start_agent(&self, agent: Agent) {
+        self.open_terminal(
+            Some(vec![agent.program().to_owned()]),
+            Some(agent.name().to_owned()),
+        );
+    }
+
+    /// The agent New agent tab starts: the one the settings name, else the
+    /// first with an integration on the shown project's machine, as far as
+    /// checks found so far.
+    pub fn default_agent(&self) -> Option<Agent> {
+        let inner = self.borrow();
+        if let Some(agent) = (inner.settings.default_agent.as_deref()).and_then(Agent::find) {
+            return Some(agent);
+        }
+        let project = inner.state.active()?;
+        inner
+            .settings_ui
+            .agents
+            .configured(&project.env)
+            .first()
+            .copied()
+    }
+
+    /// Starts the default agent in a new tab. Without one, the new panel
+    /// list opens at its agents, which checks the machine for them.
+    pub fn open_default_agent(&self) {
+        if self.borrow().active_key().is_none() {
+            return;
+        }
+        match self.default_agent() {
+            Some(agent) => self.start_agent(agent),
+            None => self.open_agent_list(),
+        }
+    }
+
+    /// Picks the agent New agent tab starts; `None` is the first one set
+    /// up on the project's machine.
+    pub fn set_default_agent(&self, agent: Option<Agent>) {
+        let id = agent.map(|agent| agent.session_name().to_owned());
+        {
+            let mut inner = self.borrow_mut();
+            if inner.settings.default_agent == id {
+                return;
+            }
+            inner.settings.default_agent = id;
+            inner.dirty.setup |= inner.setup.is_some();
+            inner.dirty.settings |= inner.settings_ui.open;
+        }
+        self.save_settings();
     }
 
     fn show_palette(&self, input: Option<InputMode>, new_panel: bool) {
@@ -1264,10 +1321,8 @@ impl Workspace {
             Action::Ask(_) => {}
             Action::NewShell => self.open_terminal(None, None),
             Action::NewShellWith { name, argv } => self.open_terminal(Some(argv), Some(name)),
-            Action::StartAgent(agent) => self.open_terminal(
-                Some(vec![agent.program().to_owned()]),
-                Some(agent.name().to_owned()),
-            ),
+            Action::StartAgent(agent) => self.start_agent(agent),
+            Action::NewAgent => self.open_default_agent(),
             Action::Files if new_panel => self.open(crate::state::PanelSpec::Files { file: None }),
             Action::Files => self.open_files(),
             Action::Explore => self.open_explore(false),
