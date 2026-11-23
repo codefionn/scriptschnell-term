@@ -106,6 +106,12 @@ pub struct Project {
     /// `None` detects it, see [`crate::vcs::Repository::default_base`].
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub base: Option<String>,
+    /// Where this project's worktrees run, in place of
+    /// [`Settings::default_runtime`], from the Project settings page. A
+    /// devcontainer applies only to worktrees with a `devcontainer.json`;
+    /// the others take the default. `None` follows the setting.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub runtime: Option<Runtime>,
     /// Folders on the project's machine that its sandboxed worktrees may
     /// reach besides the worktree, on top of [`SandboxSettings`].
     #[serde(default, skip_serializing_if = "ProjectSandbox::is_empty")]
@@ -688,6 +694,7 @@ impl AppState {
             allows_launches: false,
             jj: None,
             base: None,
+            runtime: None,
             sandbox: ProjectSandbox::default(),
             env_vars: Vec::new(),
             fused: false,

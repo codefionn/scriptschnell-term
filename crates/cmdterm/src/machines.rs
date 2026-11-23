@@ -1514,12 +1514,19 @@ impl Workspace {
         self.set_container_engine(engine);
     }
 
-    /// Picks where the active worktree's terminals run from the settings
-    /// dropdown and closes it.
-    pub fn pick_runtime(&self, runtime: Runtime) {
+    /// Picks where worktrees the app opens for the first time run from the
+    /// Sandboxing page's dropdown and closes it.
+    pub fn pick_default_runtime(&self, runtime: Runtime) {
         self.close_picker();
-        self.set_runtime(runtime);
+        self.set_default_runtime(runtime);
         self.borrow_mut().dirty.settings = true;
+    }
+
+    /// Picks where the worktrees of project `id` run from the Project
+    /// page's dropdown, `None` for the default, and closes it.
+    pub fn pick_project_runtime(&self, id: u64, runtime: Option<Runtime>) {
+        self.close_picker();
+        self.set_project_runtime(id, runtime);
     }
 
     /// Starts the active worktree's terminals again, so they run with the

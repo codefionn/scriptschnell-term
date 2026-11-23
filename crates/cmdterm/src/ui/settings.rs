@@ -319,7 +319,10 @@ pub enum Picker {
     Keymap,
     Language,
     ContainerEngine,
+    /// Where worktrees the app opens for the first time run.
     Runtime,
+    /// Where the active project's worktrees run.
+    ProjectRuntime,
     SandboxEngines,
     SidecarEngine,
     AgentControl,
@@ -5872,11 +5875,30 @@ mod tests {
         let mut app = crate::build_app(&ws, VIEWPORT);
         ws.take_dirty();
         assert!(visible_options(&app).is_empty(), "starts collapsed");
-        // No worktree is open, so only the engine has a dropdown.
-        assert!(
-            app.find_widget(Role::ComboBox, Some(EN.this_worktree))
-                .is_none()
+
+        // Where new worktrees run belongs to the app, so it shows without
+        // an open worktree.
+        use crate::state::Runtime;
+        let runtime = app
+            .find_widget(Role::ComboBox, Some(EN.setup_runtime))
+            .unwrap();
+        app.dispatch_click(runtime);
+        rebuild(&ws, &mut app);
+        assert_eq!(
+            visible_options(&app),
+            [EN.run_on_host, EN.run_in_devcontainer, EN.run_in_sandbox]
         );
+        let host = app
+            .find_widget(Role::ListBoxOption, Some(EN.run_on_host))
+            .unwrap();
+        app.dispatch_click(host);
+        assert_eq!(ws.borrow().settings.default_runtime, Runtime::Host);
+        assert_eq!(ws.borrow().settings_ui.picker, None);
+        let saved = SettingsStore::new(root.join("cfg/settings.json"))
+            .load()
+            .unwrap();
+        assert_eq!(saved.default_runtime, Runtime::Host);
+        rebuild(&ws, &mut app);
 
         let engine = app
             .find_widget(Role::ComboBox, Some(EN.container_engine))

@@ -215,13 +215,19 @@ after force pushes.
 
 ### Sandboxes and containers
 
-A worktree's terminals run on the host, in its devcontainer, or in a sandbox. Pick one in
-the palette; the worktree keeps the choice in `state.json`.
+A worktree's terminals run on the host, in its devcontainer, or in a sandbox. Settings are
+not per project except on the Project page: the Sandboxing page sets `default_runtime` for
+every project, a project can choose for itself on its Project page (`runtime` in
+`state.json`), and the palette switches one worktree. The worktree keeps the choice in
+`state.json`.
 
 - `default_runtime`: where a worktree the app opens for the first time runs: `sandbox`,
-  `devcontainer` or `host`. The default is `sandbox`, except on Windows, where it is
+  `devcontainer` or `host`, unless its project chose another. The Sandboxing page
+  picks it, and changing it moves only worktrees opened afterwards. The default is `sandbox`, except on Windows, where it is
   `host` (see "Why Windows runs on the host" below). With `devcontainer`, a worktree without a
-  `devcontainer.json` uses that default. The first-start setup asks for it. A worktree
+  `devcontainer.json` uses that default. A project's choice moves the worktrees it
+  knows when it is picked, each where it fits: a devcontainer only where the worktree
+  has a `devcontainer.json`, the others take `default_runtime`. The first-start setup asks for it. A worktree
   keeps its runtime in `state.json` only when it differs from that default, so on
   Windows a worktree saved in a sandbox before this default changed now runs on the host;
   pick the sandbox for it again in its runtime menu to keep it there.
@@ -1011,6 +1017,9 @@ repository with `jj`, and missing for one that follows the `jj` setting.
 against when none is named, as the Project page of the settings sets it. Missing, reviews
 detect the base: git's `origin/HEAD`, else `origin/main`, `origin/master`, `main`,
 `master` or `trunk`; Mercurial's `default`; jj's `trunk()`.
+`runtime` is `host`, `devcontainer` or `sandbox` for a project that chose where its
+worktrees run on the Project page of the settings, in place of `default_runtime`, and
+missing for one that follows it. See "Sandboxes and containers" above.
 `sandbox` holds a project's own sandbox folders, which the Project page of the settings
 edits: `writable` ones its sandboxes may write and `readable` ones they may read, as
 `{"writable": ["~/src/shared-lib"], "readable": ["~/.ssh/known_hosts"]}`. A read-only

@@ -1136,14 +1136,7 @@ pub struct Strings {
     /// The name of the Show/Hide advanced settings button, the same in
     /// both states so focus stays on it when it flips.
     pub advanced_settings: &'static str,
-    pub this_worktree: &'static str,
-    /// The Sandboxing page's heading, naming the active worktree's branch.
-    pub terminals_of_branch: fn(&str) -> String,
-    pub no_active_worktree: &'static str,
     pub container_engine: &'static str,
-    /// Heads the Sandboxing settings that apply to every worktree, under
-    /// the one that applies to the active worktree only.
-    pub all_worktrees: &'static str,
     pub automatic: &'static str,
     pub section_sandbox: &'static str,
     pub sandbox_network: &'static str,
@@ -1312,6 +1305,12 @@ pub struct Strings {
     pub add_readable: &'static str,
     pub project_remote_note: &'static str,
     pub project_not_sandboxed: &'static str,
+    /// The Sandboxing page's note under where new worktrees run.
+    pub default_runtime_note: &'static str,
+    /// The Project page's note under where its worktrees run.
+    pub project_runtime_note: &'static str,
+    /// The Project page's choice that follows the Sandboxing page.
+    pub runtime_follow_default: &'static str,
 }
 
 impl Strings {
@@ -1455,7 +1454,7 @@ fn cpu_detail_de(free: u32, percent: u32, nice: u8) -> String {
 fn keywords_en(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Project => {
-            "Environment variables, Sandbox folders, Jujutsu, Reset all settings | project jj env secrets keyring"
+            "Where terminals run, Environment variables, Sandbox folders, Jujutsu, Reset all settings | project jj env secrets keyring host devcontainer sandbox runtime rebuild"
         }
         SettingsSection::ProjectAllowed => {
             "Guarded requests, Allow agents to open worktrees without asking, Add an entry | always allowed approvals answers git push keyring launches"
@@ -1486,7 +1485,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         SettingsSection::Vpn => "Tailscale, NetBird, Nebula | vpn peers network",
         SettingsSection::Vms => "Virtual machines, VM images | firecracker",
         SettingsSection::Sandboxing => {
-            "Run terminals in a sandbox, Devcontainer engine, Network, Allowed hosts only, Inspect HTTPS, Container engines, Sidecar engine, Restart terminals | proxy certificate docker podman passthrough"
+            "Where terminals run, Devcontainer engine, Network, Allowed hosts only, Inspect HTTPS, Container engines, Sidecar engine, Restart terminals | proxy certificate docker podman passthrough host sandbox default runtime"
         }
         SettingsSection::SandboxFiles => "Additional writable paths, Hidden paths | files folders",
         SettingsSection::SandboxHosts => "Allowed hosts, Common hosts | domains allowlist proxy",
@@ -1500,7 +1499,7 @@ fn keywords_en(section: SettingsSection) -> &'static str {
 fn keywords_de(section: SettingsSection) -> &'static str {
     match section {
         SettingsSection::Project => {
-            "Umgebungsvariablen, Sandbox-Ordner, Jujutsu, Alle Einstellungen zurücksetzen | projekt jj env geheimnisse schlüsselbund"
+            "Wo Terminals laufen, Umgebungsvariablen, Sandbox-Ordner, Jujutsu, Alle Einstellungen zurücksetzen | projekt jj env geheimnisse schlüsselbund host devcontainer sandbox laufzeit neu bauen"
         }
         SettingsSection::ProjectAllowed => {
             "Geschützte Anfragen, Agenten dürfen Worktrees ohne Nachfrage öffnen, Eintrag hinzufügen | immer erlaubt freigaben antworten git push schlüsselbund"
@@ -1533,7 +1532,7 @@ fn keywords_de(section: SettingsSection) -> &'static str {
         SettingsSection::Vpn => "Tailscale, NetBird, Nebula | vpn peers netzwerk",
         SettingsSection::Vms => "Virtuelle Maschinen, VM-Images | firecracker",
         SettingsSection::Sandboxing => {
-            "Terminals in einer Sandbox starten, Devcontainer-Engine, Netzwerk, Nur erlaubte Hosts, HTTPS prüfen, Container-Engines, Sidecar-Engine, Terminals neu starten | proxy zertifikat docker podman durchreichen"
+            "Wo Terminals laufen, Devcontainer-Engine, Netzwerk, Nur erlaubte Hosts, HTTPS prüfen, Container-Engines, Sidecar-Engine, Terminals neu starten | proxy zertifikat docker podman durchreichen host sandbox standard laufzeit"
         }
         SettingsSection::SandboxFiles => {
             "Zusätzliche beschreibbare Pfade, Verborgene Pfade | dateien ordner"
@@ -2635,11 +2634,7 @@ pub static EN: Strings = Strings {
     vms_without_network: "VMs have no network access. Install passt (pasta) to enable networking.",
     vm_name_note: "A VM named ubuntu or ubuntu-something starts from the Ubuntu image.",
     advanced_settings: "Advanced settings",
-    this_worktree: "Terminals of this worktree",
-    terminals_of_branch: |branch| format!("Terminals of this worktree ({branch})"),
-    no_active_worktree: "Open a worktree to choose where its terminals run.",
     container_engine: "Devcontainer engine",
-    all_worktrees: "Every worktree",
     automatic: "Automatic: docker if installed, else podman",
     section_sandbox: "Sandbox",
     sandbox_network: "Network",
@@ -2694,7 +2689,7 @@ pub static EN: Strings = Strings {
     default_agent_first: "First set up",
     default_agent_named: |agent| format!("Default agent: {agent}"),
     default_agent_note: "New agent tab starts this agent. Without a choice it starts the first agent with an integration on the project's machine.",
-    setup_runtime_note: "To change it for one worktree, open Settings › Sandboxing.",
+    setup_runtime_note: "Change it later under Settings › Sandboxing. A project can choose for itself on its settings page.",
     setup_sandbox_note: "Restricts writes to the worktree and filters network access through a proxy.",
     setup_sandbox_note_windows: "Not recommended on Windows: Claude Code and other Node.js programs cannot start programs there, and Git Bash cannot start at all. Use a devcontainer to isolate a worktree.",
     setup_devcontainer_note: "Uses the worktree's devcontainer.json if present, otherwise falls back to the sandbox.",
@@ -2807,6 +2802,9 @@ pub static EN: Strings = Strings {
     add_readable: "Add as read-only",
     project_remote_note: "This project is on another machine. Only absolute paths apply there.",
     project_not_sandboxed: "This worktree is not using a sandbox, so these folder rules do not apply.",
+    default_runtime_note: "Where the terminals of a worktree run when the app opens it for the first time. A project can choose for itself on its settings page, and the palette changes it for one worktree.",
+    project_runtime_note: "Replaces the default from Sandboxing for this project's worktrees and moves the ones it knows. A devcontainer applies only to worktrees with a devcontainer.json; the others use the default.",
+    runtime_follow_default: "Use the default from Sandboxing",
 };
 
 pub static DE: Strings = Strings {
@@ -3954,11 +3952,7 @@ pub static DE: Strings = Strings {
     vms_without_network: "VMs haben keinen Netzwerkzugriff. Installiere passt (pasta), um Netzwerk zu aktivieren.",
     vm_name_note: "Eine VM namens ubuntu oder ubuntu-irgendwas startet vom Ubuntu-Image.",
     advanced_settings: "Erweiterte Einstellungen",
-    this_worktree: "Terminals dieses Worktrees",
-    terminals_of_branch: |branch| format!("Terminals dieses Worktrees ({branch})"),
-    no_active_worktree: "Öffne einen Worktree, um zu wählen, wo seine Terminals laufen.",
     container_engine: "Devcontainer-Engine",
-    all_worktrees: "Für jeden Worktree",
     automatic: "Automatisch: docker, wenn installiert, sonst podman",
     section_sandbox: "Sandbox",
     sandbox_network: "Netzwerk",
@@ -4013,7 +4007,7 @@ pub static DE: Strings = Strings {
     default_agent_first: "Erster eingerichteter",
     default_agent_named: |agent| format!("Standard-Agent: {agent}"),
     default_agent_note: "Neuer Agenten-Tab startet diesen Agenten. Ohne Auswahl startet er den ersten Agenten mit Integration auf dem Rechner des Projekts.",
-    setup_runtime_note: "Für einen einzelnen Worktree änderst du das unter Einstellungen › Sandboxing.",
+    setup_runtime_note: "Später änderst du das unter Einstellungen › Sandboxing. Ein Projekt kann das auf seiner Einstellungsseite selbst festlegen.",
     setup_sandbox_note: "Beschränkt Schreibzugriffe auf den Worktree und filtert Netzwerkzugriffe über einen Proxy.",
     setup_sandbox_note_windows: "Unter Windows nicht empfohlen: Claude Code und andere Node.js-Programme können dort keine Programme starten, und Git Bash startet gar nicht. Nutze einen Devcontainer, um einen Worktree abzuschotten.",
     setup_devcontainer_note: "Nutzt die devcontainer.json des Worktrees, falls vorhanden, sonst die Sandbox.",
@@ -4126,6 +4120,9 @@ pub static DE: Strings = Strings {
     add_readable: "Als nur lesbar hinzufügen",
     project_remote_note: "Dieses Projekt liegt auf einem anderen Rechner. Dort gelten nur absolute Pfade.",
     project_not_sandboxed: "Dieser Worktree läuft nicht in einer Sandbox, daher gelten diese Ordnerregeln nicht.",
+    default_runtime_note: "Wo die Terminals eines Worktrees laufen, wenn die App ihn zum ersten Mal öffnet. Ein Projekt kann das auf seiner Einstellungsseite selbst festlegen, und die Palette ändert es für einen einzelnen Worktree.",
+    project_runtime_note: "Ersetzt für die Worktrees dieses Projekts den Standard aus Sandboxing und verschiebt die bekannten. Ein Devcontainer gilt nur für Worktrees mit einer devcontainer.json; die anderen nutzen den Standard.",
+    runtime_follow_default: "Standard aus Sandboxing verwenden",
 };
 
 #[cfg(test)]

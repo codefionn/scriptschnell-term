@@ -64,8 +64,9 @@ machine on or off (it stays on across restarts), lists the keys allowed in and t
 machines you trust, and adds a machine after showing its key fingerprint to compare.
 Virtual machines sets up ready-made Alpine and Ubuntu VMs with one button (no root,
 about half a minute, with internet through pasta), lists your VMs, and resets or stops
-them. Advanced settings there edit `server.json` for images you made yourself. Sandboxing picks where the current worktree's terminals run, the
-devcontainer engine, and the sandbox's network. Its Files and Hosts subsections edit the sandbox's paths and allowed hosts.
+them. Advanced settings there edit `server.json` for images you made yourself. Sandboxing picks where the terminals of newly opened worktrees run, the
+devcontainer engine, and the sandbox's network. Only the Project page belongs to one
+project; there a project can choose host, devcontainer or sandbox for its own worktrees. Its Files and Hosts subsections edit the sandbox's paths and allowed hosts.
 
 A worktree's terminals can run somewhere other than its git: in the worktree's
 devcontainer, or in a sandbox that may write only the worktree and cannot read your

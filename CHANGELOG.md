@@ -10,6 +10,12 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Added
 
+- The Project page of the settings picks where the project's worktrees run: on the
+  host, in the devcontainer or in a sandbox, in place of the default from Sandboxing.
+  The choice moves the worktrees the project knows, each where it fits: a devcontainer
+  only where the worktree has a `devcontainer.json`, the others take the default.
+  Worktrees opened later take it too. The project keeps it in `state.json`
+  (`runtime`).
 - Settings, Project has two new pages, Allowed and Blocked, that list the guarded
   requests the active project answered for good, such as a `git push` to a host or a
   keyring secret. Remove takes an entry back, "Block instead" and "Allow instead" move
@@ -60,6 +66,10 @@ All notable changes to scriptschnell-term are in this file. The format is
 - A tab with several panes takes its title from an agent in one of them once the
   agent has titled its session, the focused pane's agent first. Without a titled agent
   the tab keeps the focused pane's title.
+- Only the Project pages of the settings belong to one project. The Sandboxing page no
+  longer picks where the shown worktree runs; it picks where worktrees the app opens
+  for the first time run (`default_runtime`), and the palette still switches one
+  worktree. Rebuild the devcontainer moved to the Project page.
 
 ### Fixed
 
@@ -68,7 +78,6 @@ All notable changes to scriptschnell-term are in this file. The format is
   `scriptschnell-term fix` opens the agent in a console window of its own. Programs
   the app starts in the background, such as `git` and `ssh`, open no console window
   either.
-
 - On Windows, Claude Code, Mistral Vibe and other agents start when their folder is
   missing from the `PATH` the app started with. The app also looks in
   `%USERPROFILE%\.local\bin`, winget's links, npm's global folder and the folders of

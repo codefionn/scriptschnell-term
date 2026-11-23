@@ -2243,6 +2243,61 @@ impl Workspace {
         }
     }
 
+    /// Sets where the worktrees of project `id` run, `None` for the default
+    /// from the settings, and moves the worktrees it knows there, each
+    /// where it is compatible: a devcontainer only where the worktree has a
+    /// `devcontainer.json`. Running terminals of the worktrees that moved
+    /// start again. Worktrees opened later take it when first opened.
+    pub fn set_project_runtime(&self, id: u64, runtime: Option<Runtime>) {
+        let Some((env, worktrees, default)) = ({
+            let mut inner = self.borrow_mut();
+            let default = inner.settings.default_runtime;
+            inner.state.project_mut(id).map(|project| {
+                project.runtime = runtime;
+                let paths: Vec<PathBuf> =
+                    project.worktrees.iter().map(|w| w.path.clone()).collect();
+                (project.env.clone(), paths, default)
+            })
+        }) else {
+            return;
+        };
+        // Looking for a devcontainer.json may run a command on the
+        // project's machine, so no borrow is held meanwhile.
+        let moves: Vec<(PathBuf, Runtime)> = worktrees
+            .into_iter()
+            .map(|path| {
+                let to = crate::workspace::new_worktree_runtime(runtime, default, &env, &path);
+                (path, to)
+            })
+            .collect();
+        let mut moved = Vec::new();
+        {
+            let mut inner = self.borrow_mut();
+            let inner = &mut *inner;
+            if let Some(project) = inner.state.project_mut(id) {
+                for (path, to) in moves {
+                    let config = project.worktree_mut(&path);
+                    if config.runtime != to {
+                        config.runtime = to;
+                        let live = inner.live.get(&id).is_some_and(|w| w.contains_key(&path));
+                        if live {
+                            moved.push((path, to));
+                        }
+                    }
+                }
+            }
+            inner.dirty.status = true;
+            inner.dirty.settings = true;
+        }
+        self.save();
+        for (path, to) in moved {
+            self.restart_terminals(id, &path, true);
+            if to == Runtime::Sandbox {
+                self.announce(id, &path, "sandbox");
+            }
+        }
+    }
+
     /// Removes the active worktree's devcontainer and builds it again.
     pub fn rebuild_devcontainer(&self) {
         let Some((id, path)) = self.borrow().active_key() else {

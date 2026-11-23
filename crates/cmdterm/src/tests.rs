@@ -3430,8 +3430,7 @@ fn a_runtime_switch_is_saved() {
             .unwrap();
         state.projects[0].worktrees[0].runtime
     };
-    // The palette switches with `set_runtime` alone, without the
-    // settings dropdown's `pick_runtime`.
+    // The palette switches one worktree with `set_runtime`.
     let other = if Runtime::default() == Runtime::Host {
         Runtime::Sandbox
     } else {
@@ -3445,6 +3444,54 @@ fn a_runtime_switch_is_saved() {
     ws.set_runtime(Runtime::Sandbox);
     ws.set_runtime(Runtime::Devcontainer);
     assert_eq!(saved(), Runtime::Host);
+}
+
+#[test]
+fn a_project_chooses_where_its_worktrees_run() {
+    use crate::state::Runtime;
+    use crate::workspace::new_worktree_runtime;
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    let ws = workspace(dir.path());
+    ws.set_default_runtime(Runtime::Host);
+    add_project_and_wait(&ws, &repo);
+    let id = ws.borrow().state.active_project.unwrap();
+    let saved = || {
+        StateStore::new(dir.path().join("cfg/state.json"))
+            .load()
+            .unwrap()
+            .projects[0]
+            .clone()
+    };
+
+    // The project's choice moves the worktrees it knows and is saved.
+    ws.set_project_runtime(id, Some(Runtime::Sandbox));
+    assert_eq!(ws.borrow().active_runtime(), Runtime::Sandbox);
+    let project = saved();
+    assert_eq!(project.runtime, Some(Runtime::Sandbox));
+    assert_eq!(project.worktrees[0].runtime, Runtime::Sandbox);
+
+    // A devcontainer applies only where there is a devcontainer.json; this
+    // worktree takes the default instead.
+    ws.set_project_runtime(id, Some(Runtime::Devcontainer));
+    assert_eq!(ws.borrow().active_runtime(), Runtime::Host);
+    assert_eq!(saved().runtime, Some(Runtime::Devcontainer));
+
+    // Following the default again moves the worktrees back to it.
+    ws.set_project_runtime(id, Some(Runtime::Sandbox));
+    ws.set_project_runtime(id, None);
+    assert_eq!(ws.borrow().active_runtime(), Runtime::Host);
+    assert_eq!(saved().runtime, None);
+
+    // Worktrees opened later take the project's choice over the default.
+    let local = cmdterm_env::Environment::Local;
+    let pick = |project, default| new_worktree_runtime(project, default, &local, &repo);
+    assert_eq!(pick(Some(Runtime::Host), Runtime::Sandbox), Runtime::Host);
+    assert_eq!(
+        pick(Some(Runtime::Devcontainer), Runtime::Sandbox),
+        Runtime::Sandbox
+    );
+    assert_eq!(pick(None, Runtime::Devcontainer), Runtime::default());
 }
 
 #[test]

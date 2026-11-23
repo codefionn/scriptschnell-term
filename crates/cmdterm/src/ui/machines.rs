@@ -1198,45 +1198,26 @@ fn apply_note(ws: &Workspace, scheme: &Scheme) -> Box<dyn View> {
     ))
 }
 
-/// The heading of a scope, such as "Every worktree": a small capitalized
-/// muted label, like the nav's group names, so it reads as a divider above
-/// the section titles under it instead of one more title among them.
-fn scope_title(scheme: &Scheme, text: &str) -> impl View + use<> {
-    // A muted capital label over a rule across the page, as the nav names
-    // its groups: it splits the page into the part that applies to one
-    // worktree and the part for every one, above the bold section titles
-    // inside each, so the scope reads as the outer level.
-    let width = page_width();
-    Pad::insets(EdgeInsets {
-        top: GAP * 1.5,
-        bottom: 2.0,
-        ..EdgeInsets::default()
-    })
-    .child(
-        Column::new()
-            .width(width)
-            .gap(4.0)
-            .child(ThemeProvider::new(
-                scheme.muted_theme(),
-                Text::new(text.to_uppercase()).size(12.0).bold(),
-            ))
-            .child(Fill::new(width, 1.0, scheme.line)),
-    )
+/// The runtimes a dropdown offers, with their names.
+fn runtime_choices(tr: &crate::i18n::Strings) -> [(Runtime, &'static str); 3] {
+    [
+        (Runtime::Host, tr.run_on_host),
+        (Runtime::Devcontainer, tr.run_in_devcontainer),
+        (Runtime::Sandbox, tr.run_in_sandbox),
+    ]
 }
 
-/// The Sandboxing page: where the active worktree's terminals run, the
-/// devcontainer engine and the sandbox's network. Its paths and hosts have
-/// their own pages.
+/// The Sandboxing page: where worktrees run unless their project chooses,
+/// the devcontainer engine and the sandbox's network. Its paths and hosts
+/// have their own pages. Nothing on it belongs to one project; the Project
+/// page holds what does.
 pub fn sandbox_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
-    let (engine, sandbox, active, branch, runtime, preparing, picker, focus, tr) = {
+    let (engine, sandbox, runtime, picker, focus, tr) = {
         let inner = ws.borrow();
         (
             inner.settings.container_engine.clone(),
             inner.settings.sandbox.clone(),
-            inner.active_key().is_some(),
-            inner.active_branch().map(str::to_owned),
-            inner.active_runtime(),
-            inner.active_runtime_preparing(),
+            inner.settings.default_runtime,
             inner.settings_ui.picker,
             inner.regions.settings_focus,
             inner.tr,
@@ -1244,57 +1225,30 @@ pub fn sandbox_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
     };
     let mut column = Column::new().width(page_width()).gap(GAP / 2.0);
 
-    // Where the active worktree's terminals run. Two scope headings, a
-    // step above the group titles, split the page into what applies to this
-    // worktree and what applies to all of them.
-    column = column.child(scope_title(
-        scheme,
-        &match &branch {
-            Some(branch) => (tr.terminals_of_branch)(branch),
-            None => tr.this_worktree.to_owned(),
-        },
-    ));
-    if active {
-        let open = picker == Some(Picker::Runtime);
-        let toggle = ws.clone();
-        let mut dropdown = Dropdown::new(tr.this_worktree)
-            .min_width(SELECT_WIDTH)
-            .text_size(INPUT_TEXT_SIZE)
-            .open(open)
-            .on_toggle(move || toggle.toggle_picker(Picker::Runtime));
-        for (choice, title) in [
-            (Runtime::Host, tr.run_on_host),
-            (Runtime::Devcontainer, tr.run_in_devcontainer),
-            (Runtime::Sandbox, tr.run_in_sandbox),
-        ] {
-            let pick = ws.clone();
-            dropdown = dropdown.option(
-                DropdownOption::new(title)
-                    .selected(runtime == choice)
-                    .on_select(move || pick.pick_runtime(choice)),
-            );
-        }
-        column = column.child(focused(scheme, dropdown, open, focus));
-        if cfg!(windows) && runtime == Runtime::Sandbox {
-            column = column.child(label(scheme, tr.setup_sandbox_note_windows));
-        }
-        if runtime == Runtime::Devcontainer && preparing {
-            column = column.child(label(scheme, tr.runtime_starting));
-        }
-        // Only a devcontainer has anything to rebuild.
-        if runtime == Runtime::Devcontainer {
-            let rebuild = ws.clone();
-            column = column.child(
-                button(tr.rebuild_devcontainer, tr.rebuild_devcontainer)
-                    .on_click(move || rebuild.rebuild_devcontainer_from_settings()),
-            );
-        }
-    } else {
-        column = column.child(label(scheme, tr.no_active_worktree));
+    // Where worktrees the app opens for the first time run.
+    column = column
+        .child(section_title(tr.setup_runtime))
+        .child(note(scheme, tr.default_runtime_note));
+    let open = picker == Some(Picker::Runtime);
+    let toggle = ws.clone();
+    let mut dropdown = Dropdown::new(tr.setup_runtime)
+        .min_width(SELECT_WIDTH)
+        .text_size(INPUT_TEXT_SIZE)
+        .open(open)
+        .on_toggle(move || toggle.toggle_picker(Picker::Runtime));
+    for (choice, title) in runtime_choices(tr) {
+        let pick = ws.clone();
+        dropdown = dropdown.option(
+            DropdownOption::new(title)
+                .selected(runtime == choice)
+                .on_select(move || pick.pick_default_runtime(choice)),
+        );
+    }
+    column = column.child(focused(scheme, dropdown, open, focus));
+    if cfg!(windows) && runtime == Runtime::Sandbox {
+        column = column.child(label(scheme, tr.setup_sandbox_note_windows));
     }
 
-    // The rest applies to every worktree; its scope heading says so.
-    column = column.child(scope_title(scheme, tr.all_worktrees));
     // Devcontainer engine. An engine settings.json names other than docker
     // or podman shows as its own option.
     column = column.child(section_title(tr.container_engine));
@@ -1987,6 +1941,9 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .active_key()
         .and_then(|(_, path)| project.worktree(&path).map(|w| w.runtime))
         .unwrap_or_default();
+    let preparing = inner.active_runtime_preparing();
+    let picker = inner.settings_ui.picker;
+    let focus = inner.regions.settings_focus;
     let path = inner.settings_ui.machines.form.project_path.clone();
     let env_name = inner.settings_ui.machines.form.project_env_name.clone();
     let env_value = inner.settings_ui.machines.form.project_env_value.clone();
@@ -2054,6 +2011,49 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
                             .on_click(move || set.apply_project_base_draft(id)),
                     ),
             );
+
+        // Where this project's worktrees run, in place of the Sandboxing
+        // page's default.
+        column = column
+            .child(section_title(tr.setup_runtime))
+            .child(note(scheme, tr.project_runtime_note));
+        let open = picker == Some(Picker::ProjectRuntime);
+        let toggle = ws.clone();
+        let pick = ws.clone();
+        let mut dropdown = Dropdown::new(tr.setup_runtime)
+            .min_width(SELECT_WIDTH)
+            .text_size(INPUT_TEXT_SIZE)
+            .open(open)
+            .on_toggle(move || toggle.toggle_picker(Picker::ProjectRuntime))
+            .option(
+                DropdownOption::new(tr.runtime_follow_default)
+                    .selected(project.runtime.is_none())
+                    .on_select(move || pick.pick_project_runtime(id, None)),
+            );
+        for (choice, title) in runtime_choices(tr) {
+            let pick = ws.clone();
+            dropdown = dropdown.option(
+                DropdownOption::new(title)
+                    .selected(project.runtime == Some(choice))
+                    .on_select(move || pick.pick_project_runtime(id, Some(choice))),
+            );
+        }
+        column = column.child(focused(scheme, dropdown, open, focus));
+        if cfg!(windows) && project.runtime == Some(Runtime::Sandbox) {
+            column = column.child(label(scheme, tr.setup_sandbox_note_windows));
+        }
+        // The shown worktree's devcontainer, the only runtime with anything
+        // to rebuild.
+        if runtime == Runtime::Devcontainer {
+            if preparing {
+                column = column.child(label(scheme, tr.runtime_starting));
+            }
+            let rebuild = ws.clone();
+            column = column.child(
+                button(tr.rebuild_devcontainer, tr.rebuild_devcontainer)
+                    .on_click(move || rebuild.rebuild_devcontainer_from_settings()),
+            );
+        }
     }
     let env_note = if project.temporary {
         tr.project_env_note_temporary
@@ -2145,7 +2145,7 @@ pub fn project_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         let sandbox = ws.clone();
         column = column.child(note(scheme, tr.project_not_sandboxed)).child(
             button(tr.run_in_sandbox, tr.run_in_sandbox)
-                .on_click(move || sandbox.pick_runtime(Runtime::Sandbox)),
+                .on_click(move || sandbox.pick_project_runtime(id, Some(Runtime::Sandbox))),
         );
     }
     if !project.env.is_local() {

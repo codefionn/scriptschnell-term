@@ -1554,9 +1554,11 @@ impl Workspace {
             let name = project.name.clone();
             let project_id = project_storage_id(&name, &env, &project.root);
             let fresh = project.worktree(path).is_none();
+            let chosen = project.runtime;
             let config = project.worktree_mut(path);
             if fresh {
-                config.runtime = new_worktree_runtime(inner.settings.default_runtime, &env, path);
+                config.runtime =
+                    new_worktree_runtime(chosen, inner.settings.default_runtime, &env, path);
             }
             let config = config.clone();
             inner.state.active_project = Some(id);
@@ -4816,18 +4818,27 @@ fn watch(project: &crate::state::Project, jj: bool) -> Job {
 }
 
 /// Where a new worktree goes: `<repo>-<suffix>` beside the main worktree.
-/// The runtime of a worktree seen for the first time: the default from the
-/// settings, except that a devcontainer default without a
-/// `devcontainer.json` falls back to [`Runtime::default`], the sandbox
-/// except on Windows.
-fn new_worktree_runtime(default: Runtime, env: &Environment, path: &Path) -> Runtime {
-    match default {
-        Runtime::Devcontainer => match crate::container::find(env, path) {
-            Ok(Some(_)) => Runtime::Devcontainer,
-            _ => Runtime::default(),
-        },
-        runtime => runtime,
+/// The runtime of worktree `path`: its project's choice, else the default
+/// from the settings, else [`Runtime::default`], the sandbox except on
+/// Windows. A devcontainer is skipped where the worktree has no
+/// `devcontainer.json`. Blocking: looking for one runs a command on a
+/// machine that is not this one.
+pub(crate) fn new_worktree_runtime(
+    project: Option<Runtime>,
+    default: Runtime,
+    env: &Environment,
+    path: &Path,
+) -> Runtime {
+    let mut has_devcontainer = None;
+    for runtime in project.into_iter().chain([default]) {
+        if runtime != Runtime::Devcontainer
+            || *has_devcontainer
+                .get_or_insert_with(|| matches!(crate::container::find(env, path), Ok(Some(_))))
+        {
+            return runtime;
+        }
     }
+    Runtime::default()
 }
 
 /// `revision` as part of a directory name, such as `origin-main` for
