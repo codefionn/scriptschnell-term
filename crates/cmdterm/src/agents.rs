@@ -2773,23 +2773,41 @@ pub fn runs(argv: &[String], program: &str) -> bool {
         .is_some_and(|name| name == program)
 }
 
-/// Whether `argv` starts one of [`Agent::ALL`] that should get bash as
-/// `$SHELL`, as [`Settings::agents_use_bash`] asks. Linux only.
+/// Arguments to `sh` that start `argv` in a terminal that runs one of
+/// [`Agent::all`] itself, such as an agent launch or a saved layout opens.
+/// The app's `PATH` comes from the desktop session, which often lacks what
+/// the user's shell profile adds, such as `~/.local/bin`, where uv, pipx and
+/// npm put Mistral Vibe, Kimi Code and others. So when the program is not
+/// on `PATH`, the script takes `PATH` from the user's login shell, if the
+/// program is found there. With `use_bash` (Linux only, see
+/// [`Settings::agents_use_bash`]), `SHELL` becomes the first bash on `PATH`.
+/// `exec` leaves the agent itself as the process group leader, as
+/// [`group_runs`] expects. Unix only; `None` for other commands.
 ///
 /// [`Settings::agents_use_bash`]: crate::state::Settings::agents_use_bash
-pub fn wants_bash(argv: &[String]) -> bool {
-    cfg!(target_os = "linux") && Agent::all().iter().any(|agent| runs(argv, agent.program()))
+pub fn agent_launch(argv: &[String], use_bash: bool) -> Option<[String; 5]> {
+    if !cfg!(unix) || !Agent::all().iter().any(|agent| runs(argv, agent.program())) {
+        return None;
+    }
+    let bash = if use_bash && cfg!(target_os = "linux") {
+        "bash"
+    } else {
+        ""
+    };
+    Some(["-c", AGENT_LAUNCH, "sh", argv[0].as_str(), bash].map(str::to_owned))
 }
 
-/// Arguments to `sh` that run the command after them with `SHELL` set to
-/// the first bash on the environment's `PATH`. Without bash there, the
-/// command keeps the `SHELL` it had. `exec` leaves the agent itself as the
-/// process group leader, as [`group_runs`] expects.
-pub const WITH_BASH: [&str; 3] = [
-    "-c",
-    "b=$(command -v bash) && SHELL=$b && export SHELL; exec \"$@\"",
-    "sh",
-];
+/// The script of [`agent_launch`]: `$1` is the program to find, `$2` is
+/// `bash` to set `SHELL` to bash, the rest is the command. The login shell
+/// is `$SHELL`, else the passwd entry's. Fish prints a quoted `$PATH` joined
+/// with colons too; a shell that prints something else fails the check.
+const AGENT_LAUNCH: &str = "p=$1 b=$2; shift 2; \
+if ! command -v \"$p\" >/dev/null 2>&1; then \
+s=$SHELL; [ -x \"$s\" ] || s=$(getent passwd \"$(id -un)\" 2>/dev/null | cut -d: -f7); \
+if [ -x \"$s\" ] && l=$(\"$s\" -l -c 'printf %s \"$PATH\"' </dev/null 2>/dev/null) \
+&& (PATH=$l; command -v \"$p\") >/dev/null 2>&1; then PATH=$l; export PATH; fi; fi; \
+if [ -n \"$b\" ] && b=$(command -v bash); then SHELL=$b; export SHELL; fi; \
+exec \"$@\"";
 
 /// What the app types into an agent it resumed in the middle of a turn.
 pub const CONTINUE_PROMPT: &str = "scriptschnell-term was closed while you were working on this session. Continue where you left off.";
@@ -3493,6 +3511,49 @@ mod tests {
         assert_eq!(check(&home, Agent::Antigravity), Ok(Status::Off));
         let root: Value = serde_json::from_str(&std::fs::read_to_string(&config).unwrap()).unwrap();
         assert_eq!(root["mcpServers"], json!({"mine": {"command": "x"}}));
+    }
+
+    /// An agent the app's `PATH` misses, as `~/.local/bin` often is when the
+    /// app starts from the desktop, starts from the login shell's `PATH`.
+    #[cfg(unix)]
+    #[test]
+    fn an_agent_off_the_apps_path_starts_from_the_login_shells() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("bin");
+        std::fs::create_dir_all(&bin).unwrap();
+        let script = |path: &std::path::Path, body: &str| {
+            std::fs::write(path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        script(&bin.join("vibe"), "echo \"vibe ran with $*\"");
+        // A login shell whose profile adds the agent's directory.
+        let login = dir.path().join("login-shell");
+        script(
+            &login,
+            &format!("printf %s '{}:/usr/bin:/bin'", bin.display()),
+        );
+        let run = |path: &str| {
+            let argv = vec!["vibe".to_owned(), "a prompt".to_owned()];
+            let launch = agent_launch(&argv, false).unwrap();
+            let out = cmdterm_env::Environment::Local
+                .command("sh")
+                .args(launch)
+                .args(&argv)
+                .var("PATH", path)
+                .var("SHELL", &login)
+                .output()
+                .unwrap();
+            String::from_utf8_lossy(&out.stdout).into_owned()
+        };
+        assert_eq!(run("/usr/bin:/bin"), "vibe ran with a prompt\n");
+        // Found on the app's PATH, the login shell is not asked.
+        script(&login, "exit 1");
+        assert_eq!(
+            run(&format!("{}:/usr/bin:/bin", bin.display())),
+            "vibe ran with a prompt\n"
+        );
+        assert!(agent_launch(&["htop".to_owned()], true).is_none());
     }
 
     #[test]

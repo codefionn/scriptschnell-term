@@ -876,6 +876,11 @@ through `sh` on the host, so they need a POSIX shell there.
   hosts, remote machines and VMs. Where `PATH` has no bash, the agent keeps the `SHELL` it
   had. A shell you start an agent from yourself keeps the user's `SHELL`. Set it to `false`
   to keep the user's shell for agents too.
+- An agent the app starts itself that is not on the app's `PATH` is looked up on the
+  `PATH` of the user's login shell (`$SHELL -l`), on every Unix and whatever
+  `agents_use_bash` says. An app started from the desktop often lacks what a shell
+  profile adds, such as `~/.local/bin`, where uv, pipx and npm install Mistral Vibe,
+  Kimi Code and other agents.
 
 ### Shells on Windows
 

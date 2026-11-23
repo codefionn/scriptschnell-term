@@ -6,6 +6,15 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Fixed
+
+- Agents the app starts itself, from a launch, the palette or a saved layout, no
+  longer exit at once with "exec: vibe: not found" when they live in a directory the
+  app's `PATH` lacks, such as `~/.local/bin` for an app started from the desktop. An
+  agent missing from `PATH` is looked up on the `PATH` of your login shell. This
+  affected Mistral Vibe, Kimi Code and any agent installed with uv, pipx or a user npm
+  prefix.
+
 ## [0.1.2] - 2026-11-23
 
 ### Added

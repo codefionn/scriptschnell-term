@@ -5585,14 +5585,16 @@ impl Inner {
                         match resumed.as_ref().or(command.as_ref()) {
                             Some(argv) if !argv.is_empty() => {
                                 let run = wrapped.as_deref().unwrap_or(argv);
-                                // An agent finds bash as `$SHELL` where the
-                                // environment has it.
-                                let mut command = if self.settings.agents_use_bash
-                                    && crate::agents::wants_bash(argv)
-                                {
-                                    env.command("sh").args(crate::agents::WITH_BASH).args(run)
-                                } else {
-                                    env.command(&run[0]).args(&run[1..])
+                                // An agent is found on the login shell's
+                                // `PATH` too, and finds bash as `$SHELL`
+                                // where the environment has it.
+                                let launch = crate::agents::agent_launch(
+                                    argv,
+                                    self.settings.agents_use_bash,
+                                );
+                                let mut command = match launch {
+                                    Some(launch) => env.command("sh").args(launch).args(run),
+                                    None => env.command(&run[0]).args(&run[1..]),
                                 }
                                 .args(once)
                                 .cwd(cwd);
