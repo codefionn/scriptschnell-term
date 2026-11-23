@@ -982,8 +982,9 @@ they start.
 page of the settings, passed to every newly started terminal of that project's worktrees
 (including sandboxed ones, even when a variable's name looks like a credential). Worktree
 `env_vars` override project `env_vars` of the same name. When the operating system's
-secret storage is available (Secret Service through `secret-tool` on Linux, or the login
-keychain on macOS, outside `--config-dir`), only each variable's `name` is saved in
+secret storage is available (Secret Service through `secret-tool` on Linux, the login
+keychain on macOS, or the Credential Manager on Windows, outside `--config-dir`), only
+each variable's `name` is saved in
 `state.json` and the values live encrypted in the keyring under service
 `scriptschnell-term-project-env`. When no secret storage is reachable, each entry falls
 back to keeping its `value` in `state.json` (mode 0600 on Unix). On Linux, local

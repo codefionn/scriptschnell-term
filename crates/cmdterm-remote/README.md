@@ -48,8 +48,8 @@ disks go to `remote/` of the data directory (`~/.local/share/scriptschnell-term/
 `--config-dir` puts both into one directory, the same as for `scriptschnell-term`.
 
 Where the session has secret storage, the private key also goes there: the Secret
-Service through `secret-tool` (gnome-keyring, KWallet, KeePassXC), or the login keychain
-through `security` on macOS. The entry's service is `scriptschnell-term remote key`, and
+Service through `secret-tool` (gnome-keyring, KWallet, KeePassXC), the login keychain
+through `security` on macOS, or the Credential Manager on Windows. The entry's service is `scriptschnell-term remote key`, and
 its account is the path of `id_hybrid`. A new key is stored right away. A key from before
 goes there the next time the app starts, or on `cmdterm-remote keygen`. When `id_hybrid`
 is missing, the key comes back from the storage before a new one is made, and the

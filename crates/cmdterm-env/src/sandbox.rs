@@ -1376,7 +1376,15 @@ impl SandboxTarget {
             args.push(format!("{}:{}", cpu.share.reserve, cpu.share.percent).into());
         }
         args.push("--".into());
-        args.push(command.program.clone());
+        // The launcher's `CreateProcessW` finds only `.exe` files on `PATH`,
+        // so a batch file such as `claude.cmd` gets its full path here.
+        let program = if self.host.is_local() {
+            crate::shells::local_program(&command.program, crate::shells::path_var(&command.vars))
+                .into_owned()
+        } else {
+            command.program.clone()
+        };
+        args.push(program);
         args.extend(command.args.iter().cloned());
         self.host.command(launcher()).args(args)
     }

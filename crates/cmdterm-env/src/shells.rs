@@ -12,6 +12,7 @@
 // Finding shells runs on Windows only; tests run it everywhere.
 #![cfg_attr(not(windows), allow(dead_code))]
 
+use std::borrow::Cow;
 use std::ffi::{OsStr, OsString};
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
@@ -103,6 +104,57 @@ impl Probe<'_> {
             .into_iter()
             .map(|root| root.join("usr").join("bin").join(name))
             .find(|path| (self.is_file)(path))
+    }
+
+    /// The full path of `name` where Windows' own search misses it: a bare
+    /// name, such as `az` or `claude`, that `PATH` (`path`, else this
+    /// process's) holds only as a batch file such as `az.cmd`, which npm and
+    /// the Azure CLI install. Windows looks only for `name.exe`; this tries
+    /// every extension of `PATHEXT` in each directory, as the shells do. A
+    /// name with an extension of `PATHEXT` is looked for as it is. `None` for
+    /// a path, and for a program of the Windows directories, which Windows
+    /// searches before `PATH`.
+    fn path_program(&self, name: &OsStr, path: Option<&OsStr>) -> Option<PathBuf> {
+        let text = name.to_str()?;
+        if text.is_empty() || text.contains(['/', '\\', ':']) {
+            return None;
+        }
+        let pathext = (self.var)("PATHEXT")
+            .and_then(|value| value.into_string().ok())
+            .unwrap_or_else(|| ".COM;.EXE;.BAT;.CMD".to_owned());
+        let extensions: Vec<String> = pathext
+            .split(';')
+            .filter(|ext| ext.starts_with('.') && ext.len() > 1)
+            // Lower case, as the files are usually named.
+            .map(str::to_ascii_lowercase)
+            .collect();
+        let has_extension = Path::new(text).extension().is_some_and(|ext| {
+            let ext = format!(".{}", ext.to_string_lossy().to_ascii_lowercase());
+            extensions.contains(&ext)
+        });
+        let candidates: Vec<String> = if has_extension {
+            vec![text.to_owned()]
+        } else {
+            let exe = format!("{text}.exe");
+            if let Some(root) = (self.var)("SystemRoot").map(PathBuf::from)
+                && [root.join("System32"), root.clone()]
+                    .iter()
+                    .any(|dir| (self.is_file)(&dir.join(&exe)))
+            {
+                return None;
+            }
+            extensions
+                .iter()
+                .map(|ext| format!("{text}{ext}"))
+                .collect()
+        };
+        let dirs: Vec<PathBuf> = match path {
+            Some(path) => std::env::split_paths(path).collect(),
+            None => self.path_dirs(),
+        };
+        dirs.iter()
+            .flat_map(|dir| candidates.iter().map(move |name| dir.join(name)))
+            .find(|candidate| (self.is_file)(candidate))
     }
 
     /// Whether `program` runs on the MSYS runtime of Git for Windows, or on
@@ -259,26 +311,44 @@ pub(crate) fn git_bash_var() -> Option<(&'static str, &'static OsStr)> {
         .then_some((GIT_BASH_VAR, bash.as_os_str()))
 }
 
-/// The program to start for `program` on this machine. Windows has no `sh`
-/// of its own, and Git for Windows puts only `git` on `PATH`, so there a
-/// bare `sh` or `bash` that `PATH` lacks becomes the one that comes with
-/// Git. The app's scripts need it, as does every `term.run` of `sh`.
-pub(crate) fn local_program(program: &OsStr) -> &OsStr {
+/// The program to start for `program` on this machine, with `path` as the
+/// `PATH` the command gets when it sets one. Windows has no `sh` of its
+/// own, and Git for Windows puts only `git` on `PATH`, so there a bare
+/// `sh` or `bash` that `PATH` lacks becomes the one that comes with Git.
+/// The app's scripts need it, as does every `term.run` of `sh`. Other bare
+/// names that `PATH` holds only as a batch file, such as `az.cmd` or the
+/// `claude.cmd` of npm, become its full path ([`Probe::path_program`]).
+pub(crate) fn local_program<'a>(program: &'a OsStr, path: Option<&OsStr>) -> Cow<'a, OsStr> {
     #[cfg(windows)]
     {
         use std::sync::OnceLock;
         static GIT_SH: OnceLock<Option<PathBuf>> = OnceLock::new();
         static GIT_BASH: OnceLock<Option<PathBuf>> = OnceLock::new();
-        let (cell, name) = match program.to_str() {
-            Some("sh") => (&GIT_SH, "sh.exe"),
-            Some("bash") => (&GIT_BASH, "bash.exe"),
-            _ => return program,
+        let git = match program.to_str() {
+            Some("sh") => Some((&GIT_SH, "sh.exe")),
+            Some("bash") => Some((&GIT_BASH, "bash.exe")),
+            _ => None,
         };
-        if let Some(found) = cell.get_or_init(|| machine(|probe| probe.git_unix_tool(name))) {
-            return found.as_os_str();
+        if let Some((cell, name)) = git
+            && let Some(found) = cell.get_or_init(|| machine(|probe| probe.git_unix_tool(name)))
+        {
+            return Cow::Borrowed(found.as_os_str());
+        }
+        if let Some(found) = machine(|probe| probe.path_program(program, path)) {
+            return Cow::Owned(found.into_os_string());
         }
     }
-    program
+    #[cfg(not(windows))]
+    let _ = path;
+    Cow::Borrowed(program)
+}
+
+/// The `PATH` among a command's variables, which Windows names in any case.
+pub(crate) fn path_var(vars: &[(OsString, OsString)]) -> Option<&OsStr> {
+    vars.iter()
+        .rev()
+        .find(|(key, _)| key.eq_ignore_ascii_case("PATH"))
+        .map(|(_, value)| value.as_os_str())
 }
 
 static DEFAULT_SHELL: RwLock<Option<Vec<OsString>>> = RwLock::new(None);
@@ -476,6 +546,63 @@ mod tests {
         let cmd = vec![OsString::from("cmd.exe")];
         assert_eq!(sandbox_history(cmd.clone()), cmd);
         assert!(sandbox_history(Vec::new()).is_empty());
+    }
+
+    #[test]
+    fn batch_files_on_path_are_found_by_their_extension() {
+        let az = path(&["/tools", "azure", "wbin", "az.cmd"]);
+        let claude = path(&["/home", "npm", "claude.cmd"]);
+        let claude_sh = path(&["/home", "npm", "claude"]);
+        let git = path(&["/tools", "git", "cmd", "git.exe"]);
+        let explorer = path(&["/win", "explorer.exe"]);
+        let files = [
+            az.clone(),
+            claude.clone(),
+            claude_sh,
+            git.clone(),
+            explorer.clone(),
+        ];
+        let dirs = std::env::join_paths([
+            path(&["/tools", "azure", "wbin"]),
+            path(&["/home", "npm"]),
+            path(&["/tools", "git", "cmd"]),
+            path(&["/win"]),
+        ])
+        .unwrap();
+        let dirs = dirs.to_str().unwrap();
+        let vars = [
+            ("PATH", dirs),
+            ("PATHEXT", ".COM;.EXE;.BAT;.CMD;.PS1"),
+            ("SystemRoot", "/win"),
+        ];
+        probe_with(&vars, &files, |p| {
+            let find = |name: &str| p.path_program(name.as_ref(), None);
+            assert_eq!(find("az"), Some(az.clone()));
+            assert_eq!(find("az.cmd"), Some(az.clone()));
+            // The batch file, not the shell script npm puts beside it.
+            assert_eq!(find("claude"), Some(claude.clone()));
+            assert_eq!(find("git"), Some(git.clone()));
+            // Windows finds these itself.
+            assert_eq!(find("explorer"), None);
+            assert_eq!(find(az.to_str().unwrap()), None);
+            assert_eq!(find("missing"), None);
+            // A `PATH` the command sets replaces the app's.
+            let only_npm = path(&["/home", "npm"]);
+            assert_eq!(
+                p.path_program("az".as_ref(), Some(only_npm.as_os_str())),
+                None
+            );
+        });
+    }
+
+    #[test]
+    fn path_is_found_among_variables_in_any_case() {
+        let vars = vec![
+            (OsString::from("Path"), OsString::from("a")),
+            (OsString::from("HOME"), OsString::from("h")),
+        ];
+        assert_eq!(path_var(&vars), Some(OsStr::new("a")));
+        assert_eq!(path_var(&vars[1..]), None);
     }
 
     #[test]

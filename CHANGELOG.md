@@ -25,6 +25,14 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- On Windows, Sign in on the Accounts page no longer fails with "program not found".
+  Forge tokens, project environment variables and the remote machine key go to the
+  Windows Credential Manager, where Linux uses `secret-tool` and macOS the keychain.
+- On Windows, agents and other programs that `PATH` holds only as batch files, such as
+  the `claude.cmd` and `codex.cmd` npm installs or `az.cmd`, start from launches,
+  the palette, saved layouts and extensions instead of failing with "program not
+  found". The app now looks a bare name up with every extension of `PATHEXT` and runs
+  batch files through `cmd.exe`.
 - Agents the app starts itself, from a launch, the palette or a saved layout, no
   longer exit at once with "exec: vibe: not found" when they live in a directory the
   app's `PATH` lacks, such as `~/.local/bin` for an app started from the desktop. An

@@ -893,8 +893,8 @@ extension's page. The app keeps each forge's list under `forge_hosts` in
 - `whoami(host, account)` returns a URL that answers with JSON about the token's owner, and the
   dotted field that names them, such as `"login"`. The URL must be on one of the
   extension's hosts. Sign in on the Accounts page sends the token there; a
-  2xx answer keeps the token in the system's secret storage (`secret-tool` or the macOS
-  keychain) and the user name under `forge_accounts` in `settings.json`. Without a
+  2xx answer keeps the token in the system's secret storage (`secret-tool`, the macOS
+  keychain or the Windows Credential Manager) and the user name under `forge_accounts` in `settings.json`. Without a
   `whoami` the token is kept without a check.
 - `check(items)` gets a list of `{ account, host, path, remote, branches, signed_in }`,
   one per repository, with every branch the app wants to know about. `account` is the

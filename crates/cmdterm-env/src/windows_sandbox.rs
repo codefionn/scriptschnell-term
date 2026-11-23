@@ -27,6 +27,7 @@
 #![allow(unsafe_code)]
 
 use std::ffi::{OsStr, OsString, c_void};
+use std::io;
 use std::os::windows::ffi::OsStrExt;
 use std::path::{Path, PathBuf};
 use std::ptr::{null, null_mut};
@@ -229,7 +230,8 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
     vars.push(("TEMP".into(), temp.clone().into()));
     vars.push(("TMP".into(), temp.into()));
     let environment = environment_block(&launch.unset, &vars);
-    let command_line = command_line(&launch.program, &launch.args);
+    let command_line = process_command_line(&launch.program, &launch.args)
+        .map_err(|error| format!("{}: {error}", launch.program.to_string_lossy()))?;
     let cwd = launch.cwd.as_deref().map(|cwd| wide(cwd.as_os_str()));
 
     // The console's Ctrl+C belongs to the command. Ignoring it with a null
@@ -871,6 +873,81 @@ pub(crate) fn command_line(program: &OsStr, args: &[OsString]) -> Vec<u16> {
     line
 }
 
+/// The command line that starts `program` with `args` through
+/// `CreateProcessW`: [`command_line`], or for a batch file (`.cmd`, `.bat`)
+/// one that runs it through `cmd.exe`, quoted for it as the standard
+/// library quotes one ([`batch_command_line`]).
+pub(crate) fn process_command_line(program: &OsStr, args: &[OsString]) -> io::Result<Vec<u16>> {
+    if is_batch_file(program) {
+        batch_command_line(program, args)
+    } else {
+        Ok(command_line(program, args))
+    }
+}
+
+/// Whether `program` names a batch file, which only `cmd.exe` runs.
+pub(crate) fn is_batch_file(program: &OsStr) -> bool {
+    std::path::Path::new(program)
+        .extension()
+        .is_some_and(|ext| ext.eq_ignore_ascii_case("cmd") || ext.eq_ignore_ascii_case("bat"))
+}
+
+/// `cmd.exe /e:ON /v:OFF /d /c ""<script>" <args>"`, with each argument
+/// quoted so that `cmd.exe` passes it to the script whole and expands
+/// nothing in it, as `std::process::Command` does for batch files: special
+/// characters put an argument in quotes, a quote doubles and `%` becomes
+/// `%%cd:~,%`, which expands to a lone `%`. Line breaks would end the
+/// command, so an argument with one is refused.
+pub(crate) fn batch_command_line(script: &OsStr, args: &[OsString]) -> io::Result<Vec<u16>> {
+    let script: Vec<u16> = script.encode_wide().collect();
+    if script.contains(&u16::from(b'"')) || script.last() == Some(&u16::from(b'\\')) {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidInput,
+            "a batch file's path may not hold `\"` or end with `\\`",
+        ));
+    }
+    let mut line: Vec<u16> = "cmd.exe /e:ON /v:OFF /d /c \"\"".encode_utf16().collect();
+    line.extend(script);
+    line.push(u16::from(b'"'));
+    for arg in args {
+        let bytes = arg.as_encoded_bytes();
+        if bytes.iter().any(|b| matches!(b, b'\r' | b'\n')) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
+                "batch file arguments may not hold line breaks",
+            ));
+        }
+        line.push(u16::from(b' '));
+        const SPECIAL: &[u8] = b"\t &()[]{}^=;!'+,`~%|<>\"";
+        let quote = bytes.is_empty() || bytes.iter().any(|b| SPECIAL.contains(b));
+        if quote {
+            line.push(u16::from(b'"'));
+        }
+        let mut backslashes = 0;
+        for unit in arg.encode_wide() {
+            if unit == u16::from(b'\\') {
+                backslashes += 1;
+            } else {
+                if unit == u16::from(b'"') {
+                    line.extend(std::iter::repeat_n(u16::from(b'\\'), backslashes));
+                    line.push(u16::from(b'"'));
+                } else if unit == u16::from(b'%') {
+                    line.extend("%%cd:~,".encode_utf16());
+                }
+                backslashes = 0;
+            }
+            line.push(unit);
+        }
+        if quote {
+            line.extend(std::iter::repeat_n(u16::from(b'\\'), backslashes));
+            line.push(u16::from(b'"'));
+        }
+    }
+    line.push(u16::from(b'"'));
+    line.push(0);
+    Ok(line)
+}
+
 /// `arg` quoted the way `CommandLineToArgvW` splits it, for
 /// [`std::os::windows::process::CommandExt::raw_arg`].
 pub(crate) fn quoted_arg(arg: &OsStr) -> OsString {
@@ -925,6 +1002,24 @@ mod tests {
         assert_eq!(quoted(r#"x"y"#), r#""x\"y""#);
         assert_eq!(quoted(r"d\ e\"), r#""d\ e\\""#);
         assert_eq!(quoted("f\ng"), "\"f\ng\"");
+    }
+
+    #[test]
+    fn batch_files_run_through_cmd_with_their_arguments_quoted_for_it() {
+        let line = |args: &[&str]| {
+            let args: Vec<OsString> = args.iter().map(OsString::from).collect();
+            let line = process_command_line(OsStr::new(r"C:\npm\claude.cmd"), &args).unwrap();
+            String::from_utf16_lossy(&line[..line.len() - 1])
+        };
+        assert_eq!(
+            line(&["--resume", "a b", "50%", r#"say "hi""#, ""]),
+            r#"cmd.exe /e:ON /v:OFF /d /c ""C:\npm\claude.cmd" --resume "a b" "50%%cd:~,%" "say ""hi""" """"#
+        );
+        assert!(is_batch_file(OsStr::new("x.BAT")));
+        assert!(!is_batch_file(OsStr::new("claude.exe")));
+        let plain = process_command_line(OsStr::new("git.exe"), &["a b".into()]).unwrap();
+        assert_eq!(String::from_utf16_lossy(&plain), "git.exe \"a b\"\0");
+        assert!(process_command_line(OsStr::new("x.cmd"), &["a\nb".into()]).is_err());
     }
 
     #[test]

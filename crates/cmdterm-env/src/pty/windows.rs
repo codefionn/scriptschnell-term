@@ -31,7 +31,7 @@ use windows_sys::Win32::System::Threading::{
 };
 
 use super::{CommandBuilder, DEFAULT_TERM, ExitStatus, PtySize};
-use crate::windows_sandbox::{command_line, environment_block, wide};
+use crate::windows_sandbox::{environment_block, process_command_line, wide};
 
 /// An owned kernel handle, closed on drop.
 struct Handle(HANDLE);
@@ -156,7 +156,7 @@ impl Pty {
             .argv
             .first()
             .ok_or_else(|| io::Error::new(io::ErrorKind::InvalidInput, "empty command"))?;
-        let mut line = command_line(program, &command.argv[1..]);
+        let mut line = process_command_line(program, &command.argv[1..])?;
 
         let mut unset: Vec<OsString> = Vec::new();
         let mut vars: Vec<(OsString, OsString)> = Vec::new();

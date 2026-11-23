@@ -83,7 +83,7 @@ pub use seatbelt::{
     SandboxWarning, sandbox_warnings_pending, take_sandbox_warnings, warm_seatbelt_probe,
 };
 pub use shells::{GIT_BASH_VAR, ShellOption, git_bash, installed_shells, set_default_shell};
-use shells::{git_bash_var, local_program, local_shell};
+use shells::{git_bash_var, local_program, local_shell, path_var};
 #[cfg(windows)]
 pub use windows_sandbox::launch_sandboxed;
 
@@ -728,7 +728,7 @@ impl EnvCommand {
         }
         match &self.env {
             Environment::Local => {
-                let mut command = Command::new(local_program(&self.program));
+                let mut command = Command::new(local_program(&self.program, path_var(&self.vars)));
                 add_local_args(&mut command, &self.args);
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
@@ -901,7 +901,8 @@ impl EnvCommand {
         }
         match &self.env {
             Environment::Local => {
-                let mut builder = pty::CommandBuilder::new(local_program(&self.program));
+                let mut builder =
+                    pty::CommandBuilder::new(local_program(&self.program, path_var(&self.vars)));
                 builder.args(&self.args);
                 builder.limit_cpu(self.cpu.clone().filter(|_| cpu::by_job(&self.env)));
                 if let Some(cwd) = &self.cwd {
