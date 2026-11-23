@@ -6,6 +6,8 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-11-23
+
 ### Added
 
 - Agents read the pull or merge request of a worktree's branch from the app's own
@@ -120,6 +122,7 @@ Initial release.
 - Self-updates from GitHub releases and the codefionn.eu mirror, with signed release
   manifests.
 
-[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.2
 [0.1.1]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.1
 [0.1.0]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.0

@@ -1452,7 +1452,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "allocation-counter",
  "base64 0.22.1",
@@ -1486,7 +1486,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm-env"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "getrandom 0.3.4",
@@ -1506,7 +1506,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm-remote"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "chacha20poly1305",
@@ -1531,7 +1531,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm-update"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "clap",
@@ -1549,7 +1549,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm-vt"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "allocation-counter",
  "cmdterm-env",
@@ -1563,7 +1563,7 @@ dependencies = [
 
 [[package]]
 name = "cmdterm-web"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "argon2",
  "axum",
