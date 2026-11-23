@@ -6,6 +6,8 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+## [0.1.3] - 2026-11-23
+
 ### Added
 
 - Settings, Project has two new pages, Allowed and Blocked, that list the guarded
@@ -236,7 +238,8 @@ Initial release.
 - Self-updates from GitHub releases and the codefionn.eu mirror, with signed release
   manifests.
 
-[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.2...HEAD
+[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.3...HEAD
+[0.1.3]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.3
 [0.1.2]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.2
 [0.1.1]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.1
 [0.1.0]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.0
