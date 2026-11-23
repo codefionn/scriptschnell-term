@@ -86,7 +86,12 @@ It prints JSON:
   tool's proxy by hand.
 - A local Linux sandbox has a network namespace of its own, even with the whole network. Servers
   you start bind no host ports, and only HTTP and HTTPS reach the outside, through the
-  proxy. `ssh`, raw TCP and UDP fail. Terminals of one worktree reach each other's
+  proxy. Git over SSH works too: `GIT_SSH_COMMAND` sends git's `ssh` through the proxy,
+  which runs the user's `ssh` outside with the user's keys, for allowed hosts only. Leave
+  `GIT_SSH_COMMAND` and `GIT_SSH_VARIANT` as they are. `ssh` itself, SSH shells,
+  `hg` over SSH, raw TCP and UDP fail. "Host key verification failed" means the host is
+  not in the user's known hosts yet; ask the user to connect to it once outside the
+  sandbox. Terminals of one worktree reach each other's
   servers on `localhost` as usual. The host does not, until a port is exposed:
   `sh ~/.local/share/cmdterm/control ports` lists your listening ports,
   `control expose PORT [HOST_PORT]` opens one on the host's `127.0.0.1` and

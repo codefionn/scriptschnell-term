@@ -54,7 +54,10 @@ use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
 
-use crate::proxy::{INNER_CA, INNER_PORTS, INNER_SOCKET, SandboxProxy, proxy_bridge};
+use crate::proxy::{
+    GIT_SSH_FLAG, INNER_CA, INNER_PORTS, INNER_SOCKET, SandboxProxy, known_proxy_bridge,
+    proxy_bridge,
+};
 use crate::seatbelt::Rules;
 
 /// Where a bubblewrap sandbox sees [`SandboxPolicy::keyring`].
@@ -636,6 +639,12 @@ impl SandboxPolicy {
             _ => bundle.to_string_lossy().into_owned(),
         });
         let mut vars = proxy.vars(ca.as_deref());
+        if let Some(command) = self.git_ssh_command() {
+            vars.push(("GIT_SSH_COMMAND".into(), command));
+            // Without it git asks the command whether it is OpenSSH, with
+            // `-G`, which the bridge does not take.
+            vars.push(("GIT_SSH_VARIANT".into(), "ssh".into()));
+        }
         if self.kind == SandboxKind::Windows && ca.is_some() {
             for (key, value) in [
                 ("GIT_CONFIG_COUNT", "1"),
@@ -646,6 +655,23 @@ impl SandboxPolicy {
             }
         }
         vars
+    }
+
+    /// The `GIT_SSH_COMMAND` that sends git's SSH connections through the
+    /// proxy (see `proxy/ssh.rs`): the bridge with `--git-ssh`. An isolated
+    /// bubblewrap sandbox has the bridge bound at its own path, and Seatbelt
+    /// reads it in place. Other sandboxes, and builds whose bridge is not a
+    /// file the app knows, get none.
+    fn git_ssh_command(&self) -> Option<String> {
+        let reaches_bridge = match self.kind {
+            SandboxKind::Bwrap => self.isolated(),
+            SandboxKind::Seatbelt => true,
+            SandboxKind::Windows => false,
+        };
+        if !reaches_bridge {
+            return None;
+        }
+        git_ssh_command(known_proxy_bridge()?)
     }
 
     /// Stand-ins for the host's shell startup files that set proxy
@@ -1130,6 +1156,17 @@ fn bind_wrapper(args: &mut Vec<OsString>, wrapper: &[OsString]) {
     if program.as_encoded_bytes().starts_with(b"/") {
         args.extend(["--ro-bind-try".into(), program.clone(), program.clone()]);
     }
+}
+
+/// `bridge` with `--git-ssh`, quoted for the shell git runs
+/// `GIT_SSH_COMMAND` in. `None` for a path that is not UTF-8.
+fn git_ssh_command(bridge: &[OsString]) -> Option<String> {
+    let mut words: Vec<&str> = Vec::with_capacity(bridge.len() + 1);
+    for word in bridge {
+        words.push(word.to_str()?);
+    }
+    words.push(GIT_SSH_FLAG);
+    Some(shell_words::join(words))
 }
 
 /// Another environment's commands, inside a sandbox.
@@ -2243,6 +2280,22 @@ mod tests {
         bind_wrapper(&mut args, &["sh".into(), "-c".into()]);
         bind_wrapper(&mut args, &[]);
         assert_eq!(args.len(), 5);
+    }
+
+    #[test]
+    fn git_reaches_ssh_hosts_through_the_bridge() {
+        let bridge = [
+            OsString::from("/opt/my term/app"),
+            "--cmdterm-proxy-bridge".into(),
+        ];
+        assert_eq!(
+            git_ssh_command(&bridge).as_deref(),
+            Some("'/opt/my term/app' --cmdterm-proxy-bridge --git-ssh")
+        );
+        assert_eq!(
+            git_ssh_command(&["/b/cmdterm-proxy-bridge".into()]).as_deref(),
+            Some("/b/cmdterm-proxy-bridge --git-ssh")
+        );
     }
 
     #[test]

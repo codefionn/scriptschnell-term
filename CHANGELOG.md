@@ -6,6 +6,16 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Added
+
+- Git over SSH works in sandboxes that reach the network through the app's proxy: local
+  bubblewrap sandboxes with a network of their own and Seatbelt sandboxes on macOS.
+  `GIT_SSH_COMMAND` there runs the proxy bridge in place of `ssh`, and the proxy runs
+  this machine's `ssh` with your configuration, agent and known hosts, so `git clone`,
+  `fetch` and `push` reach allowed hosts while your keys stay outside the sandbox. Only
+  git's own remote commands pass. A push asks under `cmdterm.git-push` like one over
+  HTTPS. SSH from a sandbox never reaches this machine, even with `localhost` allowed.
+
 ### Fixed
 
 - Agents that were in the middle of a turn when the app closed now resume at start in

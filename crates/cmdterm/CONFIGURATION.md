@@ -398,7 +398,8 @@ the palette; the worktree keeps the choice in `state.json`.
   machine's network and ports. Off by default: the sandbox has a loopback of its own, so
   servers in it bind no ports on this machine, and only proxy-aware traffic (HTTP, HTTPS
   and CONNECT) leaves through the app's filtering proxy, which allows every host when
-  `restrict_network` is off. SSH, raw TCP and UDP do not get out. The app forwards a
+  `restrict_network` is off, and so does git over SSH (see `sandbox.allowed_hosts`).
+  Other SSH, raw TCP and UDP do not get out. The app forwards a
   sandbox's listening ports to the other terminals of the same worktree, and to this
   machine when you expose one (palette entries "Expose port N" and "Stop exposing port
   N", or `control expose`). Without `network`, the sandbox also has its own loopback and
@@ -479,6 +480,26 @@ the palette; the worktree keeps the choice in `state.json`.
   the sandbox that sets the sandbox's proxy again at its end, so login shells, such as
   the `bash -lc` Codex runs commands in, keep using the sandbox's proxy. The first-start dialog also offers Maven and Gradle, NuGet, RubyGems and
   Packagist, container registries, and Debian, Ubuntu and Alpine packages.
+- Git over SSH reaches allowed hosts from local bubblewrap sandboxes with a network of
+  their own and from Seatbelt sandboxes on macOS, when the sandbox has the proxy. These
+  sandboxes get `GIT_SSH_COMMAND`, which runs `cmdterm-proxy-bridge --git-ssh` in place of
+  `ssh`, and `GIT_SSH_VARIANT=ssh`. The bridge hands git's remote command to the proxy,
+  and the proxy runs this machine's `ssh` for it, with your SSH configuration, agent and
+  known hosts, so your keys never enter the sandbox. Only `git-upload-pack`,
+  `git-receive-pack` and `git-upload-archive` pass. Host aliases work: the proxy asks
+  `ssh -G` where the host leads, and that name must be in `allowed_hosts` and on no
+  blocklist. SSH from a sandbox never reaches this machine or a link-local address, even
+  with `localhost` allowed. Without a `ProxyCommand` or `ProxyJump` for the host, the
+  proxy resolves the name itself and `ssh` connects to that address. `ssh` runs with
+  `BatchMode=yes`, so keys must come from your agent or be unencrypted, and the host must
+  already be in your known hosts: run `ssh -T git@HOST` once outside the sandbox to add
+  it. Guards see the command as the HTTP request of the same service, such as `POST
+  /org/repo.git/git-receive-pack`, so a push asks under `cmdterm.git-push` and under
+  extension guards on pushes, as one over HTTPS does, and an answer for a repository
+  covers both. `ssh` itself, an SSH shell and `hg` over SSH still fail in a
+  sandbox, and so do Windows sandboxes, sandboxes with `host_network` and sandboxes on
+  other machines, which keep their own SSH. A repository's `core.sshCommand` gives way
+  to `GIT_SSH_COMMAND`.
 - `sandbox.intercept_tls`: the proxy also decrypts HTTPS, with a CA that sandboxes trust.
   On by default. Sandboxes trust the CA through `SSL_CERT_FILE`, `CURL_CA_BUNDLE`,
   `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`, `CARGO_HTTP_CAINFO`,

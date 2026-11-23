@@ -465,6 +465,11 @@ term.sandbox{
   matching. The dialog shows the start of a body it read.
 - `kind` is `create`, `comment` or `merge` for a guard on change requests. See
   Guards on change requests under Forges.
+- Git over SSH from a sandbox meets the guards as the HTTP request of the same
+  service, without a body: `git-receive-pack 'org/repo.git'` is
+  `POST /org/repo.git/git-receive-pack`, and `git-upload-pack` and
+  `git-upload-archive` are `POST`s to `/git-upload-pack` and `/git-upload-archive`
+  under the repository's path. The dialog shows it with the method `SSH`.
 
 The proxy has guards of its own, with ids starting with `cmdterm.`: `git push` and
 `hg push` to any host, container image pushes to any registry, and publishing to

@@ -12,7 +12,6 @@
 //! (`--ports`, see `ports.rs`). Either works without the other.
 
 use std::collections::VecDeque;
-#[cfg(unix)]
 use std::ffi::OsString;
 use std::io::{self, Read, Write};
 use std::net::{IpAddr, Shutdown, TcpListener, TcpStream, ToSocketAddrs};
@@ -32,6 +31,7 @@ use super::rules::ProxyRules;
 use super::{ProxyToken, SandboxProxy, host_allowed};
 
 mod http;
+mod ssh;
 mod tls;
 
 use http::RequestFilter;
@@ -52,6 +52,8 @@ struct Shared {
     approvals: RwLock<Option<Arc<Approvals>>>,
     /// The latest refused hosts, newest first, for agents to look up.
     refused: RefusalLog,
+    /// The `ssh` that git's SSH requests run (see `server/ssh.rs`).
+    ssh: RwLock<OsString>,
     stop: AtomicBool,
 }
 
@@ -210,6 +212,7 @@ impl NetworkProxy {
             blocking: RwLock::default(),
             approvals: RwLock::new(None),
             refused: RefusalLog::default(),
+            ssh: RwLock::new("ssh".into()),
             stop: AtomicBool::new(false),
         });
         let (port, token) = listen(&shared, socket, None)?;
@@ -309,6 +312,14 @@ impl NetworkProxy {
     /// need of HTTPS inspection.
     pub fn refusals(&self) -> RefusalLog {
         self.shared.refused.clone()
+    }
+
+    /// Sets the `ssh` that git's SSH requests run (see `server/ssh.rs`),
+    /// `ssh` on `PATH` until then.
+    pub fn set_ssh_program(&self, program: impl Into<OsString>) {
+        if let Ok(mut current) = self.shared.ssh.write() {
+            *current = program.into();
+        }
     }
 
     /// Where guards in `Ask` mode put their questions. Without approvals
@@ -678,6 +689,13 @@ fn serve<S: Duplex>(
     let (Some(method), Some(target), Some(_)) = (first.next(), first.next(), first.next()) else {
         return respond(&mut client, "400 Bad Request", "bad request line\n");
     };
+    if method.eq_ignore_ascii_case(super::ssh::METHOD) {
+        if plain {
+            let body = "cmdterm sandbox: git over SSH goes through the sandbox's proxy only\n";
+            return respond(&mut client, "403 Forbidden", body);
+        }
+        return ssh::serve(shared, client, text, rest, scope);
+    }
     let connect_method = method.eq_ignore_ascii_case("CONNECT");
     let authority = if connect_method {
         target
@@ -814,8 +832,17 @@ fn serve<S: Duplex>(
 /// forwards every connection to the Unix socket `PATH`. With `--ports` it
 /// joins the port hub at `PATH` (see `ports.rs`). It runs the program and
 /// exits with its status; with nothing to forward it becomes the program.
+///
+/// With `--git-ssh` first it stands in for `ssh` instead, which git in a
+/// sandbox runs (see `proxy/ssh.rs`).
 pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
-    let mut args = args.into_iter();
+    let mut args = args.into_iter().peekable();
+    if args
+        .next_if(|first| first == super::ssh::GIT_SSH_FLAG)
+        .is_some()
+    {
+        return super::ssh::git_ssh_main(args);
+    }
     let mut port = None;
     let mut socket = None;
     let mut ports = None;

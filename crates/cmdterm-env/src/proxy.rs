@@ -49,7 +49,13 @@
 //! the TCP port directly, and programs that ignore the proxy variables go
 //! around it; they reach the hosts with fake credentials only. An isolated
 //! sandbox that is allowed any host ([`NetworkProxy::allow_any_host`]) still
-//! sends only proxy-aware traffic out: HTTP, HTTPS and CONNECT tunnels.
+//! sends only proxy-aware traffic out: HTTP, HTTPS, CONNECT tunnels and
+//! git over SSH.
+//!
+//! Git over SSH (see `proxy/ssh.rs`) is an `SSH` request that names a host
+//! and one of git's remote commands. The proxy runs this machine's `ssh`
+//! for it, with the user's keys, which stay outside the sandbox, and
+//! checks pushes against the same guards as pushes over HTTPS.
 
 use std::ffi::OsString;
 use std::fmt;
@@ -65,6 +71,9 @@ mod approval;
 mod blocklist;
 mod rules;
 mod server;
+mod ssh;
+
+pub(crate) use ssh::GIT_SSH_FLAG;
 
 pub use approval::{Approval, Approvals};
 pub use blocklist::{Blocking, Blocklist};

@@ -580,6 +580,7 @@ mod tests {
             blocking: RwLock::default(),
             approvals: RwLock::new(None),
             refused: crate::proxy::RefusalLog::default(),
+            ssh: RwLock::new("ssh".into()),
             stop: AtomicBool::new(false),
         })
     }
