@@ -29,6 +29,7 @@ mod machines;
 mod memory;
 mod monitor;
 mod notifications;
+mod open_url;
 mod project_env;
 mod runtime;
 mod search;

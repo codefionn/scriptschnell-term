@@ -307,10 +307,16 @@ pub const KEYRING_GUARD: &str = "cmdterm.keyring";
 /// bubblewrap sandboxes, on Linux, write such copies.
 pub const AGENT_SETTINGS_GUARD: &str = "cmdterm.agent-settings";
 
+/// The guard for links that programs in a sandbox open in the browser on
+/// this machine, through the proxy's [`crate::OPEN_HOST`]. It has no hosts
+/// and no requests either: the app asks with the link's host in its place.
+pub const OPEN_URL_GUARD: &str = "cmdterm.open-url";
+
 /// The guards the proxy always has, for the public registries and for
 /// pushes over HTTPS to any host: `git push`, `hg push`, npm, Cargo,
-/// NuGet, PyPI, RubyGems and container registries, and on Linux the
-/// [`KEYRING_GUARD`] and the [`AGENT_SETTINGS_GUARD`]. Their ids start with `cmdterm.`, and their mode is
+/// NuGet, PyPI, RubyGems and container registries, the [`OPEN_URL_GUARD`],
+/// and on Linux the [`KEYRING_GUARD`] and the [`AGENT_SETTINGS_GUARD`].
+/// Their ids start with `cmdterm.`, and their mode is
 /// [`GuardMode::Ask`] until the user picks another. Extensions add guards
 /// for other hosts, such as a company registry.
 pub fn builtin_guards() -> Vec<GuardRule> {
@@ -380,6 +386,7 @@ pub fn builtin_guards() -> Vec<GuardRule> {
             &["*"],
             &["POST */v2/*/blobs/uploads*", "PUT */v2/*/manifests/*"],
         ),
+        guard("open-url", "open a link in your browser", &[], &[]),
         guard(
             "keyring",
             "use a secret from this machine's keyring",

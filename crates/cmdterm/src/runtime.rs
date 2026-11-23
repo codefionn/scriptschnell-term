@@ -128,6 +128,8 @@ pub struct Runtimes {
     seen_approvals: Cell<u64>,
     /// The copies of agents' settings in sandboxes, see `agent_sync.rs`.
     pub agent_sync: crate::agent_sync::AgentSync,
+    /// Opens the links programs in sandboxes ask for, see `open_url.rs`.
+    links: Arc<crate::open_url::LinkOpener>,
     /// The extensions' blocklists, downloaded once the proxy runs.
     pub blocklists: crate::blocklists::Blocklists,
     /// The blocklists' revision the proxy was last given.
@@ -154,6 +156,14 @@ impl PortHubs {
         &self,
     ) -> std::sync::MutexGuard<'_, HashMap<(u64, PathBuf), Arc<cmdterm_env::PortHub>>> {
         self.hubs.lock().unwrap_or_else(|e| e.into_inner())
+    }
+
+    /// The hubs of every worktree of `project`.
+    pub fn of_project(&self, project: u64) -> Vec<Arc<cmdterm_env::PortHub>> {
+        (self.lock().iter())
+            .filter(|((id, _), _)| *id == project)
+            .map(|(_, hub)| Arc::clone(hub))
+            .collect()
     }
 
     /// The hub of a worktree, if its sandboxes have started one.
@@ -228,6 +238,11 @@ impl Runtimes {
         let approvals = Arc::new(Approvals::new(move || wake_up(&wake)));
         let agent_sync =
             crate::agent_sync::AgentSync::new(sandbox_dir.join("agents"), Arc::clone(&approvals));
+        let ports = Arc::new(PortHubs::default());
+        let links = Arc::new(crate::open_url::LinkOpener::new(
+            Arc::clone(&approvals),
+            Arc::clone(&ports),
+        ));
         Self {
             phases: HashMap::new(),
             sidecars: HashMap::new(),
@@ -239,7 +254,7 @@ impl Runtimes {
             proxy: OnceCell::new(),
             #[cfg(target_os = "linux")]
             keyring: OnceCell::new(),
-            ports: Arc::new(PortHubs::default()),
+            ports,
             seen_ports: Cell::new(0),
             synced_rules: Cell::new(u64::MAX),
             blocklists,
@@ -247,6 +262,7 @@ impl Runtimes {
             approvals,
             seen_approvals: Cell::new(0),
             agent_sync,
+            links,
         }
     }
 
@@ -285,6 +301,8 @@ impl Runtimes {
             let socket = self.socket_path("proxy.sock")?;
             let proxy = cmdterm_env::NetworkProxy::start(&socket, Vec::new()).ok()?;
             proxy.set_approvals(Some(Arc::clone(&self.approvals)));
+            let links = Arc::clone(&self.links);
+            proxy.set_opener(Some(Arc::new(move |scope, link| links.open(scope, link))));
             Some(proxy)
         });
         let proxy = proxy.as_ref()?;
@@ -409,6 +427,7 @@ impl Runtimes {
     ) -> std::io::Result<()> {
         let restricted = settings.network && settings.restrict_network;
         let proxy_rules = proxy_rules(settings, rules);
+        (self.links).set_mode(settings.guard_mode(cmdterm_env::OPEN_URL_GUARD, None));
         // On Windows, programs on Windows' own TLS stack (.NET, PowerShell,
         // winget) trust the Windows store only, which never holds the
         // proxy's CA, so they fail on every intercepted tunnel. Only the
@@ -527,13 +546,18 @@ pub fn proxy_rules(settings: &SandboxSettings, rules: &SandboxRules) -> ProxyRul
     }
 }
 
-/// The user's allowed hosts, then the ones extensions add, then the hosts
-/// of the OTLP endpoints the app's environment names, so agents in a
+/// The user's allowed hosts, then the ones extensions add, then the
+/// companions of allowed hosts ([`crate::state::HOST_COMPANIONS`]), then the
+/// hosts of the OTLP endpoints the app's environment names, so agents in a
 /// sandbox send telemetry where the user told them to.
 pub(crate) fn allowed_hosts(settings: &SandboxSettings, rules: &SandboxRules) -> Vec<String> {
     let mut hosts = settings.allowed_hosts.clone();
     let telemetry = cmdterm_env::host_env::telemetry_hosts();
-    for host in rules.hosts.iter().chain(&telemetry) {
+    let companions = (crate::state::HOST_COMPANIONS.iter())
+        .filter(|(host, _)| hosts.iter().any(|h| h == host))
+        .flat_map(|(_, companions)| companions.iter().map(|c| (*c).to_owned()))
+        .collect::<Vec<_>>();
+    for host in rules.hosts.iter().chain(&companions).chain(&telemetry) {
         if !hosts.contains(host) {
             hosts.push(host.clone());
         }
@@ -889,6 +913,19 @@ pub fn sandbox_env(
                 policy.files.extend(shims);
             }
             policy.readable.push(staged);
+        }
+        // Links that programs open go through the proxy to the browser on
+        // this machine, after asking, see `open_url.rs`. Without a proxy
+        // the shim could not reach the app.
+        if proxy.is_some()
+            && let Some(shim) = crate::open_url::sandbox_shim(&app_dirs.cache)
+        {
+            if let Some(xdg_open) = shim.xdg_open.filter(|_| bind_files) {
+                policy.files.push((shim.path.clone(), xdg_open));
+            }
+            policy.readable.push(shim.dir);
+            let browser = shim.path.to_string_lossy().into_owned();
+            policy.vars.push(("BROWSER".into(), browser));
         }
         policy.unset.push("DBUS_SESSION_BUS_ADDRESS".into());
         // The sandbox program inherits the app's environment. Its tokens
@@ -2466,6 +2503,92 @@ mod tests {
         assert_ne!(old, new);
         assert_eq!(std::fs::read_to_string(&old).unwrap(), "one");
         assert_eq!(write_content_file(&files, inside, "one"), Some(old));
+    }
+
+    /// Claude Code renews and creates its login at `platform.claude.com`, so
+    /// that host comes with `api.anthropic.com` without being stored.
+    #[test]
+    fn the_claude_login_hosts_come_with_the_anthropic_api() {
+        let rules = SandboxRules::default();
+        let mut settings = SandboxSettings::default();
+        let hosts = allowed_hosts(&settings, &rules);
+        assert!(hosts.iter().any(|h| h == "api.anthropic.com"));
+        assert!(hosts.iter().any(|h| h == "platform.claude.com"));
+        assert!(
+            !settings
+                .allowed_hosts
+                .iter()
+                .any(|h| h == "platform.claude.com")
+        );
+        settings.allowed_hosts.retain(|h| h != "api.anthropic.com");
+        let hosts = allowed_hosts(&settings, &rules);
+        assert!(!hosts.iter().any(|h| h == "platform.claude.com"));
+    }
+
+    /// A sandbox with a proxy gets the browser shim as `$BROWSER`, in a
+    /// directory it may read; one without a proxy keeps its own.
+    #[test]
+    fn sandboxes_with_a_proxy_open_links_through_the_shim() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = cmdterm_env::canonicalize(dir.path()).unwrap();
+        let path = |name: &str| base.join(name);
+        std::fs::create_dir_all(path("repo")).unwrap();
+        let project: Project = serde_json::from_value(serde_json::json!({
+            "id": 1, "name": "p", "root": path("repo"), "vcs": "git",
+        }))
+        .unwrap();
+        let app = cmdterm_env::AppDirs::under(&path("config"));
+        let proxy = cmdterm_env::SandboxProxy {
+            socket: path("proxy.sock"),
+            port: 1,
+            ca_bundle: None,
+            token: None,
+        };
+        let policy = |proxy: Option<&cmdterm_env::SandboxProxy>| {
+            let env = sandbox_env(
+                &SandboxSettings::default(),
+                &SandboxRules::default(),
+                &project,
+                &path("repo"),
+                &SandboxDirs {
+                    shell: &path("shell"),
+                    files: &path("files"),
+                    app: &app,
+                    agents: None,
+                },
+                proxy,
+                None,
+                None,
+                None,
+                None,
+            );
+            let Environment::Sandbox(target) = env else {
+                panic!("not a sandbox");
+            };
+            target.policy
+        };
+        let with = policy(Some(&proxy));
+        let browser = (with.vars.iter())
+            .find(|(name, _)| name == "BROWSER")
+            .map(|(_, value)| PathBuf::from(value))
+            .expect("BROWSER is set");
+        let content = std::fs::read_to_string(&browser).unwrap();
+        assert!(content.contains(cmdterm_env::OPEN_HOST), "{content}");
+        assert!(with.readable.iter().any(|dir| browser.starts_with(dir)));
+        if with.kind.redirects()
+            && crate::open_url::sandbox_shim(&app.cache)
+                .unwrap()
+                .xdg_open
+                .is_some()
+        {
+            assert!(
+                with.files
+                    .iter()
+                    .any(|(host, inside)| *host == browser && inside.ends_with("xdg-open"))
+            );
+        }
+        let without = policy(None);
+        assert!(!without.vars.iter().any(|(name, _)| name == "BROWSER"));
     }
 
     /// ssh reads this machine's configuration in a sandbox, though root's

@@ -286,6 +286,11 @@ pub struct Strings {
     pub agent_settings_note: &'static str,
     /// Where the agent settings guard applies, in its settings row.
     pub agent_settings_scope: &'static str,
+    /// The link a sandbox wants to open in the browser.
+    pub open_url_request: fn(&str) -> String,
+    pub open_url_note: &'static str,
+    /// Where the open-url guard applies, in its settings row.
+    pub open_url_scope: &'static str,
     pub approval_allow: &'static str,
     pub approval_block: &'static str,
     pub control_dialog: &'static str,
@@ -1686,6 +1691,9 @@ pub static EN: Strings = Strings {
     agent_settings_more: |n| format!("and {n} more keys"),
     agent_settings_note: "Until allowed, the change stays inside the sandbox. Your choice applies to this file for one minute.",
     agent_settings_scope: "settings agents change in sandboxes",
+    open_url_request: |link| format!("Open {link}"),
+    open_url_note: "The link opens in your browser on this machine, where you are logged in. Allow it when you started what opens it, such as a login. A port on localhost that the link names reaches the sandbox's server on that port for 10 minutes.",
+    open_url_scope: "links programs in sandboxes open",
     approval_allow: "Allow",
     approval_block: "Block",
     control_dialog: "Extension change",
@@ -2938,6 +2946,9 @@ pub static DE: Strings = Strings {
     agent_settings_more: |n| format!("und {n} weitere Schlüssel"),
     agent_settings_note: "Bis zur Freigabe bleibt die Änderung innerhalb der Sandbox. Deine Wahl gilt eine Minute lang für diese Datei.",
     agent_settings_scope: "Einstellungen, die Agenten in Sandboxes ändern",
+    open_url_request: |link| format!("Öffnen: {link}"),
+    open_url_note: "Der Link öffnet sich in deinem Browser auf diesem Rechner, wo du angemeldet bist. Erlaube ihn, wenn du selbst gestartet hast, was ihn öffnet, etwa eine Anmeldung. Ein Port auf localhost, den der Link nennt, erreicht 10 Minuten lang den Server der Sandbox auf diesem Port.",
+    open_url_scope: "Links, die Programme in Sandboxes öffnen",
     approval_allow: "Erlauben",
     approval_block: "Blockieren",
     control_dialog: "Erweiterung ändern",

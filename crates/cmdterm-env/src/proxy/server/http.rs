@@ -579,6 +579,7 @@ mod tests {
             rules: RwLock::new(Arc::new(rules)),
             blocking: RwLock::default(),
             approvals: RwLock::new(None),
+            opener: RwLock::new(None),
             refused: crate::proxy::RefusalLog::default(),
             ssh: RwLock::new("ssh".into()),
             stop: AtomicBool::new(false),

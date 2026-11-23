@@ -564,11 +564,7 @@ fn json_field(body: &str, path: &str) -> Option<String> {
 /// Opens `url` in the system's browser, where the user is signed in to the
 /// forge.
 pub(crate) fn open_in_system_browser(url: &str) {
-    let program = match std::env::consts::OS {
-        "macos" => "open",
-        "windows" => "explorer",
-        _ => "xdg-open",
-    };
+    let program = crate::open_url::SYSTEM_OPENER;
     let command = cmdterm_env::Environment::Local.command(program).arg(url);
     // On a thread, so the opener is waited for without holding up a frame.
     let _ = std::thread::Builder::new()

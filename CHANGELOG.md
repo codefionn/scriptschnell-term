@@ -16,6 +16,12 @@ All notable changes to scriptschnell-term are in this file. The format is
 - The approval dialog offers "Always block in this project". The project keeps the
   answer in `state.json` (`always_blocked`), and later requests for that guard and host
   are refused without a question.
+- Programs in a sandbox with a proxy open links in your browser outside it, after you
+  allow it under the new `cmdterm.open-url` guard. `$BROWSER` points to a shim, which
+  on Linux also stands in for `xdg-open`, and the shim sends `http` and `https` links
+  through the proxy to the app. A localhost port the link names, such as an OAuth
+  `redirect_uri`, is forwarded from this machine into the sandbox for 10 minutes, so
+  logins like Claude Code's `/login` and `gh auth login --web` complete from a sandbox.
 
 ### Fixed
 
@@ -28,6 +34,14 @@ All notable changes to scriptschnell-term are in this file. The format is
 - Opening a dropdown near the lower edge of a scrolled settings page, such as the CPU
   dropdowns on the Agents page, scrolls the page to show its whole list instead of
   leaving it cut off at the dialog's edge.
+- Claude Code in a sandbox keeps its login and can log in again. The proxy refused
+  `platform.claude.com`, where Claude Code renews its token and finishes `/login`, so a
+  sandboxed Claude Code lost its login when the access token expired, and `/login` there
+  failed after you had signed in. Since every sandbox shares `~/.claude/.credentials.json`,
+  the login then ended in all of them at once. Sandboxes now reach `platform.claude.com`
+  and `console.anthropic.com` whenever `api.anthropic.com` is allowed, also with
+  settings saved before this change, and a renewed or new login reaches running Claude
+  Code sessions in the other sandboxes through that shared file.
 
 ## [0.1.2] - 2026-11-23
 

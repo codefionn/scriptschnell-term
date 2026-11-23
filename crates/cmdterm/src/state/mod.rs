@@ -1187,6 +1187,17 @@ pub struct HostGroup {
     pub hosts: &'static [&'static str],
 }
 
+/// Hosts a sandbox reaches whenever the first host is allowed, because the
+/// program that uses it cannot work without them. Claude Code logs in and
+/// renews its login at `platform.claude.com` (older versions at
+/// `console.anthropic.com`), and a login it cannot renew there ends for
+/// every sandbox once its token expires. They are not stored in the
+/// settings, so users who allowed `api.anthropic.com` before get them too.
+pub const HOST_COMPANIONS: &[(&str, &[&str])] = &[(
+    "api.anthropic.com",
+    &["platform.claude.com", "console.anthropic.com"],
+)];
+
 /// The groups the first start asks about, in the order it shows them. No
 /// host is in two groups.
 pub const HOST_GROUPS: &[HostGroup] = &[

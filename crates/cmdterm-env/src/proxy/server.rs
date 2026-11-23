@@ -50,12 +50,20 @@ struct Shared {
     blocking: RwLock<Arc<Blocking>>,
     /// Where guards in `Ask` mode ask. Without it they refuse.
     approvals: RwLock<Option<Arc<Approvals>>>,
+    /// Opens the links of [`super::OPEN_HOST`]. Without it they are refused.
+    opener: RwLock<Option<LinkOpener>>,
     /// The latest refused hosts, newest first, for agents to look up.
     refused: RefusalLog,
     /// The `ssh` that git's SSH requests run (see `server/ssh.rs`).
     ssh: RwLock<OsString>,
     stop: AtomicBool,
 }
+
+/// Opens a link a program in a sandbox asked for, see [`super::OPEN_HOST`]:
+/// gets the scope of the proxy endpoint the request came through and the
+/// link, and answers with a line for the program or why it refused. It runs
+/// on the request's thread and may wait for the user.
+pub type LinkOpener = Arc<dyn Fn(Option<&str>, &str) -> Result<String, String> + Send + Sync>;
 
 /// A host the proxy refused, see [`NetworkProxy::refusals`].
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -211,6 +219,7 @@ impl NetworkProxy {
             rules: RwLock::default(),
             blocking: RwLock::default(),
             approvals: RwLock::new(None),
+            opener: RwLock::new(None),
             refused: RefusalLog::default(),
             ssh: RwLock::new("ssh".into()),
             stop: AtomicBool::new(false),
@@ -319,6 +328,14 @@ impl NetworkProxy {
     pub fn set_ssh_program(&self, program: impl Into<OsString>) {
         if let Ok(mut current) = self.shared.ssh.write() {
             *current = program.into();
+        }
+    }
+
+    /// What opens the links programs in sandboxes ask for at
+    /// [`super::OPEN_HOST`]. Without it the proxy refuses them.
+    pub fn set_opener(&self, opener: Option<LinkOpener>) {
+        if let Ok(mut current) = self.shared.opener.write() {
+            *current = opener;
         }
     }
 
@@ -717,6 +734,16 @@ fn serve<S: Duplex>(
     let Some((host, port)) = split_authority(authority, default_port) else {
         return respond(&mut client, "400 Bad Request", "bad host\n");
     };
+    if host.eq_ignore_ascii_case(super::OPEN_HOST) {
+        // The debug browser's port takes requests from any local process,
+        // so only a sandbox's own endpoint opens links.
+        let path = if connect_method || plain {
+            None
+        } else {
+            Some(&target[7 + authority.len()..])
+        };
+        return open_link(shared, &mut client, scope.as_deref(), path);
+    }
     if let Ok(blocking) = shared.blocking.read()
         && let Some(by) = blocking.blocked_by(&host)
     {
@@ -820,6 +847,69 @@ fn serve<S: Duplex>(
     {
         splice_filtered(client, upstream, filter);
     }
+}
+
+/// Answers a request for [`super::OPEN_HOST`]: `path` is its path and query,
+/// `None` for a tunnel or a request on the plain port, which are refused.
+fn open_link(shared: &Shared, client: &mut impl Write, scope: Option<&str>, path: Option<&str>) {
+    let Some(path) = path else {
+        let body = "cmdterm sandbox: links open through a sandbox's own proxy, over plain HTTP\n";
+        return respond(client, "403 Forbidden", body);
+    };
+    let link = (path.split_once('?'))
+        .filter(|(at, _)| *at == "/open")
+        .and_then(|(_, query)| query.split('&').find_map(|pair| pair.strip_prefix("url=")))
+        .map(percent_decode)
+        .filter(|link| !link.is_empty());
+    let Some(link) = link else {
+        let body = format!(
+            "cmdterm sandbox: ask with GET http://{}/open?url=LINK\n",
+            super::OPEN_HOST
+        );
+        return respond(client, "400 Bad Request", &body);
+    };
+    let opener = shared.opener.read().ok().and_then(|opener| opener.clone());
+    let Some(opener) = opener else {
+        let body = "cmdterm sandbox: the app opens no links from this sandbox\n";
+        return respond(client, "503 Service Unavailable", body);
+    };
+    match opener(scope, &link) {
+        Ok(line) => respond(client, "200 OK", &format!("{line}\n")),
+        Err(reason) => respond(
+            client,
+            "403 Forbidden",
+            &format!("cmdterm sandbox: {reason}\n"),
+        ),
+    }
+}
+
+/// `text` with its `%XX` escapes and `+` decoded; invalid UTF-8 becomes
+/// U+FFFD.
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let hex = |b: u8| (b as char).to_digit(16);
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        let escaped = (bytes[i] == b'%')
+            .then(|| Some(hex(*bytes.get(i + 1)?)? * 16 + hex(*bytes.get(i + 2)?)?))
+            .flatten();
+        match (escaped, bytes[i]) {
+            (Some(byte), _) => {
+                out.push(byte as u8);
+                i += 3;
+            }
+            (None, b'+') => {
+                out.push(b' ');
+                i += 1;
+            }
+            (None, byte) => {
+                out.push(byte);
+                i += 1;
+            }
+        }
+    }
+    String::from_utf8_lossy(&out).into_owned()
 }
 
 #[cfg(unix)]
@@ -1056,6 +1146,76 @@ mod tests {
             }
         });
         (port, heads)
+    }
+
+    #[test]
+    fn links_go_to_the_opener_with_their_scope_and_only_from_sandboxes() {
+        let dir = tempfile::tempdir().unwrap();
+        let proxy = NetworkProxy::start(&dir.path().join("p.sock"), Vec::new()).unwrap();
+        let scoped = proxy
+            .endpoint_for("7", &dir.path().join("p7.sock"))
+            .unwrap();
+        let request = |path: &str| {
+            format!(
+                "GET http://{}{path} HTTP/1.1\r\nHost: x\r\n\r\n",
+                super::super::OPEN_HOST
+            )
+        };
+        let link = "/open?url=https%3A%2F%2Fclaude.ai%2Foauth%3Fa%3D1%26b%3Dc+d";
+        // No opener: refused, though the host is not on any list.
+        let reply = ask(tcp_to(&scoped), &request(link));
+        assert!(reply.starts_with("HTTP/1.1 503"), "{reply}");
+        assert!(proxy.refusals().list().is_empty());
+
+        let seen = Arc::new(Mutex::new(Vec::new()));
+        let kept = Arc::clone(&seen);
+        proxy.set_opener(Some(Arc::new(move |scope: Option<&str>, link: &str| {
+            kept.lock()
+                .unwrap()
+                .push((scope.map(str::to_owned), link.to_owned()));
+            if link.contains("nope") {
+                Err("the user did not allow it".to_owned())
+            } else {
+                Ok("opened".to_owned())
+            }
+        })));
+        let reply = ask(tcp_to(&scoped), &request(link));
+        assert!(
+            reply.starts_with("HTTP/1.1 200") && reply.ends_with("opened\n"),
+            "{reply}"
+        );
+        let reply = ask(
+            tcp_to(&proxy.endpoint()),
+            &request("/open?url=https://x.example/nope"),
+        );
+        assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
+        assert!(reply.contains("the user did not allow it"), "{reply}");
+        assert_eq!(
+            *seen.lock().unwrap(),
+            [
+                (
+                    Some("7".to_owned()),
+                    "https://claude.ai/oauth?a=1&b=c d".to_owned()
+                ),
+                (None, "https://x.example/nope".to_owned()),
+            ]
+        );
+        // Without a link, through a tunnel or from the debug browser's
+        // port, nothing opens.
+        assert!(ask(tcp_to(&scoped), &request("/open")).starts_with("HTTP/1.1 400"));
+        let tunnel = format!("CONNECT {}:443 HTTP/1.1\r\n\r\n", super::super::OPEN_HOST);
+        assert!(ask(tcp_to(&scoped), &tunnel).starts_with("HTTP/1.1 403"));
+        let (plain, plain_token) = proxy.plain_port().unwrap();
+        let reply = ask(authed(plain, &plain_token), &request(link));
+        assert!(reply.starts_with("HTTP/1.1 403"), "{reply}");
+        assert_eq!(seen.lock().unwrap().len(), 2);
+    }
+
+    #[test]
+    fn percent_escapes_decode() {
+        assert_eq!(percent_decode("a%20b+c%2F%e2%9c%93"), "a b c/\u{2713}");
+        assert_eq!(percent_decode("100%"), "100%");
+        assert_eq!(percent_decode("%zz%4"), "%zz%4");
     }
 
     #[test]

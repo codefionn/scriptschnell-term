@@ -517,6 +517,9 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
             (tr.keyring_request)(&question.method, &label),
             tr.keyring_note,
         )
+    } else if question.guard == cmdterm_env::OPEN_URL_GUARD {
+        let link = truncate(&question.target, LONG);
+        ((tr.open_url_request)(&link), tr.open_url_note)
     } else {
         let request = format!(
             "{} {}{}",

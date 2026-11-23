@@ -78,15 +78,23 @@ pub(crate) use ssh::GIT_SSH_FLAG;
 pub use approval::{Approval, Approvals};
 pub use blocklist::{Blocking, Blocklist};
 pub use rules::{
-    AGENT_SETTINGS_GUARD, GuardKind, GuardMode, GuardRule, KEYRING_GUARD, ProxyRules, SecretRule,
-    builtin_guards, fake_secret, named_fake_secret, valid_request_pattern,
+    AGENT_SETTINGS_GUARD, GuardKind, GuardMode, GuardRule, KEYRING_GUARD, OPEN_URL_GUARD,
+    ProxyRules, SecretRule, builtin_guards, fake_secret, named_fake_secret, valid_request_pattern,
 };
 #[cfg(unix)]
 pub use server::proxy_bridge_main;
 pub(crate) use server::{
     Duplex, authorized, connect, read_head, respond, splice, split_authority, unauthorized,
 };
-pub use server::{NetworkProxy, Refusal, RefusalLog};
+pub use server::{LinkOpener, NetworkProxy, Refusal, RefusalLog};
+
+/// The host name programs in a sandbox ask the proxy to open a link at, as
+/// `GET http://open.scriptschnell-term.invalid/open?url=LINK` over plain
+/// HTTP. The proxy hands the link to the [`LinkOpener`] of
+/// [`NetworkProxy::set_opener`], which asks the user and opens it in the
+/// browser on this machine. `.invalid` names no real host, so the request
+/// never leaves the proxy.
+pub const OPEN_HOST: &str = "open.scriptschnell-term.invalid";
 
 /// Where a sandbox reaches a [`NetworkProxy`].
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]

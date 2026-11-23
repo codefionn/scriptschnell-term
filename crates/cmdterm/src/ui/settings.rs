@@ -2487,6 +2487,8 @@ impl GuardRow {
             tr.keyring_scope.to_owned()
         } else if guard.id == cmdterm_env::AGENT_SETTINGS_GUARD {
             tr.agent_settings_scope.to_owned()
+        } else if guard.id == cmdterm_env::OPEN_URL_GUARD {
+            tr.open_url_scope.to_owned()
         } else if guard.hosts.iter().any(|h| h == "*") {
             tr.every_host.to_owned()
         } else {

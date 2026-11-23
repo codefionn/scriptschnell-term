@@ -168,11 +168,14 @@ It prints JSON:
   you open stay invisible, and programs in the sandbox cannot send input or messages to
   the user's windows. The clipboard stays readable there, because image paste into an
   agent reads it from inside the sandbox.
-- A tool that opens a browser, such as a login with `gh auth login --web`, cannot do so
-  from a sandbox on macOS or Windows: `open`, `start` and `explorer` fail or start the
-  browser inside the sandbox. On Linux no browser shows either. Print the URL and ask
-  the user to Ctrl+click it in the terminal; the app opens it in a browser panel, outside
-  the sandbox. The control socket has no command to open URLs.
+- A tool that opens a browser through `$BROWSER` or `xdg-open`, such as Claude Code's
+  `/login` or `gh auth login --web`, works from a sandbox with a proxy: the shim there
+  asks the user, under the `cmdterm.open-url` guard, and opens the link in the user's
+  browser outside the sandbox. A localhost port the link names, such as an OAuth
+  `redirect_uri`, is forwarded into the sandbox for 10 minutes, so the login's callback
+  arrives. Only `http` and `https` links open. Tools that call `open`, `start` or
+  `explorer` directly (macOS, Windows) still fail. Then print the URL and ask the user
+  to Ctrl+click it in the terminal; the app opens it in a browser panel.
 
 ## Suggest a fix
 

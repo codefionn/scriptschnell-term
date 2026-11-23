@@ -480,6 +480,10 @@ the palette; the worktree keeps the choice in `state.json`.
   the sandbox that sets the sandbox's proxy again at its end, so login shells, such as
   the `bash -lc` Codex runs commands in, keep using the sandbox's proxy. The first-start dialog also offers Maven and Gradle, NuGet, RubyGems and
   Packagist, container registries, and Debian, Ubuntu and Alpine packages.
+  While `api.anthropic.com` is allowed, so are `platform.claude.com` and
+  `console.anthropic.com`, without being listed here. Claude Code logs in and renews its
+  login there. Without them a sandboxed Claude Code cannot finish `/login`, and its login
+  ends once the access token expires.
 - Git over SSH reaches allowed hosts from local bubblewrap sandboxes with a network of
   their own and from Seatbelt sandboxes on macOS, when the sandbox has the proxy. These
   sandboxes get `GIT_SSH_COMMAND`, which runs `cmdterm-proxy-bridge --git-ssh` in place of
@@ -607,6 +611,18 @@ the palette; the worktree keeps the choice in `state.json`.
   same way, as both replace their settings by renaming a new file over them. So that Claude Code can lock
   `~/.claude.json`, the sandbox sees the home directory as a scratch directory: the
   existing entries are the host's, and new files there vanish when the sandbox ends.
+  `cmdterm.open-url` covers links that programs in a sandbox open in your browser, such
+  as the page of Claude Code's `/login` or `gh auth login --web`. A sandbox with a
+  proxy gets `$BROWSER` set to a shim, and on Linux the shim is also bound over
+  `xdg-open`. The shim takes `http` and `https` links only and sends them through the
+  sandbox's proxy to the app (`GET http://open.scriptschnell-term.invalid/open?url=LINK`,
+  which never leaves the proxy). `ask` shows the link with its host; "Always allow in
+  this project" holds for that host. Once the link may open, every port on `localhost`,
+  `127.0.0.1` or `::1` it names, itself or in a query value such as an OAuth
+  `redirect_uri`, is forwarded from the same port on this machine to the sandbox's
+  server on it for 10 minutes. So the browser's redirect back to a login's own server
+  reaches it. Then `xdg-open` (`open` on macOS) opens the link. Programs that ignore
+  `$BROWSER` and `xdg-open`, such as most on macOS, still print the link instead.
 
 - `sandbox.change_requests`: `{ "create": "ask", "comment": "ask", "merge": "ask" }`, the
   mode of every forge's guards on pull and merge requests: opening one, commenting on or
