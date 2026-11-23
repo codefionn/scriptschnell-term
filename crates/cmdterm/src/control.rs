@@ -83,6 +83,13 @@ pub const VAR_TOKEN: &str = "SCRIPTSCHNELL_TERM_TOKEN";
 /// Most connections served at once. Waiting inboxes and held locks each
 /// keep one open.
 const MAX_CONNECTIONS: usize = 256;
+/// Longest quiet time on a lock request's connection. The empty line sent
+/// then ends a client whose shell is gone, such as one killed with
+/// SIGKILL, and with it the request.
+#[cfg(not(test))]
+const LOCK_PULSE: Duration = Duration::from_secs(10);
+#[cfg(test)]
+const LOCK_PULSE: Duration = Duration::from_millis(200);
 /// How long `GET /v1/messages?wait=` may wait.
 const MAX_WAIT: Duration = Duration::from_secs(7200);
 /// Where devcontainers see the socket's directory.
@@ -1003,6 +1010,13 @@ impl Control {
                     _ => Response::json(200, &Value::Array(locks)),
                 }
             }
+            ("DELETE", ["v1", "locks", name]) => {
+                let freed = self.lock().bus.unlock(token, name);
+                if freed > 0 {
+                    self.bus_changed.notify_all();
+                }
+                Response::json(200, &json!({ "lock": name, "freed": freed }))
+            }
             ("POST", ["v1", "mcp"]) => self.mcp(token, &terminal, &request.body),
             ("GET", ["v1", "tools"]) => {
                 Response::json(200, &json!({ "tools": self.lock().tools.clone() }))
@@ -1466,8 +1480,11 @@ impl Control {
     /// `POST /v1/locks/NAME` with `{"max_processes": 1, "ram": bytes,
     /// "total_ram": bytes, "keep_free": bytes, "command": "..."}`: queues
     /// for the lock and streams lines: `waiting N` while N requests are
-    /// ahead, `granted` once held and `released` when the terminal closed.
-    /// The client closing the connection gives the lock back at once.
+    /// ahead, each followed by a `held by ...` line per request it waits
+    /// for, `granted` once held and `released` when the terminal closed or
+    /// `DELETE /v1/locks/NAME` freed it. An empty line follows every
+    /// [`LOCK_PULSE`] without other news. The client closing the connection
+    /// gives the lock back at once.
     #[cfg(unix)]
     fn hold(
         &self,
@@ -1517,7 +1534,9 @@ impl Control {
             });
             let head = "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=utf-8\r\nCache-Control: no-store\r\nConnection: close\r\n\r\n";
             let mut said = None;
+            let mut blocked: Vec<u64> = Vec::new();
             let mut line = Some(head.to_owned());
+            let mut pulsed = Instant::now();
             let mut state = self.lock();
             loop {
                 if let Some(text) = line.take() {
@@ -1529,29 +1548,47 @@ impl Control {
                     {
                         break;
                     }
+                    pulsed = Instant::now();
                     state = self.lock();
                     continue;
                 }
                 let hold = state.bus.hold(ticket);
                 if hold.is_none() {
                     drop(state);
-                    // Gone with the terminal, or the client left.
+                    // Gone with the terminal, unlocked, or the client left.
                     let _ = stream.write_all(b"released\n");
                     break;
                 }
-                if hold != said {
+                let blockers = match hold {
+                    Some(bus::Hold::Waiting(_)) => state.bus.blockers(ticket, token),
+                    _ => Vec::new(),
+                };
+                let numbers: Vec<u64> = blockers.iter().map(|(n, _)| *n).collect();
+                if hold != said || numbers != blocked {
                     said = hold;
-                    line = Some(match hold {
+                    blocked = numbers;
+                    let mut text = match hold {
                         Some(bus::Hold::Held) => "granted\n".to_owned(),
                         Some(bus::Hold::Waiting(ahead)) => format!("waiting {ahead}\n"),
                         None => unreachable!("checked above"),
-                    });
+                    };
+                    for (_, blocker) in blockers {
+                        text.push_str(&blocker);
+                        text.push('\n');
+                    }
+                    line = Some(text);
                     continue;
                 }
-                state = self
-                    .bus_changed
-                    .wait(state)
-                    .unwrap_or_else(|poison| poison.into_inner());
+                // An empty line now and then: a client whose shell died
+                // fails to pass it on and exits, which frees the lock.
+                let left = LOCK_PULSE.saturating_sub(pulsed.elapsed());
+                if left.is_zero() {
+                    line = Some("\n".to_owned());
+                    continue;
+                }
+                state = (self.bus_changed.wait_timeout(state, left))
+                    .unwrap_or_else(|poison| poison.into_inner())
+                    .0;
             }
             give_back();
             let _ = stream.shutdown(std::net::Shutdown::Both);

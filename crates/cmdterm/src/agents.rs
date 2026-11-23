@@ -321,6 +321,9 @@ Agents of all the app's terminals (none of these asks the user):
                         wait for the next messages (exit 1 on timeout, 3
                         when you are not on the list)
   locks [--json]        the locks agents hold or wait for
+  unlock NAME           free this terminal's hold on lock NAME, such as one
+                        a command left that was killed or runs on in the
+                        background
   run [OPTIONS] [--] COMMAND...
                         run COMMAND, after a lock and with limits:
       --mutex NAME      wait until NAME is free on this machine
@@ -608,6 +611,11 @@ case $command in
   locks)
     case ${1:-} in --json) call GET /locks ;; *) call GET '/locks?format=text' ;; esac
     ;;
+  unlock)
+    need 1 $#
+    case $1 in ''|*[!A-Za-z0-9._-]*) fail "bad lock name $1" ;; esac
+    call DELETE "/locks/$1"; echo
+    ;;
   run)
     mutex= procs= max_ram= reserve= keep_free=1073741824 cpus= quota= tasks= cpu_time=
     while [ "$#" -gt 0 ]; do
@@ -670,14 +678,21 @@ case $command in
       holder=$!
       exec 3< "$dir/lock"
       trap 'kill "$holder" 2>/dev/null; rm -rf "$dir"' EXIT
+      trap 'exit 129' HUP
       trap 'exit 130' INT
       trap 'exit 143' TERM
       granted=
+      # After the grant nobody reads the server's empty lines: they fill the
+      # pipe's buffer while this shell lives, and end curl once it is gone.
       while IFS= read -r line <&3; do
         case $line in
           granted) granted=1; break ;;
           'waiting 0') echo "control: waiting for $name" >&2 ;;
           waiting*) echo "control: waiting for $name, ${line#waiting } ahead" >&2 ;;
+          'held by '*'(this terminal)'*)
+            echo "control: $name is $line" >&2
+            echo "control: that command started in this terminal; if it is no longer needed, stop it, and if it is gone, free the lock with: control unlock $name" >&2 ;;
+          'held by '*) echo "control: $name is $line" >&2 ;;
           '') ;;
           *) printf '%s\n' "$line" >&2 ;;
         esac
@@ -4061,6 +4076,57 @@ mod tests {
                 .code(),
             Some(2)
         );
+
+        // A run whose shell was killed with SIGKILL leaves curl behind; the
+        // next empty line from the app ends it and frees the lock. A hold
+        // this terminal left is named to its next request, and unlock
+        // frees it.
+        let script = r#"control=$1 out=$2
+wait_for() {
+  n=0
+  until eval "$1"; do
+    n=$((n + 1)); [ $n -lt 200 ] || { echo "timed out: $1"; exit 1; }; sleep 0.05
+  done
+}
+sh "$control" run --mutex orphan -- sleep 5 >/dev/null 2>&1 &
+pid=$!
+wait_for 'sh "$control" locks | grep -q "holds: app-1 .*sleep 5"'
+kill -9 $pid
+wait_for '! sh "$control" locks | grep -q orphan'
+sh "$control" run --mutex self -- sh -c "echo \$\$ > '$out/stuck'; exec sleep 30" >/dev/null 2>&1 &
+wait_for '[ -s "$out/stuck" ] && sh "$control" locks | grep -q "holds: app-1"'
+sh "$control" run --mutex self -- echo ran > "$out/second" 2> "$out/second.err" &
+second=$!
+wait_for 'grep -q "this terminal" "$out/second.err"'
+sh "$control" unlock self
+wait $second
+kill "$(cat "$out/stuck")"
+cat "$out/second" "$out/second.err"
+"#;
+        std::fs::write(dir.path().join("locks.sh"), script).unwrap();
+        let control = dir.path().join(CONTROL_PATH);
+        let out = run_helper(
+            dir.path(),
+            "locks.sh",
+            &[&control.to_string_lossy(), &dir.path().to_string_lossy()],
+            &[
+                ("SCRIPTSCHNELL_TERM_SOCKET", &socket),
+                ("SCRIPTSCHNELL_TERM_TOKEN", &tokens[0]),
+            ],
+        );
+        let printed = format!("{}{}", text(&out), String::from_utf8_lossy(&out.stderr));
+        assert!(out.status.success(), "{printed}");
+        assert!(printed.contains("\"freed\": 1"), "{printed}");
+        assert!(printed.contains("ran\n"), "{printed}");
+        assert!(
+            printed.contains("self is held by app-1 (this terminal) for "),
+            "{printed}"
+        );
+        let deadline = std::time::Instant::now() + std::time::Duration::from_secs(5);
+        while !text(&run(1, &["locks"])).is_empty() {
+            assert!(std::time::Instant::now() < deadline, "a lock stayed");
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
 
         assert!(run(0, &["leave"]).status.success());
         assert_eq!(run(0, &["wait", "--timeout", "0"]).status.code(), Some(3));

@@ -589,6 +589,71 @@ impl Bus {
         })
     }
 
+    /// What request `n` waits for while it waits: the holders of its lock,
+    /// or, when the lock has room and memory is what is short, the holders
+    /// that reserve memory on its machine. Each with its number and a line
+    /// such as `held by app-3 for 2m: cargo test`; `(this terminal)`
+    /// follows the id of a holder from `token`.
+    pub fn blockers(&self, n: u64, token: &str) -> Vec<(u64, String)> {
+        let Some(((machine, _), group)) =
+            (self.groups.iter()).find(|(_, group)| group.waiting.iter().any(|t| t.n == n))
+        else {
+            return Vec::new();
+        };
+        let room = group.capacity == 0 || group.holders.len() < group.capacity;
+        let holders: Vec<&Ticket> = if room {
+            (self.groups.iter())
+                .filter(|((other, _), _)| other == machine)
+                .flat_map(|(_, group)| &group.holders)
+                .filter(|t| t.ram > 0)
+                .collect()
+        } else {
+            group.holders.iter().collect()
+        };
+        holders
+            .into_iter()
+            .map(|t| {
+                let mine = if t.token == token {
+                    " (this terminal)"
+                } else {
+                    ""
+                };
+                let ram = match t.ram {
+                    0 => String::new(),
+                    n => format!(", reserving {}", bytes(n)),
+                };
+                let line = format!(
+                    "held by {}{mine} for {}{ram}: {}",
+                    t.holder,
+                    ago(t.since.elapsed().as_secs()),
+                    t.command
+                );
+                (t.n, line)
+            })
+            .collect()
+    }
+
+    /// Frees the holds `token`'s terminal has on lock `name` of its
+    /// machine, such as one a killed command left behind. Its waiting
+    /// requests stay. Returns how many it freed.
+    pub fn unlock(&mut self, token: &str, name: &str) -> usize {
+        let Some(peer) = self.peers.get(token) else {
+            return 0;
+        };
+        let key = (peer.terminal.machine.clone(), name.to_owned());
+        let Some(group) = self.groups.get_mut(&key) else {
+            return 0;
+        };
+        let before = group.holders.len();
+        group.holders.retain(|t| t.token != token);
+        let freed = before - group.holders.len();
+        if freed > 0 {
+            self.tidy();
+            self.admit();
+        }
+        freed
+    }
+
     /// Ends request `n`, held or waiting, and lets the next ones in.
     pub fn release(&mut self, n: u64) {
         for group in self.groups.values_mut() {
@@ -1018,6 +1083,41 @@ mod tests {
         assert_eq!(bus.hold(third), Some(Hold::Held));
         bus.release(third);
         assert!(bus.locks().is_empty());
+    }
+
+    #[test]
+    fn waiting_requests_learn_what_holds_them_and_unlock_frees_only_own_holds() {
+        let mut bus = bus();
+        let first = bus.enqueue("a", lock("cargo", 1, 0)).unwrap();
+        let mine = bus.enqueue("a", lock("cargo", 1, 0)).unwrap();
+        let theirs = bus.enqueue("b", lock("cargo", 1, 0)).unwrap();
+        let lines = |bus: &Bus, n, token| -> Vec<String> {
+            bus.blockers(n, token).into_iter().map(|(_, l)| l).collect()
+        };
+        assert_eq!(
+            lines(&bus, mine, "a"),
+            ["held by app-1 (this terminal) for 0s: cargo test"]
+        );
+        assert_eq!(
+            lines(&bus, theirs, "b"),
+            ["held by app-1 for 0s: cargo test"]
+        );
+        assert!(bus.blockers(first, "a").is_empty());
+        // Another terminal cannot free it; waiting requests stay.
+        assert_eq!(bus.unlock("b", "cargo"), 0);
+        assert_eq!(bus.unlock("a", "other"), 0);
+        assert_eq!(bus.unlock("a", "cargo"), 1);
+        assert_eq!(bus.hold(first), None);
+        assert_eq!(bus.hold(mine), Some(Hold::Held));
+        assert_eq!(bus.hold(theirs), Some(Hold::Waiting(0)));
+        // Waiting for memory names the holders that reserve it.
+        let big = bus.enqueue("c", lock("build", 0, 12 << 30)).unwrap();
+        let more = bus.enqueue("d", lock("test", 0, 8 << 30)).unwrap();
+        assert_eq!(bus.hold(big), Some(Hold::Held));
+        assert_eq!(
+            lines(&bus, more, "d"),
+            ["held by app-feature-3 for 0s, reserving 12.0 GiB: cargo test"]
+        );
     }
 
     #[test]

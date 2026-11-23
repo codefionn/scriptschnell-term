@@ -1250,7 +1250,12 @@ terminal or `control leave`.
 
 `control run --mutex NAME -- COMMAND` waits until lock `NAME` is free on the machine the
 terminal runs on, then runs the command and frees the lock when it ends, also when it is
-killed. `--max-processes N` lets N commands hold the lock at once. `--reserve-ram SIZE`
+killed. While it waits it prints what holds the lock, and says so when a command from the
+same terminal does, such as one that runs on in the background. A run whose shell was
+killed with SIGKILL leaves its `curl` behind; the app sends that request an empty line
+every 10 seconds, which ends the orphaned `curl` and frees the lock. `control unlock NAME`
+frees the holds this terminal has on `NAME` right away; the commands keep running.
+`--max-processes N` lets N commands hold the lock at once. `--reserve-ram SIZE`
 waits until SIZE fits next to the reservations of the commands running on that machine,
 counted against its memory minus `--keep-free-ram` (1 GiB by default). `--max-ram SIZE`
 reserves the same and is also a hard limit. `--cpus 0-3`, `--cpu-quota 200%`,
@@ -1290,7 +1295,8 @@ $SCRIPTSCHNELL_TERM_TOKEN`. Paths under `/v1`:
 | `POST /messages` | Body `{"to": ID, "text": "..."}` or `{"scope": "worktree", "text": "..."}` (`project`, `all`; `worktree` or `project` may name another one), with `"untrusted": "..."` for relayed content. Returns `{"to": [ids]}`, 404 for an unknown agent, 409 for one that has not joined |
 | `GET /messages` | The inbox, marked read. `?peek=1` leaves it, `wait=SECONDS` (up to 7200) waits for the first message, `format=text`, `hook&event=EVENT` (hook JSON with the messages as `additionalContext`; `shape=flat` puts it at the top level, `shape=text` sends plain text) or `stop` (a Stop hook's block while messages wait). 410 when this terminal's agent has not joined |
 | `GET /locks` | Every lock with its machine, capacity, holders and those waiting; `?format=text` for lines |
-| `POST /locks/NAME` | Body `{"max_processes": 1, "ram": BYTES, "total_ram": BYTES, "keep_free": BYTES, "command": "..."}`, each optional: queue for the lock. The response streams `waiting N`, then `granted`, and stays open while the lock is held; closing the connection frees it. 409 when the lock runs with another `max_processes`, 413 when `ram` exceeds what the machine has |
+| `POST /locks/NAME` | Body `{"max_processes": 1, "ram": BYTES, "total_ram": BYTES, "keep_free": BYTES, "command": "..."}`, each optional: queue for the lock. The response streams `waiting N` with a `held by ID for AGE: COMMAND` line per holder it waits for (`ID (this terminal)` for the caller's own), then `granted`, and stays open while the lock is held, with an empty line every 10 seconds without other news; closing the connection frees it, and `released` ends it when the hold went away. 409 when the lock runs with another `max_processes`, 413 when `ram` exceeds what the machine has |
+| `DELETE /locks/NAME` | Frees the holds the caller's terminal has on lock `NAME` of its machine; its waiting requests stay. Answers `{"lock": NAME, "freed": N}` |
 
 An agent is `"claude"`, `"codex"`, `"opencode"`, `"pi"`, `"copilot"`, `"qwen"`,
 `"gemini"`, `"kimi"`, `"vibe"`, `"agy"` or an extension agent's name, or `{"agent": "claude",

@@ -15,6 +15,10 @@ All notable changes to scriptschnell-term are in this file. The format is
   `fetch` and `push` reach allowed hosts while your keys stay outside the sandbox. Only
   git's own remote commands pass. A push asks under `cmdterm.git-push` like one over
   HTTPS. SSH from a sandbox never reaches this machine, even with `localhost` allowed.
+- `control unlock NAME` frees the holds the agent's own terminal has on a `control run
+  --mutex` lock, such as one a killed command left. While `control run` waits, it prints
+  which commands hold the lock and how long they have, and says when one of them came
+  from the same terminal, as when an agent waits for a build it moved to the background.
 
 ### Fixed
 
@@ -37,6 +41,10 @@ All notable changes to scriptschnell-term are in this file. The format is
   of failing with "status code 0". Sandboxes bind the proxy's bundle, which holds the
   system roots too, over `/etc/ssl/certs/ca-certificates.crt`, `/etc/ssl/cert.pem`
   and their Fedora and openSUSE counterparts.
+- A `control run --mutex` lock no longer stays held for hours after the shell running it
+  was killed with SIGKILL. The `curl` that held the request open survived its shell; the
+  app now sends each lock request an empty line every 10 seconds, which ends such a
+  `curl` and frees the lock.
 - `scripts/build-appimage.sh` builds an AppImage with a PNG `.DirIcon`, which
   appimagetool now asks for, and caches the AppImage runtime next to appimagetool.
 
