@@ -581,6 +581,15 @@ impl SandboxPolicy {
                 args.push("--ro-bind".into());
                 args.push(bundle.clone().into_os_string());
                 args.push(INNER_CA.into());
+                // Programs that ignore the CA variables, such as
+                // appimagetool with its static libcurl, read the system
+                // bundle. The proxy's bundle holds the system roots too, so
+                // it goes over them.
+                for system in system_ca_bundles(SYSTEM_CA_BUNDLES) {
+                    args.push("--ro-bind".into());
+                    args.push(bundle.clone().into_os_string());
+                    args.push(system.into_os_string());
+                }
             }
         }
         if let Some(socket) = &self.keyring {
@@ -869,6 +878,34 @@ fn scratch_home_args(home: &Path, synced: &dyn Fn(&PathBuf) -> bool, args: &mut 
         args.push(path.clone().into_os_string());
         args.push(path.into_os_string());
     }
+}
+
+/// Where TLS libraries look for this machine's CA bundle when no variable
+/// names one: Debian, Alpine and Arch, Fedora, openSUSE.
+const SYSTEM_CA_BUNDLES: &[&str] = &[
+    "/etc/ssl/certs/ca-certificates.crt",
+    "/etc/ssl/cert.pem",
+    "/etc/pki/tls/certs/ca-bundle.crt",
+    "/etc/pki/tls/cert.pem",
+    "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem",
+    "/etc/ca-certificates/extracted/tls-ca-bundle.pem",
+    "/etc/ssl/ca-bundle.pem",
+];
+
+/// The files of `candidates` that exist, with symlinks resolved, each once.
+/// bwrap cannot mount over a symlink, and the links of one distribution
+/// often lead to the same file.
+fn system_ca_bundles(candidates: &[&str]) -> Vec<PathBuf> {
+    let mut found = Vec::new();
+    for candidate in candidates {
+        let Ok(path) = crate::canonicalize(Path::new(candidate)) else {
+            continue;
+        };
+        if path.is_file() && !found.contains(&path) {
+            found.push(path);
+        }
+    }
+    found
 }
 
 /// `path` with symlinks resolved, as far as it exists.
@@ -2168,6 +2205,24 @@ mod tests {
             "{args}"
         );
         assert!(!args.contains("--setenv"), "{args}");
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn system_ca_bundles_are_the_files_links_lead_to() {
+        let dir = tempfile::tempdir().unwrap();
+        let dir = crate::canonicalize(dir.path()).unwrap();
+        let real = dir.join("tls-ca-bundle.pem");
+        std::fs::write(&real, "roots").unwrap();
+        let link = dir.join("cert.pem");
+        std::os::unix::fs::symlink("tls-ca-bundle.pem", &link).unwrap();
+        let (real_s, link_s) = (real.to_str().unwrap(), link.to_str().unwrap());
+        let missing = dir.join("missing.crt");
+        assert_eq!(
+            system_ca_bundles(&[link_s, missing.to_str().unwrap(), real_s]),
+            [real]
+        );
+        assert!(system_ca_bundles(&[dir.to_str().unwrap()]).is_empty());
     }
 
     #[test]

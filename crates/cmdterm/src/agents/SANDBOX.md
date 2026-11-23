@@ -99,8 +99,9 @@ It prints JSON:
   With `host_network` (which needs `restrict_network` off), none of this applies.
 - With `intercept_tls`, the proxy decrypts HTTPS with its own CA, which the sandbox
   trusts through `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`,
-  `NODE_EXTRA_CA_CERTS`, `PIP_CERT` and the other CA variables. A tool that pins its
-  own certificates or ignores these variables fails there, and `recently_refused` names
+  `NODE_EXTRA_CA_CERTS`, `PIP_CERT` and the other CA variables. On Linux the system's
+  CA bundle files hold the proxy's CA too, so tools that read only those work. A tool
+  that pins its own certificates, or on macOS ignores these variables, fails there, and `recently_refused` names
   the host with "turned down the proxy's certificate". On Windows only the hosts that
   extensions' secrets and guards need are decrypted. .NET, PowerShell and winget fail
   on those hosts because they trust only the Windows store; use curl, or git, which the

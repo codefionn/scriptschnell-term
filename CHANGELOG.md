@@ -22,6 +22,13 @@ All notable changes to scriptschnell-term are in this file. The format is
   every worktree, not only the one that shows. Before, an agent in another worktree
   waited until you opened that worktree. Idle agents still start once their worktree
   shows.
+- Programs that read only the system's CA bundle, such as appimagetool with its
+  static libcurl, now trust HTTPS through the proxy in bubblewrap sandboxes instead
+  of failing with "status code 0". Sandboxes bind the proxy's bundle, which holds the
+  system roots too, over `/etc/ssl/certs/ca-certificates.crt`, `/etc/ssl/cert.pem`
+  and their Fedora and openSUSE counterparts.
+- `scripts/build-appimage.sh` builds an AppImage with a PNG `.DirIcon`, which
+  appimagetool now asks for, and caches the AppImage runtime next to appimagetool.
 
 ## [0.1.1] - 2026-11-22
 

@@ -5,7 +5,9 @@
 #
 # <target dir> holds scriptschnell-term, cmdterm-remote and
 # cmdterm-proxy-bridge from `cargo build --release`. APPIMAGETOOL names the
-# appimagetool binary (default: appimagetool on PATH). fontconfig and
+# appimagetool binary (default: appimagetool on PATH). APPIMAGE_RUNTIME names
+# the type2 runtime file; without it appimagetool downloads the runtime
+# itself. fontconfig and
 # freetype are the only libraries the app links, and every desktop has them,
 # so the AppImage bundles none.
 set -euo pipefail
@@ -19,15 +21,25 @@ trap 'rm -rf "$(dirname "$appdir")"' EXIT
 
 mkdir -p "$appdir/usr/bin" \
   "$appdir/usr/share/applications" \
-  "$appdir/usr/share/icons/hicolor/scalable/apps"
+  "$appdir/usr/share/icons/hicolor/scalable/apps" \
+  "$appdir/usr/share/icons/hicolor/256x256/apps"
 for bin in scriptschnell-term cmdterm-remote cmdterm-proxy-bridge; do
   install -m 755 "$target_dir/$bin" "$appdir/usr/bin/$bin"
 done
 install -m 755 "$here/AppRun" "$appdir/AppRun"
 install -m 644 "$here/scriptschnell-term.desktop" "$appdir/scriptschnell-term.desktop"
 install -m 644 "$here/scriptschnell-term.desktop" "$appdir/usr/share/applications/"
-install -m 644 "$here/scriptschnell-term.svg" "$appdir/scriptschnell-term.svg"
+# appimagetool wants a PNG for .DirIcon. scriptschnell-term.png is the SVG
+# rendered at 256x256 (rsvg-convert -w 256 -h 256); render it again after
+# changing the SVG.
+install -m 644 "$here/scriptschnell-term.png" "$appdir/scriptschnell-term.png"
+install -m 644 "$here/scriptschnell-term.png" "$appdir/usr/share/icons/hicolor/256x256/apps/"
 install -m 644 "$here/scriptschnell-term.svg" "$appdir/usr/share/icons/hicolor/scalable/apps/"
-ln -s scriptschnell-term.svg "$appdir/.DirIcon"
+ln -s scriptschnell-term.png "$appdir/.DirIcon"
 
-ARCH=x86_64 VERSION="$version" "${APPIMAGETOOL:-appimagetool}" --no-appstream "$appdir" "$out"
+runtime_args=()
+if [ -n "${APPIMAGE_RUNTIME:-}" ]; then
+  runtime_args=(--runtime-file "$APPIMAGE_RUNTIME")
+fi
+ARCH=x86_64 VERSION="$version" "${APPIMAGETOOL:-appimagetool}" --no-appstream \
+  "${runtime_args[@]}" "$appdir" "$out"

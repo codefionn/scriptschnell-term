@@ -503,7 +503,10 @@ the palette; the worktree keeps the choice in `state.json`.
 - `sandbox.intercept_tls`: the proxy also decrypts HTTPS, with a CA that sandboxes trust.
   On by default. Sandboxes trust the CA through `SSL_CERT_FILE`, `CURL_CA_BUNDLE`,
   `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`, `CARGO_HTTP_CAINFO`,
-  `DENO_CERT` and `PIP_CERT`. On Windows, git is also switched to its OpenSSL backend
+  `DENO_CERT` and `PIP_CERT`. Bubblewrap sandboxes also see the proxy's bundle in place
+  of the system's CA bundle files (`/etc/ssl/certs/ca-certificates.crt`, `/etc/ssl/cert.pem`
+  and their Fedora and openSUSE counterparts), for programs that read only those, such as
+  appimagetool. On Windows, git is also switched to its OpenSSL backend
   (`GIT_CONFIG_COUNT` with `http.sslBackend=openssl`), because the schannel backend
   ignores `GIT_SSL_CAINFO`. Programs on Windows' own TLS stack, such as .NET, PowerShell
   and winget, trust only the Windows certificate store, which never gets the proxy's CA.
