@@ -157,8 +157,14 @@ pub fn main() -> ExitCode {
         }
         cmdterm_env::set_built_in_proxy_bridge(PROXY_BRIDGE_FLAG);
     }
+    // Release builds on Windows have no console of their own; help, errors
+    // and other output go to the terminal that started them, if any.
+    schnellui::platform::attach_parent_console();
     let cli = Cli::parse();
     if let Some(Command::Fix { agent }) = &cli.command {
+        // The shell that started a GUI process does not wait for it, so the
+        // agent gets a console window of its own.
+        schnellui::platform::own_console();
         let dirs = cmdterm_env::AppDirs::resolve(cli.config_dir.as_deref());
         dirs.migrate();
         let helpers = appimage_helpers(&dirs);

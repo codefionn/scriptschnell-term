@@ -63,6 +63,12 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- The installed app on Windows no longer opens a console window next to its own
+  window. Run from a terminal, it still prints help and errors there, and
+  `scriptschnell-term fix` opens the agent in a console window of its own. Programs
+  the app starts in the background, such as `git` and `ssh`, open no console window
+  either.
+
 - On Windows, Claude Code, Mistral Vibe and other agents start when their folder is
   missing from the `PATH` the app started with. The app also looks in
   `%USERPROFILE%\.local\bin`, winget's links, npm's global folder and the folders of

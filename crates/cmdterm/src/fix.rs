@@ -404,7 +404,10 @@ fn start(command: &cmdterm_env::EnvCommand, prompt: &str) -> std::io::Result<i32
 #[cfg(not(unix))]
 fn start(command: &cmdterm_env::EnvCommand, prompt: &str) -> std::io::Result<i32> {
     eprintln!("Paste this into the agent and say what broke:\n\n{prompt}\n");
-    let status = command.to_std().status()?;
+    let mut std_command = command.to_std();
+    // The agent takes this console instead of a hidden one of its own.
+    cmdterm_env::console::shared(&mut std_command);
+    let status = std_command.status()?;
     Ok(status.code().unwrap_or(1))
 }
 

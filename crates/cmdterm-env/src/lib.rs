@@ -27,6 +27,7 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 
 pub mod appimage;
+pub mod console;
 mod container;
 mod copy;
 pub mod cpu;
@@ -355,7 +356,7 @@ impl Environment {
         let Some(args) = client_args(base) else {
             return Ok(());
         };
-        let output = Command::new(&remote_client().program)
+        let output = new_command(&remote_client().program)
             .args(args)
             .args(["--session", name, "--end"])
             .stdin(Stdio::null())
@@ -571,7 +572,7 @@ impl Environment {
         let Self::Ssh(target) = self.base() else {
             return Some(true);
         };
-        let output = Command::new(target.program())
+        let output = new_command(target.program())
             .args(ssh_base_args(target))
             .args(ssh_forward_args(&[(
                 local.to_path_buf(),
@@ -732,7 +733,7 @@ impl EnvCommand {
             Environment::Local => {
                 let program = local_program(&self.program, path_var(&self.vars));
                 let msys_path = local_msys_path(&program, path_var(&self.vars));
-                let mut command = Command::new(program);
+                let mut command = new_command(program);
                 add_local_args(&mut command, &self.args);
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
@@ -752,7 +753,7 @@ impl EnvCommand {
                 command
             }
             Environment::Ssh(target) => {
-                let mut command = Command::new(target.program());
+                let mut command = new_command(target.program());
                 command.args(ssh_base_args(target));
                 command.args(ssh_forward_args(&self.sockets));
                 // Fail instead of prompting: background polls have no TTY.
@@ -762,13 +763,13 @@ impl EnvCommand {
                 command
             }
             Environment::Remote(_) | Environment::Vm(_) => {
-                let mut command = Command::new(&remote_client().program);
+                let mut command = new_command(&remote_client().program);
                 command.args(self.remote_client_args(false));
                 command
             }
             Environment::Custom(target) => {
                 let (program, args) = target.argv_or_missing(self.remote_script(), false);
-                let mut command = Command::new(program);
+                let mut command = new_command(program);
                 command.args(args);
                 command
             }
@@ -777,6 +778,14 @@ impl EnvCommand {
             }
         }
     }
+}
+
+/// A process of this machine that opens no console window of its own,
+/// see [`console::no_window`].
+fn new_command(program: impl AsRef<std::ffi::OsStr>) -> Command {
+    let mut command = Command::new(program);
+    console::no_window(&mut command);
+    command
 }
 
 /// Adds `args` to a local `command`. On Windows the standard library quotes
