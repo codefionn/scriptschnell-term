@@ -7162,7 +7162,7 @@ dependencies = [
 [[package]]
 name = "schnellui"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#467f3a507816f56f4d880ca5cf8a12bc74345284"
+source = "git+https://github.com/codefionn/schnellui#4c6df76d344029ec175b49ec56f8d83cf34ae90e"
 dependencies = [
  "accesskit 0.25.1",
  "accesskit_winit",
@@ -7201,7 +7201,7 @@ dependencies = [
 [[package]]
 name = "schnellui-icons-md"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#467f3a507816f56f4d880ca5cf8a12bc74345284"
+source = "git+https://github.com/codefionn/schnellui#4c6df76d344029ec175b49ec56f8d83cf34ae90e"
 dependencies = [
  "md-icons",
  "schnellui",
@@ -7210,7 +7210,7 @@ dependencies = [
 [[package]]
 name = "schnellui-macro"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#467f3a507816f56f4d880ca5cf8a12bc74345284"
+source = "git+https://github.com/codefionn/schnellui#4c6df76d344029ec175b49ec56f8d83cf34ae90e"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -7221,7 +7221,7 @@ dependencies = [
 [[package]]
 name = "schnellui-servo"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#467f3a507816f56f4d880ca5cf8a12bc74345284"
+source = "git+https://github.com/codefionn/schnellui#4c6df76d344029ec175b49ec56f8d83cf34ae90e"
 dependencies = [
  "cookie 0.18.2",
  "dpi",
@@ -7236,7 +7236,7 @@ dependencies = [
 [[package]]
 name = "schnellui-view-parser"
 version = "0.1.0"
-source = "git+https://github.com/codefionn/schnellui#467f3a507816f56f4d880ca5cf8a12bc74345284"
+source = "git+https://github.com/codefionn/schnellui#4c6df76d344029ec175b49ec56f8d83cf34ae90e"
 dependencies = [
  "proc-macro2",
  "quote",
