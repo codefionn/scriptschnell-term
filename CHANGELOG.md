@@ -14,6 +14,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   agent missing from `PATH` is looked up on the `PATH` of your login shell. This
   affected Mistral Vibe, Kimi Code and any agent installed with uv, pipx or a user npm
   prefix.
+- Opening a dropdown near the lower edge of a scrolled settings page, such as the CPU
+  dropdowns on the Agents page, scrolls the page to show its whole list instead of
+  leaving it cut off at the dialog's edge.
 
 ## [0.1.2] - 2026-11-23
 

@@ -169,6 +169,9 @@ pub(super) const GAP: f32 = 12.0;
 /// `Scroll` shows its bar, and rows inside it end this much earlier so the bar
 /// does not cover their buttons or switches.
 pub(super) const SCROLLBAR_ROOM: f32 = 20.0;
+/// Height of one option in the open list of a settings dropdown, with
+/// [`super::machines::INPUT_TEXT_SIZE`] text, rounded up.
+const DROPDOWN_ROW: f32 = 34.0;
 /// Least width of a settings dropdown, so the dropdowns of a page line up.
 pub(super) const SELECT_WIDTH: f32 = 320.0;
 /// Width of the surface in the overlay being built.
@@ -4339,9 +4342,16 @@ fn agent_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
             .child(label(scheme, title))
             .child(cpu_dropdown(ws, scheme, place, title));
     }
-    let page = page
-        // Room below the dropdown, so it scrolls clear of the bottom edge.
-        .child(Fill::new(1.0, GAP * 2.0, Color::TRANSPARENT));
+    // Room below the dropdowns, so the page scrolls them clear of its lower
+    // edge. An open one gets room for its whole list, which opening it
+    // scrolls into view.
+    let cpu_open = matches!(ws.borrow().settings_ui.picker, Some(Picker::Cpu(_)));
+    let room = if cpu_open {
+        crate::state::CpuMode::ALL.len() as f32 * DROPDOWN_ROW + GAP * 2.0
+    } else {
+        GAP * 2.0
+    };
+    let page = page.child(Fill::new(1.0, room, Color::TRANSPARENT));
     Scroll::new()
         .label(tr.agent_list)
         .restoration_key(tr.agent_list)
@@ -4840,6 +4850,64 @@ mod tests {
             .load()
             .unwrap();
         assert_eq!(saved.cpu_mode.remote, CpuMode::Quiet);
+    }
+
+    /// A CPU dropdown at the lower edge of the scrolled Agents page opens a
+    /// list that would run past it. Opening one scrolls the page to show the
+    /// list whole, not cut off by the dialog's edge.
+    #[test]
+    fn the_cpu_dropdowns_lists_show_whole_at_the_pages_end() {
+        for name in [EN.cpu_local, EN.cpu_remote] {
+            let dir = tempfile::tempdir().unwrap();
+            let root = dir.path();
+            let ws = Workspace::new(
+                StateStore::new(root.join("cfg/state.json")),
+                SettingsStore::new(root.join("cfg/settings.json")),
+                &root.join("cfg/extensions"),
+            );
+            ws.open_settings();
+            ws.show_settings_section(SettingsSection::Agents);
+            // Tall enough that the list fits below the trigger in the window,
+            // where it opens unless it runs past the window's bottom.
+            let viewport = Size {
+                height: 1400.0,
+                ..VIEWPORT
+            };
+            let mut app = crate::build_app(&ws, viewport);
+            ws.take_dirty();
+            app.frame();
+            // The trigger shows just above the page's lower edge.
+            let page = app
+                .find_widget(Role::ScrollView, Some(EN.agent_list))
+                .unwrap();
+            let picker = app.find_widget(Role::ComboBox, Some(name)).unwrap();
+            let view = app.scene().layout(page).unwrap().rect;
+            let trigger = app.scene().layout(picker).unwrap().rect;
+            app.dispatch_scroll(page, trigger.bottom() + 12.0 - view.bottom());
+            app.frame();
+            app.dispatch_click(picker);
+            assert!(ws.take_dirty().settings);
+            let regions = ws.regions();
+            app.apply_subtree_replacement(
+                SubtreeReplacement::new(regions.settings, settings(&ws, viewport), "settings")
+                    .with_focus_after(regions.settings_focus),
+            )
+            .unwrap();
+            app.frame();
+            let scene = app.scene();
+            let options: Vec<_> = (scene.preorder())
+                .filter(|id| scene.is_effectively_visible(*id))
+                .filter(|id| {
+                    (scene.a11y(*id)).is_some_and(|a| Role::from_u16(a.role) == Role::ListBoxOption)
+                })
+                .collect();
+            assert_eq!(options.len(), 3, "{name}");
+            for option in options {
+                let whole = scene.layout(option).unwrap().rect.height;
+                let shown = scene.composited_rect(option).height;
+                assert!(shown >= whole - 0.5, "{name}: {shown} of {whole} shown");
+            }
+        }
     }
 
     #[test]
