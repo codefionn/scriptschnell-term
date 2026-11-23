@@ -42,6 +42,11 @@
 //! and queue for locks before heavy jobs ([`bus`]). None of those asks the
 //! user.
 //!
+//! `GET /v1/change-request` reports a worktree's change request as the
+//! app's forge checks last saw it, and with `wait=` waits until it changes
+//! ([`changes`]). The MCP server offers the same as the built-in tools
+//! `change_request` and `change_request_wait`.
+//!
 //! `POST /v1/mcp` takes one MCP message (JSON-RPC) for the debug browser's
 //! tools and answers with one line of JSON (`crate::devtools::mcp`). It
 //! keeps no state per connection; agents name the browser session they
@@ -58,7 +63,7 @@
 
 use std::collections::{BTreeMap, HashMap};
 use std::path::{Component, Path, PathBuf};
-use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
@@ -67,6 +72,9 @@ use serde_json::{Value, json};
 use crate::agents::Agent;
 
 mod bus;
+mod changes;
+
+pub use changes::{ChangeEntry, TOOLS as BUILTIN_TOOLS};
 
 /// How long `apply` waits for the user before it gives up.
 pub const ANSWER_TIMEOUT: Duration = Duration::from_secs(600);
@@ -379,6 +387,8 @@ struct State {
     tool_calls: Vec<ToolCall>,
     /// Answers to tool calls, until their connection takes them.
     tool_answers: Vec<(u64, crate::ext::ToolResult)>,
+    /// The change requests of worktrees and the ones agents watch.
+    changes: changes::Changes,
 }
 
 /// A call of an extension's tool, for the UI thread to run.
@@ -404,6 +414,12 @@ pub struct Control {
     answered: Condvar,
     /// Notified when a message arrives, an agent leaves or a lock frees.
     bus_changed: Condvar,
+    /// Notified when the change request of a worktree changes.
+    changes_changed: Condvar,
+    /// Whether the UI thread published the change requests yet.
+    changes_published: AtomicBool,
+    /// Whether an agent started watching a worktree's change request.
+    new_watches: AtomicBool,
     revision: AtomicU64,
     wake: Box<dyn Fn() + Send + Sync>,
 }
@@ -416,6 +432,9 @@ impl Control {
             state: Mutex::default(),
             answered: Condvar::new(),
             bus_changed: Condvar::new(),
+            changes_changed: Condvar::new(),
+            changes_published: AtomicBool::new(false),
+            new_watches: AtomicBool::new(false),
             revision: AtomicU64::new(0),
             wake,
         }
@@ -532,6 +551,9 @@ impl Control {
             Value::Object(_) => arguments,
             _ => return Err("the arguments must be a JSON object".into()),
         };
+        if let Some(answer) = self.builtin_tool(terminal, name, &arguments) {
+            return answer.map(Some).map_err(|(_, message)| message);
+        }
         let mut state = self.lock();
         if !state.tools.iter().any(|tool| tool["name"] == name) {
             return Ok(None);
@@ -1018,8 +1040,35 @@ impl Control {
                 Response::json(200, &json!({ "lock": name, "freed": freed }))
             }
             ("POST", ["v1", "mcp"]) => self.mcp(token, &terminal, &request.body),
+            ("GET", ["v1", "change-request"]) => {
+                let wait = (request.query("wait"))
+                    .map(|secs| {
+                        secs.parse::<u64>()
+                            .map(|s| Duration::from_secs(s).min(MAX_WAIT))
+                    })
+                    .transpose();
+                let since = (request.query("since"))
+                    .map(|rev| rev.parse::<u64>())
+                    .transpose();
+                let (Ok(wait), Ok(since)) = (wait, since) else {
+                    return Response::error(400, "wait and since are whole numbers");
+                };
+                let full = matches!(request.query("full").as_deref(), Some("1" | "true"));
+                let worktree = request.query("worktree");
+                match self.change_request(
+                    &terminal,
+                    worktree.as_deref(),
+                    full,
+                    wait.map(|wait| (wait, since)),
+                ) {
+                    Ok(answer) => Response::json(200, &answer),
+                    Err((code, message)) => Response::error(code, &message),
+                }
+            }
             ("GET", ["v1", "tools"]) => {
-                Response::json(200, &json!({ "tools": self.lock().tools.clone() }))
+                let mut tools = changes::tool_list();
+                tools.extend(self.lock().tools.iter().cloned());
+                Response::json(200, &json!({ "tools": tools }))
             }
             ("POST", ["v1", "tools", name]) => {
                 let arguments = if request.body.iter().all(u8::is_ascii_whitespace) {
@@ -1141,7 +1190,10 @@ impl Control {
     ) -> Option<Value> {
         let method = message["method"].as_str().unwrap_or_default();
         let name = message["params"]["name"].as_str().unwrap_or_default();
-        if method == "tools/call" && self.lock().tools.iter().any(|t| t["name"] == name) {
+        let builtin = changes::TOOLS.contains(&name);
+        if method == "tools/call"
+            && (builtin || self.lock().tools.iter().any(|t| t["name"] == name))
+        {
             let id = message.get("id")?.clone();
             let arguments = message["params"]["arguments"].clone();
             let content = match self.run_tool(token, terminal, name, arguments) {
@@ -1165,18 +1217,25 @@ impl Control {
             "tools/list" => {
                 let tools = self.lock().tools.clone();
                 if let Some(list) = answer["result"]["tools"].as_array_mut() {
+                    list.extend(changes::tool_list());
                     list.extend(tools);
                 }
             }
             "initialize" => {
                 let tools = self.lock().tools.len();
-                if tools > 0
-                    && let Some(text) = answer["result"]["instructions"].as_str()
-                {
-                    let text = format!(
-                        "{text} Besides the browser tools, the tools without the browser_ \
-                         prefix come from the app's extensions."
+                if let Some(text) = answer["result"]["instructions"].as_str() {
+                    let mut text = format!(
+                        "{text} change_request and change_request_wait report the pull or merge \
+                         request of a worktree's branch from the app's own forge checks, without \
+                         asking the forge; wait with change_request_wait instead of polling the \
+                         forge or its CLI."
                     );
+                    if tools > 0 {
+                        text.push_str(
+                            " The other tools without the browser_ prefix come from the app's \
+                             extensions.",
+                        );
+                    }
                     answer["result"]["instructions"] = Value::String(text);
                 }
             }
@@ -2518,9 +2577,10 @@ mod tests {
         };
         let (status, body) = call(&socket, "GET", "/v1/tools", &token, b"");
         assert_eq!(status, 200);
-        assert_eq!(
-            serde_json::from_str::<Value>(&body).unwrap()["tools"][0]["name"],
-            "kb_echo"
+        let listed = serde_json::from_str::<Value>(&body).unwrap();
+        assert!(
+            (listed["tools"].as_array().unwrap().iter()).any(|tool| tool["name"] == "kb_echo"),
+            "{listed}"
         );
         let (status, body) = call(&socket, "POST", "/v1/tools/kb_echo", &token, br#"{"x": 1}"#);
         assert_eq!(status, 200, "{}", body);

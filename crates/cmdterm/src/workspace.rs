@@ -1241,9 +1241,7 @@ impl Workspace {
                         .filter(|config| working(config))
                         .map(|config| (project.id, config.clone()))
                 })
-                .filter(|(id, config)| {
-                    shown.as_ref() != Some(&(*id, config.path.clone()))
-                })
+                .filter(|(id, config)| shown.as_ref() != Some(&(*id, config.path.clone())))
                 .collect();
             if due.is_empty() {
                 return;
@@ -3432,6 +3430,8 @@ impl Workspace {
                     inner.tasks.look_again();
                 }
                 inner.dirty.sidebar = true;
+                // Agents read the worktrees' branches with their change requests.
+                inner.forges.changed();
                 if inner.active_branch() != before.as_deref() {
                     inner.dirty.status = true;
                 }
@@ -5129,7 +5129,12 @@ impl Inner {
 
     /// The control socket if it runs, without starting it.
     pub(crate) fn running_control(&self) -> Option<Arc<crate::control::Control>> {
-        Some(self.control.as_ref()?.as_ref()?.control.clone())
+        self.control_ref().cloned()
+    }
+
+    /// The control socket if it runs, borrowed. Allocation-free.
+    pub(crate) fn control_ref(&self) -> Option<&Arc<crate::control::Control>> {
+        Some(&self.control.as_ref()?.as_ref()?.control)
     }
 
     /// The oldest settings change an agent suggested, if one waits.

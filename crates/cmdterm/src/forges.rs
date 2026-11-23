@@ -19,6 +19,13 @@
 //! [`REFRESH_EVERY`]; that catches what moves no ref, such as a change
 //! request closed without a merge.
 //!
+//! Agents read the change request of a worktree through the control socket
+//! (`control/changes.rs`), from what these checks found. A worktree an
+//! agent asks about is watched for a while: its branch joins the checks,
+//! its repository's refs are read with `git ls-remote` on every check, and
+//! its discussion is asked for again when they moved, when its change
+//! request changed, or [`REFRESH_EVERY`] after it was asked last.
+//!
 //! Every rendered change request page is also written to the cache
 //! directory, one file per worktree. The next time a worktree's page is
 //! asked for, after a restart too, the saved page shows at once while the
@@ -151,15 +158,24 @@ enum Done {
     Gated {
         batches: BTreeMap<String, Vec<ForgeCheck>>,
         /// Per `(account, path)`: a hash of the refs, `None` when
-        /// `ls-remote` failed.
-        refs: Vec<((String, String), Option<u64>)>,
+        /// `ls-remote` failed, and whether the forge is skipped while they
+        /// did not move.
+        refs: Vec<Refs>,
     },
 }
+
+/// What `ls-remote` read of one repository: `(account, path)`, the hash
+/// of its refs, and whether its forge is skipped while they did not move.
+type Refs = ((String, String), Option<u64>, bool);
 
 /// A repository whose refs are read before its forge is asked.
 struct Gate {
     account: String,
     path: String,
+    /// Whether the forge is skipped while the refs did not move. Off for
+    /// repositories read only because an agent watches one of their
+    /// worktrees.
+    filter: bool,
     env: cmdterm_env::Environment,
     cwd: PathBuf,
     /// The git repository recorded for the project at `cwd`.
@@ -232,6 +248,12 @@ pub struct Forges {
     /// Discussions asked for and not answered, by request id.
     asks: HashMap<String, Ask>,
     next_ask: u64,
+    /// Whether what the control socket reports of change requests changed
+    /// since it was published.
+    stale: bool,
+    /// When the discussion of each watched worktree was asked for last, by
+    /// view key.
+    watch_asked: HashMap<String, Instant>,
 }
 
 impl Forges {
@@ -259,7 +281,14 @@ impl Forges {
             drafts: HashMap::new(),
             asks: HashMap::new(),
             next_ask: 0,
+            stale: true,
+            watch_asked: HashMap::new(),
         }
+    }
+
+    /// Publishes the change requests to the control socket on the next poll.
+    pub(crate) fn changed(&mut self) {
+        self.stale = true;
     }
 
     /// Checks soon, after an agent finished.
@@ -748,6 +777,21 @@ impl Workspace {
         if due {
             self.check_forges();
         }
+        let (watches, publish) = {
+            let inner = self.borrow();
+            inner.control_ref().map_or((false, false), |control| {
+                (
+                    control.has_new_watches(),
+                    inner.forges.stale || control.changes_wanted(),
+                )
+            })
+        };
+        if watches {
+            self.start_watches();
+        }
+        if publish {
+            self.publish_changes();
+        }
     }
 
     fn forge_done(&self, done: Done) {
@@ -799,10 +843,13 @@ impl Workspace {
             }
             Done::Gated { batches, refs } => self.ask_forges(batches, refs),
             Done::Discussion(key, rendered) => {
-                self.borrow_mut()
+                let mut inner = self.borrow_mut();
+                inner
                     .forges
                     .pages
                     .insert(key.clone(), Page::Ready(rendered));
+                inner.forges.stale = true;
+                drop(inner);
                 self.refresh_discussion(&key);
             }
         }
@@ -905,6 +952,33 @@ impl Workspace {
                     branches.push((project, branch, remote, false));
                 }
             }
+            // The branches of worktrees agents watch, whose repositories'
+            // refs are read on every check.
+            let watched = inner.control_ref().map(|c| c.watched()).unwrap_or_default();
+            let mut watched_repos: Vec<(String, String)> = Vec::new();
+            for (project, path) in watched {
+                let branch = inner
+                    .snapshots
+                    .get(&project)
+                    .and_then(|s| s.worktrees.iter().find(|w| w.path == path))
+                    .and_then(|w| w.branch.clone());
+                let (Some(branch), Some(remote)) = (branch, inner.remote_key(project)) else {
+                    continue;
+                };
+                let repo = (remote.account.clone(), remote.path.clone());
+                if !watched_repos.contains(&repo) {
+                    watched_repos.push(repo);
+                }
+                if !branches
+                    .iter()
+                    .any(|(p, b, _, _)| *p == project && *b == branch)
+                {
+                    let known = inner
+                        .branch_change(project, &remote, &branch)
+                        .is_some_and(|c| c.state != BranchState::None);
+                    branches.push((project, branch, remote, known));
+                }
+            }
             let mut batches: BTreeMap<String, Vec<ForgeCheck>> = BTreeMap::new();
             let mut gates: Vec<Gate> = Vec::new();
             // Repositories with a branch without a change request skip the
@@ -926,6 +1000,7 @@ impl Workspace {
                                 gates.push(Gate {
                                     account: repo.0.clone(),
                                     path: repo.1.clone(),
+                                    filter: true,
                                     env: project.env.clone(),
                                     cwd: project.root.clone(),
                                     known: project.known_repo(),
@@ -976,10 +1051,10 @@ impl Workspace {
             for forge in batches.keys() {
                 inner.forges.asked.insert(forge.clone(), (now, now));
             }
-            gates.retain(|g| {
+            gates.retain_mut(|g| {
                 let repo = (g.account.clone(), g.path.clone());
-                !ungated.contains(&repo)
-                    && inner.forges.seen.contains_key(&repo)
+                g.filter = !ungated.contains(&repo) && inner.forges.seen.contains_key(&repo);
+                (g.filter || watched_repos.contains(&repo))
                     && batches
                         .values()
                         .flatten()
@@ -1000,7 +1075,7 @@ impl Workspace {
             .spawn(move || {
                 let refs = gates
                     .iter()
-                    .map(|g| ((g.account.clone(), g.path.clone()), ls_remote(g)))
+                    .map(|g| ((g.account.clone(), g.path.clone()), ls_remote(g), g.filter))
                     .collect();
                 let _ = sender.send(Done::Gated { batches, refs });
                 if let Some(signal) = wake.get() {
@@ -1011,22 +1086,32 @@ impl Workspace {
 
     /// Asks every forge in `batches`, but not about repositories whose refs
     /// in `refs` did not move since their forge was asked last, unless
-    /// that was [`REFRESH_EVERY`] ago.
-    fn ask_forges(
-        &self,
-        mut batches: BTreeMap<String, Vec<ForgeCheck>>,
-        refs: Vec<((String, String), Option<u64>)>,
-    ) {
+    /// that was [`REFRESH_EVERY`] ago or the repository was read only for
+    /// a watched worktree. Then asks again for the discussions of watched
+    /// worktrees that are due.
+    fn ask_forges(&self, mut batches: BTreeMap<String, Vec<ForgeCheck>>, refs: Vec<Refs>) {
         let now = Instant::now();
+        // The forges that may be asked now; discussions keep to them too.
+        let allowed: Vec<String> = batches.keys().cloned().collect();
+        let moved: Vec<(String, String)>;
         {
             let mut inner = self.borrow_mut();
             inner.forges.gating = None;
             let unmoved: Vec<(String, String)> = refs
                 .iter()
-                .filter_map(|(repo, hash)| {
+                .filter(|(_, _, filter)| *filter)
+                .filter_map(|(repo, hash, _)| {
                     let seen = inner.forges.seen.get(repo)?;
                     let same = hash.is_some_and(|h| h == seen.refs);
                     (same && now.duration_since(seen.asked) < REFRESH_EVERY).then(|| repo.clone())
+                })
+                .collect();
+            // A hash of 0 stands for refs not read yet.
+            moved = refs
+                .iter()
+                .filter_map(|(repo, hash, _)| {
+                    let before = inner.forges.seen.get(repo)?.refs;
+                    (before != 0 && hash.is_some_and(|h| h != before)).then(|| repo.clone())
                 })
                 .collect();
             for checks in batches.values_mut() {
@@ -1037,7 +1122,10 @@ impl Workspace {
                 });
             }
             batches.retain(|_, checks| !checks.is_empty());
-            let hashes: HashMap<_, _> = refs.into_iter().collect();
+            let hashes: HashMap<_, _> = refs
+                .into_iter()
+                .map(|(repo, hash, _)| (repo, hash))
+                .collect();
             for check in batches.values().flatten() {
                 let repo = (check.account.clone(), check.path.clone());
                 // A repository seen for the first time is read on the next
@@ -1052,6 +1140,15 @@ impl Workspace {
                 self.notify(error.to_string());
             }
         }
+        self.ask_watched_discussions(|forge, repo, key, inner| {
+            allowed.iter().any(|f| f == forge)
+                && (moved.contains(repo)
+                    || inner
+                        .forges
+                        .watch_asked
+                        .get(key)
+                        .is_none_or(|at| now.duration_since(*at) >= REFRESH_EVERY))
+        });
     }
 
     /// Sends an extension's `term.http` request, with the account's token
@@ -1092,7 +1189,7 @@ impl Workspace {
         retry_after: Option<u64>,
     ) {
         let mut inner = self.borrow_mut();
-        let mut changed = false;
+        let mut changed: Vec<(String, String, String)> = Vec::new();
         for report in results {
             let key = (
                 report.account.clone(),
@@ -1100,8 +1197,8 @@ impl Workspace {
                 report.branch.clone(),
             );
             if inner.forges.reports.get(&key) != Some(&report) {
-                inner.forges.reports.insert(key, report);
-                changed = true;
+                inner.forges.reports.insert(key.clone(), report);
+                changed.push(key);
             }
         }
         if let Some(seconds) = retry_after {
@@ -1113,10 +1210,22 @@ impl Workspace {
                 .or_insert((Instant::now(), hold));
             entry.1 = hold;
         }
-        if changed {
+        if !changed.is_empty() {
             inner.dirty.sidebar = true;
+            inner.forges.stale = true;
             drop(inner);
             self.ask_waiting_discussions();
+            self.ask_watched_discussions(|_, (account, path), key, inner| {
+                let Some((project, worktree)) = parse_key(key) else {
+                    return false;
+                };
+                let branch = (inner.snapshots.get(&project))
+                    .and_then(|s| s.worktrees.iter().find(|w| w.path == worktree))
+                    .and_then(|w| w.branch.as_deref());
+                branch.is_some_and(|branch| {
+                    (changed.iter()).any(|(a, p, b)| a == account && p == path && b == branch)
+                })
+            });
         }
     }
 
@@ -1361,6 +1470,7 @@ impl Workspace {
             }
             inner.ext.set_forge_hosts(&inner.settings.forge_hosts);
             inner.forges.next_check = Instant::now();
+            inner.forges.stale = true;
             inner.dirty.settings = true;
             inner.dirty.sidebar = true;
         }
@@ -1454,6 +1564,202 @@ fn verify(
 /// The key of the discussion view of worktree `path` of project `project`.
 pub fn discussion_key(project: u64, path: &std::path::Path) -> String {
     format!("{project}:{}", path.display())
+}
+
+/// The project and worktree of a discussion view key.
+fn parse_key(key: &str) -> Option<(u64, PathBuf)> {
+    let (id, path) = key.split_once(':')?;
+    Some((id.parse().ok()?, PathBuf::from(path)))
+}
+
+/// What the control socket reports of the change request of `worktree`.
+fn change_report(
+    project: &str,
+    worktree: &Path,
+    branch: Option<&str>,
+    remote: Option<&RemoteKey>,
+    report: Option<&BranchReport>,
+    page: Option<&Rendered>,
+) -> serde_json::Value {
+    use serde_json::{Value, json};
+    let state = match (branch, remote, report) {
+        (None, ..) => "no_branch",
+        (_, None, _) => "unsupported",
+        (_, _, None) => "unknown",
+        (_, _, Some(report)) => match report.state {
+            BranchState::None => "none",
+            BranchState::Open => "open",
+            BranchState::Merged => "merged",
+            BranchState::Closed => "closed",
+        },
+    };
+    let mut out = json!({
+        "project": project,
+        "worktree": worktree,
+        "branch": branch,
+        "forge": remote.map(|r| r.forge.as_str()),
+        "state": state,
+    });
+    if let Some(report) = report {
+        out["number"] = json!(report.number);
+        out["title"] = json!(report.title);
+        out["url"] = json!(report.url);
+    }
+    let Some(page) = page else { return out };
+    let check = |state: crate::ext::CheckState| match state {
+        crate::ext::CheckState::Success => "success",
+        crate::ext::CheckState::Skipped => "skipped",
+        crate::ext::CheckState::Canceled => "canceled",
+        crate::ext::CheckState::Pending => "pending",
+        crate::ext::CheckState::Running => "running",
+        crate::ext::CheckState::Failed => "failed",
+    };
+    let discussion = &page.discussion;
+    let comments =
+        || (discussion.comments.iter()).chain(discussion.threads.iter().flat_map(|t| &t.comments));
+    let last_activity = comments()
+        .filter_map(|c| c.at.as_deref())
+        .chain(discussion.pushes.iter().filter_map(|p| p.at.as_deref()))
+        .max();
+    let reviews: Vec<Value> = (discussion.reviews.iter())
+        .map(|review| {
+            let verdict = match review.verdict {
+                crate::ext::Verdict::Pending => "pending",
+                crate::ext::Verdict::Commented => "commented",
+                crate::ext::Verdict::Approved => "approved",
+                crate::ext::Verdict::Changes => "changes_requested",
+            };
+            json!({ "author": review.author, "verdict": verdict })
+        })
+        .collect();
+    let checks: Vec<Value> = (page.checks.iter())
+        .map(|c| json!({ "name": c.name, "state": check(c.state), "url": c.url }))
+        .collect();
+    out["details"] = json!({
+        "draft": discussion.draft,
+        "conflicts": discussion.conflicts,
+        "target": discussion.target,
+        "author": discussion.author,
+        "reviews": reviews,
+        // The worst state of all checks.
+        "checks_state": page.checks.iter().map(|c| c.state).max().map(check),
+        "checks": checks,
+        "head": discussion.pushes.last().map(|p| p.commit.as_str()),
+        "comments": comments().count(),
+        "open_threads": discussion.threads.iter().filter(|t| !t.resolved).count(),
+        "last_activity": last_activity,
+    });
+    out
+}
+
+impl Inner {
+    /// The change request of every worktree, as the control socket reports
+    /// it to agents.
+    fn change_entries(&self) -> Vec<crate::control::ChangeEntry> {
+        let mut entries = Vec::new();
+        for project in &self.state.projects {
+            let Some(snapshot) = self.snapshots.get(&project.id) else {
+                continue;
+            };
+            if project.is_global() {
+                continue;
+            }
+            let remote = self.remote_key(project.id);
+            for worktree in snapshot.worktrees.iter().filter(|w| !w.bare) {
+                let branch = worktree.branch.as_deref();
+                let report = branch
+                    .and_then(|branch| self.branch_change(project.id, remote.as_ref()?, branch));
+                let key = discussion_key(project.id, &worktree.path);
+                // Only a page of the branch's current change request.
+                let page = match self.forges.pages.get(&key) {
+                    Some(Page::Ready(page))
+                        if Some(page.branch.as_str()) == branch
+                            && report.as_ref().and_then(|r| r.number) == Some(page.number) =>
+                    {
+                        Some(Arc::clone(page))
+                    }
+                    _ => None,
+                };
+                let value = change_report(
+                    &project.name,
+                    &worktree.path,
+                    branch,
+                    remote.as_ref(),
+                    report.as_ref(),
+                    page.as_deref(),
+                );
+                entries.push(crate::control::ChangeEntry {
+                    project: project.id,
+                    worktree: worktree.path.clone(),
+                    branch: worktree.branch.clone(),
+                    report: value,
+                    page,
+                });
+            }
+        }
+        entries
+    }
+}
+
+impl Workspace {
+    /// Hands the control socket the change request of every worktree.
+    fn publish_changes(&self) {
+        let (control, entries) = {
+            let mut inner = self.borrow_mut();
+            inner.forges.stale = false;
+            (inner.running_control(), inner.change_entries())
+        };
+        if let Some(control) = control {
+            control.publish_changes(entries);
+        }
+    }
+
+    /// Starts the watches agents asked for since the last poll: the next
+    /// poll checks the forges, and each worktree's discussion is asked for.
+    fn start_watches(&self) {
+        let Some(control) = self.borrow().running_control() else {
+            return;
+        };
+        let fresh = control.take_new_watches();
+        if fresh.is_empty() {
+            return;
+        }
+        let now = Instant::now();
+        let mut inner = self.borrow_mut();
+        inner.forges.now();
+        for (project, path) in fresh {
+            let key = discussion_key(project, &path);
+            inner.forges.watch_asked.insert(key.clone(), now);
+            inner.ask_discussion(&key);
+        }
+    }
+
+    /// Asks again for the discussion of each watched worktree with a change
+    /// request that `due` picks, given its forge, repository and view key.
+    fn ask_watched_discussions(&self, due: impl Fn(&str, &(String, String), &str, &Inner) -> bool) {
+        let Some(control) = self.borrow().running_control() else {
+            return;
+        };
+        let now = Instant::now();
+        for (project, path) in control.watched() {
+            let key = discussion_key(project, &path);
+            let mut inner = self.borrow_mut();
+            let Some(remote) = inner.remote_key(project) else {
+                continue;
+            };
+            let numbered = (inner.snapshots.get(&project))
+                .and_then(|s| s.worktrees.iter().find(|w| w.path == path))
+                .and_then(|w| w.branch.as_deref())
+                .and_then(|branch| inner.branch_change(project, &remote, branch))
+                .is_some_and(|change| change.number.is_some());
+            let repo = (remote.account.clone(), remote.path.clone());
+            if !numbered || !due(&remote.forge, &repo, &key, &inner) {
+                continue;
+            }
+            inner.forges.watch_asked.insert(key.clone(), now);
+            inner.ask_discussion(&key);
+        }
+    }
 }
 
 impl Inner {
@@ -1979,6 +2285,7 @@ mod tests {
         let gate = Gate {
             account: "a".into(),
             path: "p".into(),
+            filter: true,
             env: cmdterm_env::Environment::Local,
             cwd: dir.path().to_owned(),
             known: None,

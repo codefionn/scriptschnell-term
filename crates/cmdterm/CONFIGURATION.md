@@ -1210,6 +1210,50 @@ the browser ends them all.
 
 Dialogs (`alert`, `confirm`) are accepted and show up among the console messages.
 
+### Change requests
+
+Agents read the pull or merge request of a worktree's branch from the app's own forge
+checks, the ones behind the rail's Agents tab, so they never ask the forge or its CLI
+themselves. It works with every forge an extension registers (`term.forge`).
+
+| Tool | HTTP | Does |
+| --- | --- | --- |
+| `change_request` | `GET /v1/change-request` | The change request as the checks last saw it |
+| `change_request_wait` | `GET /v1/change-request?wait=SECONDS` | Waits until it changes, then answers the same |
+
+The MCP server above lists both before the extensions' tools, and `GET /v1/tools` and
+`POST /v1/tools/<name>` reach them too. `control change-request` prints one, and
+`control change-request --wait` waits (exit 1 on timeout). Arguments, as JSON for the
+tools and as query parameters over HTTP:
+
+- `worktree`: a worktree of the terminal's project by path, branch or folder name. It
+  defaults to the terminal's own worktree.
+- `full`: `true` (`1` over HTTP) adds `page`, the change request page of the explore
+  panel as Markdown, with the review threads placed on the current code.
+- `since`: a `revision` from an earlier answer. The wait returns at once when the
+  change request changed after it, else when it changes next.
+- `timeout` (tool) or `wait` (HTTP): seconds to wait. The tool waits 240 seconds by
+  default and 840 at most, under the 900 seconds the MCP server gives an answer. Over
+  HTTP the limit is two hours.
+
+An answer has `project`, `worktree`, `branch`, `forge`, `revision` and `state`:
+`open`, `merged`, `closed`, `none` (the branch has no change request), `unknown` (not
+checked yet), `unsupported` (no forge extension knows the remote) or `no_branch`. With
+a change request come `number`, `title` and `url`, and once the app has read its
+discussion, `details`: `draft`, `conflicts`, `target`, `author`, `reviews`, `checks`
+with their worst state in `checks_state`, `head` (the last push the forge saw),
+`comments`, `open_threads` and `last_activity`. A wait adds `changed`. The
+`revision` moves only when one of these fields changes.
+
+The regular checks only ask about agents that finished their turn. A worktree an agent
+reads or waits on is watched as well, for as long as the wait runs and 15 minutes
+after. The app then puts its branch into every check (every three minutes, at most
+every 30 seconds per forge), reads its repository's refs with `git ls-remote`, which
+no forge counts against its API limits, and asks for its discussion again when the refs
+moved, when the change request changed, or 30 minutes after it asked last. Pushes and
+merges show within minutes. A comment, a review or a finished CI run without a push
+can take up to 30 minutes.
+
 ### Extension tools
 
 Extensions with the `agents` permission offer tools of their own (`term.tool`), such as
@@ -1220,7 +1264,8 @@ tool refuses. The MCP server above lists them after the browser tools and runs t
 same way. A tool runs on the app's UI thread with the same 500 ms budget as any extension
 code, and the app answers within 30 seconds or reports that it is busy. The extension sees
 the calling terminal's project with its `project_id`, worktree and environment, and the
-agent's id on the agent list.
+agent's id on the agent list. The names `change_request` and `change_request_wait` are the
+app's own.
 
 ### Agents working together
 

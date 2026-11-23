@@ -172,6 +172,22 @@ post the JSON yourself:
 `{"branch": "feature/x", "from": "main", "agents": [{"agent": "claude", "args": [...]}]}`
 to `/v1/worktrees` (see `CONFIGURATION.md`).
 
+## Waiting for a pull or merge request
+
+The app checks the change requests of its worktrees itself, without spending the
+forge's API quota on git ref changes. Read what it found instead of polling `gh`,
+`glab` or the forge's API:
+
+```sh
+sh $control change-request                       # this worktree's, as JSON
+sh $control change-request --worktree fix/x --full   # another one, with the whole page
+sh $control change-request --wait --since 12 --timeout 1800   # exit 0 when it changed
+```
+
+The MCP server has the same as the tools `change_request` and `change_request_wait`.
+Pass the `revision` of one answer as `since` to the next wait. Pushes and merges show
+within minutes; a review comment without a push can take up to 30 minutes.
+
 ## Working next to other agents
 
 Other agents may work in the app's other terminals, in this worktree or elsewhere. The

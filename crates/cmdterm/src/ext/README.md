@@ -642,7 +642,8 @@ app's terminals call it through the control socket (`GET /v1/tools`,
 `agents` permission.
 
 - `name` is letters, digits, `-` and `_`, unique across extensions. Start it with
-  your extension's name, such as `knowledge_search`.
+  your extension's name, such as `knowledge_search`. `change_request` and
+  `change_request_wait` are the app's own tools and cannot be registered.
 - `description` tells the agent what the tool does.
 - `input` is the JSON schema of the arguments as a Lua table. Its `type` defaults
   to `"object"`.

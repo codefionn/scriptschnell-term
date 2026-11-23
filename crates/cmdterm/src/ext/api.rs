@@ -1039,6 +1039,11 @@ fn install_ui(runtime: &mut Runtime, table: TableHandle, binding: &Binding) -> R
                 ));
             }
         };
+        if crate::control::BUILTIN_TOOLS.contains(&name.as_str()) {
+            return Err(RuntimeError::message(format!(
+                "term.tool: '{name}' is one of the app's own tools"
+            )));
+        }
         let run = required_function(runtime, spec, "run", "tool")?;
         {
             let shared = b.shared.borrow();

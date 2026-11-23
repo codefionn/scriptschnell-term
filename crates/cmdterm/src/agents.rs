@@ -320,6 +320,13 @@ Agents of all the app's terminals (none of these asks the user):
   wait [--timeout SECONDS] [--json]
                         wait for the next messages (exit 1 on timeout, 3
                         when you are not on the list)
+  change-request [--worktree PATH|BRANCH|NAME] [--full]
+                        the pull or merge request of this worktree's branch,
+                        as the app's own forge checks last saw it, as JSON;
+                        it never asks the forge, so poll it freely
+  change-request --wait [--since REVISION] [--timeout SECONDS] [...]
+                        wait until the app sees it change (default 3600
+                        seconds; exit 1 on timeout)
   locks [--json]        the locks agents hold or wait for
   unlock NAME           free this terminal's hold on lock NAME, such as one
                         a command left that was killed or runs on in the
@@ -605,6 +612,35 @@ case $command in
         fi
         rm -f "$body"; exit 1 ;;
       410) cat "$body" >&2; rm -f "$body"; exit 3 ;;
+      *) cat "$body" >&2; rm -f "$body"; exit 1 ;;
+    esac
+    ;;
+  change-request)
+    worktree= full=0 wait= since= timeout=3600
+    while [ "$#" -gt 0 ]; do
+      case $1 in
+        --worktree) need 2 $#; worktree=$2; shift 2 ;;
+        --full) full=1; shift ;;
+        --wait) wait=1; shift ;;
+        --since) need 2 $#; since=$2; shift 2 ;;
+        --timeout) need 2 $#; timeout=$2; shift 2 ;;
+        *) usage >&2; exit 2 ;;
+      esac
+    done
+    case $since in *[!0-9]*) fail "bad revision $since" ;; esac
+    case $timeout in *[!0-9]*|'') fail "bad timeout $timeout" ;; esac
+    set --
+    [ -z "$worktree" ] || set -- -G --data-urlencode "worktree=$worktree"
+    if [ -z "$wait" ]; then
+      call GET "/change-request?full=$full" "$@"
+      exit 0
+    fi
+    max_time=$((timeout + 30)) fetch GET "/change-request?full=$full&wait=$timeout${since:+&since=$since}" "$@"
+    case $code in
+      200)
+        cat "$body"
+        if grep -q '"changed": true' "$body"; then rm -f "$body"; exit 0; fi
+        rm -f "$body"; exit 1 ;;
       *) cat "$body" >&2; rm -f "$body"; exit 1 ;;
     esac
     ;;
@@ -1626,8 +1662,10 @@ impl Agent {
             .collect();
         let (command, args) = (json!(MCP_COMMAND[0]), args.join(", "));
         match self {
+            // Codex gives a tool 60 seconds unless told otherwise; the
+            // control socket's waits take up to 840.
             Agent::Codex => Some(format!(
-                "{MCP_BEGIN}\n[mcp_servers.{MCP_NAME}]\ncommand = {command}\nargs = [{args}]\n{MCP_END}\n"
+                "{MCP_BEGIN}\n[mcp_servers.{MCP_NAME}]\ncommand = {command}\nargs = [{args}]\ntool_timeout_sec = 900\n{MCP_END}\n"
             )),
             Agent::Vibe => Some(format!(
                 "{MCP_BEGIN}\n[[mcp_servers]]\nname = \"{MCP_NAME}\"\ntransport = \"stdio\"\ncommand = {command}\nargs = [{args}]\n{MCP_END}\n"

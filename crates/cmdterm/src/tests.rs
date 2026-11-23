@@ -3097,8 +3097,14 @@ fn agents_that_were_working_resume_in_hidden_worktrees_at_start() {
     let ws = workspace(dir.path());
     let inner = ws.borrow();
     assert_eq!(inner.active_key(), Some((id, repo.clone())));
-    assert!(inner.live_get(id, &working).is_some(), "the working agent waits");
-    assert!(inner.live_get(id, &idle).is_none(), "the idle agent started");
+    assert!(
+        inner.live_get(id, &working).is_some(),
+        "the working agent waits"
+    );
+    assert!(
+        inner.live_get(id, &idle).is_none(),
+        "the idle agent started"
+    );
 }
 
 #[test]
@@ -5573,6 +5579,120 @@ fn change_request_pages_of_worktrees_without_agents_stop_waiting() {
     ws.open_discussion(id, &feature);
     let saved = ws.discussion_for_test(&feature_key).unwrap_or_default();
     assert!(saved.contains("# !3 Polish feature"), "{saved}");
+}
+
+/// An agent reads its worktree's change request from the app's checks: the
+/// read makes the app check a branch no agent row stands for, and a wait
+/// returns once the check and the discussion came in.
+#[cfg(unix)]
+#[test]
+fn agents_wait_for_change_requests_from_the_apps_checks() {
+    use crate::control::call;
+    let dir = tempfile::tempdir().unwrap();
+    let repo = repo(dir.path());
+    git(
+        &repo,
+        &[
+            "remote",
+            "add",
+            "origin",
+            "git@git.example.com:team/app.git",
+        ],
+    );
+    let feature = dir.path().join("feature");
+    git(
+        &repo,
+        &[
+            "worktree",
+            "add",
+            "-q",
+            "-b",
+            "feature",
+            feature.to_str().unwrap(),
+        ],
+    );
+    let feature = cmdterm_env::canonicalize(&feature).unwrap();
+    granted_extension(dir.path(), "hub", &["network"], HUB_FORGE);
+    let ws = workspace(dir.path());
+    add_project_and_wait(&ws, &repo);
+    wait_until(|| {
+        ws.poll();
+        let inner = ws.borrow();
+        inner
+            .snapshots
+            .values()
+            .any(|s| s.worktrees.len() == 2 && s.remote_url.is_some())
+    });
+    assert!(ws.borrow().agent_rows().is_empty());
+    let control = ws.borrow_mut().control().unwrap();
+    let id = ws.borrow().state.projects[0].id;
+    let token = control.register(crate::control::Terminal {
+        project_id: Some(id),
+        project: "repo".into(),
+        worktree: feature.clone(),
+        machine: "local".into(),
+        kind: "local",
+    });
+    let socket = control.socket().to_path_buf();
+    ws.poll();
+    let (status, body) = call(&socket, "GET", "/v1/change-request", &token, b"");
+    assert_eq!(status, 200, "{body}");
+    let first: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(first["state"], "unknown", "{first}");
+    assert_eq!(first["branch"], "feature");
+    let since = first["revision"].as_u64().unwrap();
+
+    let waiting = std::thread::spawn(move || {
+        let path = format!("/v1/change-request?wait=60&since={since}");
+        call(&socket, "GET", &path, &token, b"")
+    });
+    ws.check_forges_now();
+    wait_until(|| {
+        ws.poll();
+        waiting.is_finished()
+    });
+    let (status, body) = waiting.join().unwrap();
+    assert_eq!(status, 200, "{body}");
+    let answer: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert_eq!(answer["changed"], true, "{answer}");
+    assert_eq!(answer["state"], "open", "{answer}");
+    assert_eq!(answer["number"], 3);
+    // The regular checks asked about the watched branch.
+    assert!(
+        ws.borrow()
+            .notices
+            .iter()
+            .any(|n| n.text == "check git.example.com team/app feature false")
+    );
+    // The discussion follows and fills in the details.
+    let socket = control.socket().to_path_buf();
+    let token = control.register(crate::control::Terminal {
+        project_id: Some(id),
+        project: "repo".into(),
+        worktree: feature.clone(),
+        machine: "local".into(),
+        kind: "local",
+    });
+    let mut details = serde_json::Value::Null;
+    wait_until(|| {
+        ws.poll();
+        let (_, body) = call(&socket, "GET", "/v1/change-request?full=1", &token, b"");
+        let answer: serde_json::Value = serde_json::from_str(&body).unwrap();
+        details = answer["details"].clone();
+        if details.is_null() {
+            return false;
+        }
+        assert!(
+            answer["page"].as_str().unwrap().contains("Say hello"),
+            "{answer}"
+        );
+        true
+    });
+    assert_eq!(details["draft"], true, "{details}");
+    assert_eq!(details["checks_state"], "failed", "{details}");
+    assert_eq!(details["reviews"][0]["verdict"], "approved", "{details}");
+    assert_eq!(details["comments"], 2, "{details}");
+    assert_eq!(details["open_threads"], 1, "{details}");
 }
 
 #[test]

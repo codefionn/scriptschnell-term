@@ -8,6 +8,17 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Added
 
+- Agents read the pull or merge request of a worktree's branch from the app's own
+  forge checks with the `change_request` and `change_request_wait` tools of the
+  `scriptschnell-term-browser` MCP server, `GET /v1/change-request` on the control
+  socket, or `control change-request [--wait]`. They get its state, number and URL,
+  and once the app has read the discussion, CI checks, reviews, comment counts and the
+  head commit, all without asking the forge themselves. A wait returns when the state
+  changes. While an agent watches a worktree, the app adds its branch to its checks,
+  finds pushes and merges with `git ls-remote` within minutes, and reads the
+  discussion again when refs move or 30 minutes have passed. Codex now gives the MCP
+  server's tools 900 seconds so these waits can finish.
+
 - Git over SSH works in sandboxes that reach the network through the app's proxy: local
   bubblewrap sandboxes with a network of their own and Seatbelt sandboxes on macOS.
   `GIT_SSH_COMMAND` there runs the proxy bridge in place of `ssh`, and the proxy runs
