@@ -18,6 +18,16 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- Mistral Vibe starts in bubblewrap sandboxes. Its TUI reads its API key from the
+  keyring before it draws more than its banner, and the keyring bus held that read
+  for a dialog, so Vibe sat at "Initializing…" or failed when the read was refused.
+  Vibe's keyring logins (`service` `ai.mistral.vibe` and `ai.mistral.vibe.oidc`)
+  now pass without a question, like Kimi Code's. The default AI host group allows
+  `auth.mistral.ai`, `console.mistral.ai` and `chat.mistral.ai`, which Vibe needs
+  with a Mistral account login. Vibe gets `VIBE_HOME` pointing to a directory of
+  its own with a synced copy of `~/.vibe/config.toml`, as Codex does with
+  `CODEX_HOME`, because it saves its settings by renaming a new file over them,
+  which the read-only bind refused with "Device or resource busy".
 - Agents that were in the middle of a turn when the app closed now resume at start in
   every worktree, not only the one that shows. Before, an agent in another worktree
   waited until you opened that worktree. Idle agents still start once their worktree

@@ -1244,6 +1244,11 @@ pub const HOST_GROUPS: &[HostGroup] = &[
             "api.kimi.com",
             "auth.kimi.com",
             "api.moonshot.ai",
+            // Mistral Vibe with a Mistral account: the login, the account
+            // and the plan's settings.
+            "auth.mistral.ai",
+            "console.mistral.ai",
+            "chat.mistral.ai",
         ],
     },
     HostGroup {

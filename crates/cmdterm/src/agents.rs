@@ -1356,6 +1356,13 @@ impl Agent {
             // Python keyring's entry for the OAuth login, user
             // `oauth/kimi-code`.
             Agent::Kimi => &[&[("service", "kimi-code")]],
+            // Its API key (user `MISTRAL_API_KEY`) and its Mistral account
+            // login (user `cli-oidc:v1:tokens`). Vibe's TUI reads the key
+            // before it draws anything but its banner and waits for the answer.
+            Agent::Vibe => &[
+                &[("service", "ai.mistral.vibe")],
+                &[("service", "ai.mistral.vibe.oidc")],
+            ],
             Agent::Custom(agent) => agent.keyring,
             _ => &[],
         }
@@ -1488,6 +1495,7 @@ impl Agent {
             Agent::Qwen => &[".qwen/settings.json"],
             Agent::Gemini => &[".gemini/settings.json"],
             Agent::Antigravity => &[".gemini/antigravity-cli/settings.json"],
+            Agent::Vibe => &[".vibe/config.toml"],
             Agent::Custom(agent) => agent.synced,
             _ => &[],
         }
@@ -1501,6 +1509,7 @@ impl Agent {
     pub fn sandbox_home_var(self) -> Option<(&'static str, &'static str)> {
         match self {
             Agent::Codex => Some(("CODEX_HOME", ".codex")),
+            Agent::Vibe => Some(("VIBE_HOME", ".vibe")),
             Agent::Custom(agent) => agent.home_var,
             _ => None,
         }

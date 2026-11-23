@@ -1003,6 +1003,34 @@ mod tests {
     }
 
     #[test]
+    #[cfg_attr(
+        not(unix),
+        ignore = "the links are for bubblewrap sandboxes, which are Linux only"
+    )]
+    fn vibe_gets_a_directory_of_its_own_too() {
+        let (_dir, home, sync_dir) = home();
+        let vibe = home.join(".vibe");
+        std::fs::create_dir_all(vibe.join("logs")).unwrap();
+        std::fs::write(vibe.join("config.toml"), "theme = \"auto\"\n").unwrap();
+        if std::env::var_os("VIBE_HOME").is_some() {
+            return;
+        }
+        let sync = AgentSync::new(sync_dir.clone(), approvals());
+        let shadow = sync_dir.join("4").join("copy").join(".vibe");
+        let prepared = sync.prepare(4, &home, |_| false);
+        assert!(prepared.binds.is_empty());
+        let value = shadow.to_string_lossy().into_owned();
+        assert_eq!(prepared.vars, [("VIBE_HOME".to_owned(), value)]);
+        assert_eq!(
+            std::fs::read_link(shadow.join("logs")).unwrap(),
+            vibe.join("logs")
+        );
+        // Vibe saves its settings by renaming a new file over them, which
+        // a bind-mounted file refuses.
+        assert!(!shadow.join("config.toml").is_symlink());
+    }
+
+    #[test]
     fn toml_changes_keep_the_hosts_formatting() {
         let base: toml_edit::DocumentMut = "a = 1\n".parse().unwrap();
         let copy: toml_edit::DocumentMut = "a = 2\n[t]\nb = [1, 2]\n".parse().unwrap();

@@ -580,13 +580,15 @@ the palette; the worktree keeps the choice in `state.json`.
   renew and create them without a dialog, as they may write the agents' login files.
   These are Antigravity CLI's (`service` `gemini`, `username` `antigravity`), which
   waits only five seconds for the keyring and then shows its login screen, Kimi Code's
-  (`service` `kimi-code`) and those extensions name in `sandbox.keyring` of
+  (`service` `kimi-code`), Mistral Vibe's API key and account login (`service`
+  `ai.mistral.vibe` and `ai.mistral.vibe.oidc`) and those extensions name in `sandbox.keyring` of
   `term.agent`. Deleting one still asks, and `block` blocks them too. Calls to other
   services, owning a bus name and listening to other programs' signals are refused.
   On Linux, `cmdterm.agent-settings` covers the settings coding agents change themselves,
   such as when you trust a folder or allow a tool: `~/.claude.json` and
   `~/.claude/settings.json` for Claude Code, `~/.codex/config.toml` for Codex, and
-  `settings.json` of Gemini CLI, Antigravity CLI and Qwen Code. A local project's sandboxes write a copy of
+  `settings.json` of Gemini CLI, Antigravity CLI and Qwen Code, and `~/.vibe/config.toml` for
+  Mistral Vibe. A local project's sandboxes write a copy of
   each, kept per project in the app's state directory, and the app compares the copies
   with this machine's files once a second. Changes on this machine go into the copies.
   Changes in a copy go to this machine's file key by key, so both sides may change other
@@ -596,7 +598,8 @@ the palette; the worktree keeps the choice in `state.json`.
   a dialog with the agent, the file and each changed key. A blocked change stays in the
   sandbox's copy and is not asked about again until the app restarts. Codex gets
   `CODEX_HOME` pointing to a directory of its own with the copy and links to the rest of
-  `~/.codex`, unless `CODEX_HOME` is set already. So that Claude Code can lock
+  `~/.codex`, unless `CODEX_HOME` is set already, and Mistral Vibe gets `VIBE_HOME` the
+  same way, as both replace their settings by renaming a new file over them. So that Claude Code can lock
   `~/.claude.json`, the sandbox sees the home directory as a scratch directory: the
   existing entries are the host's, and new files there vanish when the sandbox ends.
 
