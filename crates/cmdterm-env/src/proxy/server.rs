@@ -841,7 +841,7 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
         .next_if(|first| first == super::ssh::GIT_SSH_FLAG)
         .is_some()
     {
-        return super::ssh::git_ssh_main(args);
+        return super::ssh::client::git_ssh_main(args);
     }
     let mut port = None;
     let mut socket = None;

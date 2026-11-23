@@ -480,7 +480,7 @@ mod tests {
 
     use super::*;
     use crate::proxy::rules::{ProxyRules, builtin_guards};
-    use crate::proxy::ssh::{parse_ssh_args, relay, request_head};
+    use crate::proxy::ssh::client::{parse_ssh_args, relay, request_head};
     use crate::proxy::{Approvals, NetworkProxy};
 
     #[test]
