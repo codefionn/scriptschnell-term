@@ -69,7 +69,9 @@ fn starts_a_real_container_and_runs_commands_in_it() {
         eprintln!("skipped: could not pull {IMAGE} with {engine}");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    // Under the target directory, not /tmp: a sandbox that reaches the
+    // host's engine has a /tmp of its own, which the engine cannot mount.
+    let dir = tempfile::tempdir_in(env!("CARGO_TARGET_TMPDIR")).unwrap();
     let worktree = dir.path().join("realrepo");
     fs::create_dir_all(worktree.join(".devcontainer")).unwrap();
     fs::write(worktree.join("hello.txt"), "from the host\n").unwrap();

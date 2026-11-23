@@ -3526,10 +3526,14 @@ mod tests {
         args: &[&str],
         vars: &[(&str, &str)],
     ) -> std::process::Output {
+        // The tests may run in a terminal of the app; its socket is not
+        // the one under test.
         let mut command = Environment::Local
             .command("sh")
             .arg(dir.join(path))
-            .args(args.iter().copied());
+            .args(args.iter().copied())
+            .var("SCRIPTSCHNELL_TERM_SOCKET", "")
+            .var("SCRIPTSCHNELL_TERM_TOKEN", "");
         for (key, value) in vars {
             command = command.var(key, value);
         }

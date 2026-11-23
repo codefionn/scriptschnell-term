@@ -108,9 +108,18 @@ if [ -z "$copy" ] && [ -n "$(find "$image" -mmin -1 2>/dev/null)" ]; then
     esac
   fi
 fi
+# Another shim, such as one a sandbox binds over the real tool, would hand
+# the call back to this one for ever. Its second line gives it away; only
+# shell builtins read it, since PATH may lack grep.
+shim() {
+  line=
+  { read -r line && read -r line; } <"$1" 2>/dev/null
+  case $line in *'scriptschnell-term clipboard shim'*) return 0 ;; esac
+  return 1
+}
 IFS=:
 for d in $PATH; do
-  [ -x "$d/$tool" ] && ! [ "$d/$tool" -ef "$0" ] && exec "$d/$tool" "$@"
+  [ -x "$d/$tool" ] && ! [ "$d/$tool" -ef "$0" ] && ! shim "$d/$tool" && exec "$d/$tool" "$@"
 done
 echo "$tool: this machine has no clipboard; scriptschnell-term copies text sent to its terminal and hands over images on Ctrl+V" >&2
 exit 1
@@ -445,6 +454,15 @@ mod tests {
         assert_eq!(out.stdout, b"PNG");
         // Text still comes from the real tool.
         let out = run_shim(&wl_paste, &[], &path);
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "real\n");
+        // Past another shim, such as one a sandbox bound over the real tool,
+        // instead of back and forth between the two.
+        let other = scratch.path().join("other");
+        write_executable(&other.join("wl-paste"), &shim("/nowhere")).unwrap();
+        let both = format!("{}:{}:{}", bin.display(), other.display(), real.display());
+        let out = run_shim(&wl_paste, &[], &both);
+        assert_eq!(String::from_utf8_lossy(&out.stdout), "real\n");
+        let out = run_shim(&other.join("wl-paste"), &[], &both);
         assert_eq!(String::from_utf8_lossy(&out.stdout), "real\n");
 
         // Without a real tool the shim says so.

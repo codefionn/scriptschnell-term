@@ -3421,7 +3421,11 @@ fn devcontainer_worktrees_run_terminals_in_the_container() {
         eprintln!("podman or the alpine:3.20 image is missing; skipped");
         return;
     }
-    let dir = tempfile::tempdir().unwrap();
+    // Under the target directory, not /tmp: a sandbox that reaches the
+    // host's podman has a /tmp of its own, which podman cannot mount.
+    let scratch = concat!(env!("CARGO_MANIFEST_DIR"), "/../../target/test-scratch");
+    std::fs::create_dir_all(scratch).unwrap();
+    let dir = tempfile::tempdir_in(scratch).unwrap();
     let repo = repo(dir.path());
     std::fs::create_dir_all(repo.join(".devcontainer")).unwrap();
     std::fs::write(

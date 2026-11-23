@@ -22,6 +22,9 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- The clipboard shims no longer hand a call back and forth for ever when two of them
+  are on `PATH`, such as the one in `~/.local/bin` and the one a sandbox binds over
+  `wl-paste` or `xclip`. A shim now skips other shims when it looks for the real tool.
 - Mistral Vibe starts in bubblewrap sandboxes. Its TUI reads its API key from the
   keyring before it draws more than its banner, and the keyring bus held that read
   for a dialog, so Vibe sat at "Initializing…" or failed when the read was refused.
