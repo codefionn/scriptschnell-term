@@ -1,4 +1,4 @@
-//! `cmdterm-remote`: server, client and VM guest agent for cmdterm remote
+//! `scriptschnell-term-remote`: server, client and VM guest agent for cmdterm remote
 //! machines. See the crate README for setup.
 
 use std::ffi::OsString;
@@ -14,7 +14,7 @@ use cmdterm_remote::server::Server;
 use cmdterm_remote::{DEFAULT_PORT, Paths};
 
 #[derive(Parser)]
-#[command(name = "cmdterm-remote", version, about)]
+#[command(name = "scriptschnell-term-remote", version, about)]
 struct Cli {
     /// One directory for keys, `server.json`, images and VM disks, all in its
     /// `remote/`. Defaults to $SCRIPTSCHNELL_TERM_CONFIG_DIR, else keys and
@@ -115,7 +115,7 @@ enum Command {
         #[arg(last = true)]
         command: Vec<OsString>,
     },
-    /// Link this machine to a cmdterm-web server, so its web app reaches the
+    /// Link this machine to a scriptschnell-term-web server, so its web app reaches the
     /// machine. Every `serve`, and the desktop app while it serves this
     /// machine, then keeps a connection to it.
     Link {
@@ -130,9 +130,9 @@ enum Command {
         #[arg(long)]
         fingerprint: Option<String>,
     },
-    /// Remove the link to a cmdterm-web server.
+    /// Remove the link to a scriptschnell-term-web server.
     Unlink { url: String },
-    /// List the cmdterm-web servers this machine is linked to.
+    /// List the scriptschnell-term-web servers this machine is linked to.
     Links,
     /// Hold a shared connection to a server (started by `exec`).
     #[command(hide = true)]
@@ -188,7 +188,7 @@ fn main() -> ExitCode {
     match run(&paths, cli.command) {
         Ok(code) => ExitCode::from(code),
         Err(error) => {
-            eprintln!("cmdterm-remote: {error}");
+            eprintln!("scriptschnell-term-remote: {error}");
             ExitCode::FAILURE
         }
     }
@@ -199,7 +199,7 @@ fn run(paths: &Paths, command: Command) -> io::Result<u8> {
         Command::Keygen => {
             let identity = paths.load_identity()?;
             if let Err(error) = paths.keep_identity() {
-                eprintln!("cmdterm-remote: the key stays out of the keyring: {error}");
+                eprintln!("scriptschnell-term-remote: the key stays out of the keyring: {error}");
             }
             let mut line_path = paths.identity().into_os_string();
             line_path.push(".pub");
@@ -213,11 +213,11 @@ fn run(paths: &Paths, command: Command) -> io::Result<u8> {
             let server = Server::new(paths.clone())?;
             let address = server.spawn(&listen)?;
             eprintln!(
-                "cmdterm-remote: serving on {address}, host key {}",
+                "scriptschnell-term-remote: serving on {address}, host key {}",
                 server.public_key().fingerprint()
             );
             eprintln!(
-                "cmdterm-remote: authorized keys in {}",
+                "scriptschnell-term-remote: authorized keys in {}",
                 paths.authorized_keys().display()
             );
             wait_for_termination()?;
@@ -238,26 +238,26 @@ fn run(paths: &Paths, command: Command) -> io::Result<u8> {
             let link =
                 cmdterm_remote::link::redeem(paths, &url, &code, &name, fingerprint.as_deref())?;
             eprintln!(
-                "cmdterm-remote: linked to {} as {name}; machines connect to {}",
+                "scriptschnell-term-remote: linked to {} as {name}; machines connect to {}",
                 link.url, link.address
             );
             eprintln!(
-                "cmdterm-remote: the web server's key is {}; compare it with the machine key \
+                "scriptschnell-term-remote: the web server's key is {}; compare it with the machine key \
                  the web app shows",
                 link.key()?.fingerprint()
             );
             eprintln!(
-                "cmdterm-remote: running servers pick the link up within seconds; \
-                 start one with `cmdterm-remote serve` or by serving this machine in the app"
+                "scriptschnell-term-remote: running servers pick the link up within seconds; \
+                 start one with `scriptschnell-term-remote serve` or by serving this machine in the app"
             );
             Ok(0)
         }
         Command::Unlink { url } => {
             if cmdterm_remote::link::remove(paths, &url)? {
-                eprintln!("cmdterm-remote: unlinked {url}");
+                eprintln!("scriptschnell-term-remote: unlinked {url}");
                 Ok(0)
             } else {
-                eprintln!("cmdterm-remote: not linked to {url}");
+                eprintln!("scriptschnell-term-remote: not linked to {url}");
                 Ok(1)
             }
         }
@@ -350,7 +350,9 @@ fn run(paths: &Paths, command: Command) -> io::Result<u8> {
                     eprintln!("not a terminal; pass --fingerprint to confirm it");
                     return false;
                 }
-                eprint!("Trust it? Compare it with `cmdterm-remote keygen` on the server. [y/N] ");
+                eprint!(
+                    "Trust it? Compare it with `scriptschnell-term-remote keygen` on the server. [y/N] "
+                );
                 let _ = io::stderr().flush();
                 let mut answer = String::new();
                 let _ = io::stdin().lock().read_line(&mut answer);

@@ -11,7 +11,7 @@
 //!
 //! Terminals of an SSH host, a remote machine or a VM reach the socket of
 //! this app through a forward (`Environment::forwarded_socket`): ssh's own
-//! `-R`, or the relay of `cmdterm-remote`, both over connections that the
+//! `-R`, or the relay of `scriptschnell-term-remote`, both over connections that the
 //! machines' key pairs authenticate. A change an agent there asks for still
 //! lands in this machine's extensions, the ones the app runs.
 //!

@@ -1,6 +1,6 @@
 #!/bin/sh
 # Starts scriptschnell-term from the mounted AppImage. Its helper programs
-# (cmdterm-remote, cmdterm-proxy-bridge) sit next to it in usr/bin, where
+# (scriptschnell-term-remote, scriptschnell-term-proxy-bridge) sit next to it in usr/bin, where
 # the app looks for them.
 HERE="$(dirname "$(readlink -f "$0")")"
 exec "$HERE/usr/bin/scriptschnell-term" "$@"

@@ -9,7 +9,7 @@
 //! `run` calls) goes through [`Environment`], so a remote project behaves like
 //! a local one. SSH commands share one multiplexed connection per host
 //! (`ControlMaster=auto`), so a VCS poll costs a channel open, not a handshake.
-//! Remote machine commands run through the `cmdterm-remote exec` client, which
+//! Remote machine commands run through the `scriptschnell-term-remote exec` client, which
 //! shares one authenticated connection per server the same way. Local VM
 //! commands go through the same client to the local VM daemon.
 //!
@@ -98,7 +98,7 @@ pub enum Environment {
     Local,
     Ssh(SshTarget),
     Remote(RemoteTarget),
-    /// A Firecracker VM on this machine, run by `cmdterm-remote vmd`.
+    /// A Firecracker VM on this machine, run by `scriptschnell-term-remote vmd`.
     Vm(VmTarget),
     /// A target of an environment an extension registered with
     /// `term.environment`, such as a Coder workspace.
@@ -116,7 +116,7 @@ pub struct VmTarget {
 /// Default TCP port of a cmdterm remote server.
 pub const REMOTE_DEFAULT_PORT: u16 = 7722;
 
-/// A cmdterm remote server, reached with the `cmdterm-remote` client
+/// A cmdterm remote server, reached with the `scriptschnell-term-remote` client
 /// (`crates/cmdterm-remote`). Commands run on the server's host, or inside a
 /// Firecracker VM on it when `vm` names one.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
@@ -143,7 +143,7 @@ impl RemoteTarget {
     }
 }
 
-/// Arguments of `cmdterm-remote exec` that select a remote or local VM
+/// Arguments of `scriptschnell-term-remote exec` that select a remote or local VM
 /// target, or `None` for other environments.
 fn client_args(env: &Environment) -> Option<Vec<OsString>> {
     let client = remote_client();
@@ -174,7 +174,7 @@ fn client_args(env: &Environment) -> Option<Vec<OsString>> {
 /// How this process reaches remote machines.
 #[derive(Clone, Debug)]
 pub struct RemoteClient {
-    /// The `cmdterm-remote` executable.
+    /// The `scriptschnell-term-remote` executable.
     pub program: PathBuf,
     /// Passed as `--config-dir`, so the client uses the same keys as the app.
     pub config_dir: Option<PathBuf>,
@@ -188,18 +188,18 @@ pub fn set_remote_client(client: RemoteClient) {
 }
 
 impl RemoteClient {
-    /// A `cmdterm-remote` next to the running executable, otherwise the one
+    /// A `scriptschnell-term-remote` next to the running executable, otherwise the one
     /// on `PATH`, with its default configuration directory.
     pub fn discover() -> Self {
         let sibling = std::env::current_exe()
             .ok()
             .and_then(|exe| {
-                let name = format!("cmdterm-remote{}", std::env::consts::EXE_SUFFIX);
+                let name = format!("scriptschnell-term-remote{}", std::env::consts::EXE_SUFFIX);
                 Some(exe.parent()?.join(name))
             })
             .filter(|path| path.is_file());
         Self {
-            program: sibling.unwrap_or_else(|| PathBuf::from("cmdterm-remote")),
+            program: sibling.unwrap_or_else(|| PathBuf::from("scriptschnell-term-remote")),
             config_dir: None,
         }
     }
@@ -543,7 +543,7 @@ impl Environment {
     /// `None` when they cannot. Locally and in a sandbox here it is `local`
     /// itself. On an SSH host, a remote machine or a VM it is
     /// `/tmp/<name>.sock` there: ssh listens on it (`-R`), or the server of
-    /// `cmdterm-remote` does. Extensions' environments cannot reach it. A container on this machine reaches it when
+    /// `scriptschnell-term-remote` does. Extensions' environments cannot reach it. A container on this machine reaches it when
     /// one of its mounts holds `local`, at the mounted path; sandboxes of
     /// the Windows launcher cannot reach it. `name` should be unique per
     /// command, since each forward listens on its own path.
@@ -976,7 +976,7 @@ impl EnvCommand {
         }
     }
 
-    /// `cmdterm-remote` arguments that run this command on `target`.
+    /// `scriptschnell-term-remote` arguments that run this command on `target`.
     fn remote_client_args(&self, pty: bool) -> Vec<OsString> {
         let mut args = client_args(&self.env).unwrap_or_default();
         if pty {
@@ -1125,7 +1125,7 @@ fn push_vars(script: &mut OsString, vars: &[(OsString, OsString)]) {
     }
 }
 
-/// `--env KEY=VALUE` and `--forward INSIDE=LOCAL` for `cmdterm-remote exec`.
+/// `--env KEY=VALUE` and `--forward INSIDE=LOCAL` for `scriptschnell-term-remote exec`.
 fn client_var_args(vars: &[(OsString, OsString)], sockets: &[(PathBuf, PathBuf)]) -> Vec<OsString> {
     let mut args = Vec::new();
     for (key, value) in vars {

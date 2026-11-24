@@ -1,4 +1,4 @@
-//! End-to-end tests: a server in this process, the real `cmdterm-remote`
+//! End-to-end tests: a server in this process, the real `scriptschnell-term-remote`
 //! binary as client, and a stand-in for Firecracker that runs the guest
 //! agent on the VM's vsock socket path. Unix only, like the agent.
 
@@ -14,7 +14,7 @@ use cmdterm_remote::keys::{self, Identity};
 use cmdterm_remote::server::{Server, ServerConfig};
 use cmdterm_remote::vm::FirecrackerConfig;
 
-const BIN: &str = env!("CARGO_BIN_EXE_cmdterm-remote");
+const BIN: &str = env!("CARGO_BIN_EXE_scriptschnell-term-remote");
 
 struct Setup {
     server: std::sync::Arc<Server>,
@@ -178,7 +178,7 @@ fn untrusted_and_unauthorized_logins_fail_with_guidance() {
     let out = s.exec(&["--direct"], &["true"]);
     assert_eq!(out.status.code(), Some(255));
     assert!(
-        text(&out.stderr).contains("cmdterm-remote trust"),
+        text(&out.stderr).contains("scriptschnell-term-remote trust"),
         "{}",
         text(&out.stderr)
     );

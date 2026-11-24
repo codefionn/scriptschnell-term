@@ -1,4 +1,4 @@
-//! `cmdterm-web`: the web server, and the commands that manage its users.
+//! `scriptschnell-term-web`: the web server, and the commands that manage its users.
 //! See the crate README.
 
 use std::io::{self, BufRead, IsTerminal, Write};
@@ -15,7 +15,7 @@ use cmdterm_web::store::{Store, User};
 use cmdterm_web::{App, api, auth, now, random_id};
 
 #[derive(Parser)]
-#[command(name = "cmdterm-web", version, about)]
+#[command(name = "scriptschnell-term-web", version, about)]
 struct Cli {
     /// Where `web.json`, `store.json` and the server key live. Defaults to
     /// `cmdterm-web` in the data directory (`~/.local/share` on Linux).
@@ -59,7 +59,7 @@ fn main() -> ExitCode {
     match run(&dir, cli.command) {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("cmdterm-web: {error}");
+            eprintln!("scriptschnell-term-web: {error}");
             ExitCode::FAILURE
         }
     }
@@ -95,10 +95,13 @@ fn serve(dir: &Path, dev: bool) -> io::Result<()> {
         .listen
         .parse()
         .map_err(|e| io::Error::new(io::ErrorKind::InvalidInput, format!("listen: {e}")))?;
-    eprintln!("cmdterm-web: serving {} on {address}", config.public_url());
+    eprintln!(
+        "scriptschnell-term-web: serving {} on {address}",
+        config.public_url()
+    );
     if config.tls.is_none() && !address.ip().is_loopback() {
         eprintln!(
-            "cmdterm-web: plain HTTP on a non-loopback address: session cookies cross the \
+            "scriptschnell-term-web: plain HTTP on a non-loopback address: session cookies cross the \
              network unencrypted; set tls in web.json or bind localhost"
         );
     }
@@ -106,18 +109,20 @@ fn serve(dir: &Path, dev: bool) -> io::Result<()> {
         .map(|k| k.fingerprint())
         .unwrap_or_default();
     eprintln!(
-        "cmdterm-web: machines connect on {linked} as {}, server key {fingerprint}",
+        "scriptschnell-term-web: machines connect on {linked} as {}, server key {fingerprint}",
         config.link_address()
     );
     if let Some(token) = &dev_token {
         // The token goes in the fragment, which the GET never sends, so it
         // stays out of server logs and history; the page POSTs it.
         eprintln!(
-            "cmdterm-web: dev login: {}/auth/token#token={token}",
+            "scriptschnell-term-web: dev login: {}/auth/token#token={token}",
             config.public_url()
         );
         if !address.ip().is_loopback() {
-            eprintln!("cmdterm-web: the dev login works for anyone who reaches {address}");
+            eprintln!(
+                "scriptschnell-term-web: the dev login works for anyone who reaches {address}"
+            );
         }
     }
     runtime.block_on(async move {
@@ -221,7 +226,7 @@ fn user(dir: &Path, command: UserCommand) -> io::Result<()> {
                     created: now(),
                 })
             })?;
-            eprintln!("cmdterm-web: added {name}");
+            eprintln!("scriptschnell-term-web: added {name}");
         }
         UserCommand::Passwd { name } => {
             let user = store
@@ -237,7 +242,7 @@ fn user(dir: &Path, command: UserCommand) -> io::Result<()> {
                 // Browsers logged in with the old password log in again.
                 d.sessions.retain(|s| s.user != user.id);
             })?;
-            eprintln!("cmdterm-web: changed the password of {name}");
+            eprintln!("scriptschnell-term-web: changed the password of {name}");
         }
         UserCommand::Remove { name } => {
             let user = store
@@ -249,7 +254,7 @@ fn user(dir: &Path, command: UserCommand) -> io::Result<()> {
                 d.sessions.retain(|s| s.user != user.id);
             })?;
             eprintln!(
-                "cmdterm-web: removed {name}; restart the server to drop their machines' connections"
+                "scriptschnell-term-web: removed {name}; restart the server to drop their machines' connections"
             );
         }
         UserCommand::List => {

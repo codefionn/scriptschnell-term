@@ -1,4 +1,4 @@
-//! The Windows sandbox behind the `cmdterm-sandbox` launcher.
+//! The Windows sandbox behind the `scriptschnell-term-sandbox` launcher.
 //!
 //! The command runs with a write-restricted copy of the user's token. Its
 //! restricting SIDs are a capability SID, the logon SID and Everyone, so a
@@ -179,7 +179,7 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
             Ok(sid) => Some(Isolation::AppContainer(sid)),
             Err(reason) => {
                 eprintln!(
-                    "cmdterm-sandbox: not using the AppContainer {name}: {reason}; \
+                    "scriptschnell-term-sandbox: not using the AppContainer {name}: {reason}; \
                      using the restricted token instead"
                 );
                 None
@@ -210,7 +210,7 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
             crate::ports::run_bridge_tcp(hub, token.clone(), Vec::new(), listeners, false)
         {
             eprintln!(
-                "cmdterm-sandbox: port hub 127.0.0.1:{port}: {error}; \
+                "scriptschnell-term-sandbox: port hub 127.0.0.1:{port}: {error}; \
                  running without port forwarding"
             );
         }
@@ -223,7 +223,7 @@ pub fn launch_sandboxed(launch: &SandboxLaunch) -> Result<u32, String> {
         match relay::start(address, &[&user, isolation.sid()]) {
             Ok(Some(relayed)) => vars.push((var.clone(), relayed.into())),
             Ok(None) => {}
-            Err(error) => eprintln!("cmdterm-sandbox: {error}"),
+            Err(error) => eprintln!("scriptschnell-term-sandbox: {error}"),
         }
     }
     vars.extend(launch.vars.iter().cloned());
@@ -309,7 +309,7 @@ fn shared_desktop_warning(root: &Path, reason: &str) {
     }
     let _ = std::fs::write(&marker, reason);
     eprintln!(
-        "cmdterm-sandbox: not using a desktop of its own: {reason}; the command shares \
+        "scriptschnell-term-sandbox: not using a desktop of its own: {reason}; the command shares \
          your desktop and can send keystrokes to your windows"
     );
 }
@@ -485,7 +485,7 @@ struct Rule<'a> {
 /// not stop the launch.
 fn warn(result: Result<(), String>) {
     if let Err(error) = result {
-        eprintln!("cmdterm-sandbox: {error}");
+        eprintln!("scriptschnell-term-sandbox: {error}");
     }
 }
 
@@ -563,7 +563,7 @@ fn set_access(path: &Path, rules: &[Rule], legacy: Option<&Sid>) -> Result<(), S
                 // takes minutes for a toolchain's folder. It happens once per
                 // sandbox, and the terminal would stay blank meanwhile.
                 eprintln!(
-                    "cmdterm-sandbox: changing who may use {} and everything in it \
+                    "scriptschnell-term-sandbox: changing who may use {} and everything in it \
                      (first start of this sandbox only)",
                     path.display()
                 );
@@ -807,7 +807,7 @@ fn kill_on_close_job() -> Result<HANDLE, String> {
         ) == 0
         {
             eprintln!(
-                "cmdterm-sandbox: cannot limit the job's access to the desktop: {}",
+                "scriptschnell-term-sandbox: cannot limit the job's access to the desktop: {}",
                 last_error()
             );
         }

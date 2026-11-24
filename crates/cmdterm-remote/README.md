@@ -2,7 +2,7 @@
 
 Remote machines for cmdterm. One machine serves, the others open projects on
 it with `cmdterm://host[:port]/path`. The serving machine can be a dedicated
-server running `cmdterm-remote serve`, or a desktop running `cmdterm --serve`.
+server running `scriptschnell-term-remote serve`, or a desktop running `scriptschnell-term --serve`.
 It can offer its own environment, Firecracker VMs, or both.
 
 The crate builds on Windows so the app can link it there. Keys, `known_hosts`
@@ -16,21 +16,21 @@ run `$SHELL` or `/bin/sh`, so serving a Windows machine is untested.
 On the client:
 
 ```sh
-cmdterm-remote keygen            # prints this machine's public key line
+scriptschnell-term-remote keygen            # prints this machine's public key line
 ```
 
 On the server:
 
 ```sh
-cmdterm-remote authorize 'cmdterm-hybrid-v1 AAAA... me@laptop'
-cmdterm-remote serve             # listens on 0.0.0.0:7722
-cmdterm-remote keygen            # shows the host key fingerprint to compare
+scriptschnell-term-remote authorize 'cmdterm-hybrid-v1 AAAA... me@laptop'
+scriptschnell-term-remote serve             # listens on 0.0.0.0:7722
+scriptschnell-term-remote keygen            # shows the host key fingerprint to compare
 ```
 
 Back on the client:
 
 ```sh
-cmdterm-remote trust server      # shows the fingerprint, asks before saving
+scriptschnell-term-remote trust server      # shows the fingerprint, asks before saving
 scriptschnell-term cmdterm://server/srv/app
 scriptschnell-term cmdterm://server:7722/~/src/app?vm=ci
 ```
@@ -51,7 +51,7 @@ Where the session has secret storage, the private key also goes there: the Secre
 Service through `secret-tool` (gnome-keyring, KWallet, KeePassXC), the login keychain
 through `security` on macOS, or the Credential Manager on Windows. The entry's service is `scriptschnell-term remote key`, and
 its account is the path of `id_hybrid`. A new key is stored right away. A key from before
-goes there the next time the app starts, or on `cmdterm-remote keygen`. When `id_hybrid`
+goes there the next time the app starts, or on `scriptschnell-term-remote keygen`. When `id_hybrid`
 is missing, the key comes back from the storage before a new one is made, and the
 file is written again. With `--config-dir` the storage is left alone, so test runs leave
 no keys in it. The file stays the key in use; the stored copy brings it back.
@@ -66,7 +66,7 @@ says for the rest:
   `share_projects` is false. `no-projects` never shares them with it.
   Projects need host access.
 
-A key without an option follows `server.json`. `cmdterm-remote authorize`
+A key without an option follows `server.json`. `scriptschnell-term-remote authorize`
 takes the same as `--vm-only`, `--host`, `--projects` and `--no-projects`.
 An unknown option, or two that contradict each other like `host,vm-only`,
 rejects the key instead of being ignored. The server reads the file on every
@@ -106,7 +106,7 @@ server to the internet.
 
 ## Connections
 
-`cmdterm-env`'s `Environment::Remote` runs `cmdterm-remote exec` for every
+`cmdterm-env`'s `Environment::Remote` runs `scriptschnell-term-remote exec` for every
 command and shell. `exec` talks to a per-server master over a Unix socket in
 `$XDG_RUNTIME_DIR/cmdterm-remote/`, and starts the master if none runs. The
 master holds the one TCP connection. It exits after 10 minutes without
@@ -130,7 +130,7 @@ that lets more wait holds up the connection the same way; a terminal's
 `exec` is cut off instead, and reconnects to its session.
 
 Clients never prompt. An unknown host key fails with a message that names
-`cmdterm-remote trust`.
+`scriptschnell-term-remote trust`.
 
 `exec --forward INSIDE=LOCAL` carries connections to the Unix socket `INSIDE`
 on the server (or in its VM) back to the Unix socket `LOCAL` on the client
@@ -247,13 +247,13 @@ It exits with 0 when the change applied and 1 when it could not.
 A client's bubblewrap sandbox runs on the server with the server's network, and so
 with its abstract Unix sockets, X11's among them. On Linux the server sets
 `CMDTERM_SCOPE_EXE` for the commands it starts to the program that serves as its
-proxy bridge: `cmdterm-proxy-bridge` when it sits next to the server's executable,
+proxy bridge: `scriptschnell-term-proxy-bridge` when it sits next to the server's executable,
 else that executable. The sandbox starts with a short `sh` script that runs it as
 `PROGRAM --cmdterm-proxy-bridge --try-scope -- COMMAND...`. Where the kernel has
 Landlock ABI 6 (Linux 6.12), the bridge keeps the sandbox from abstract sockets bound
 outside it and from signalling processes outside it, then becomes the command.
 Without the variable, as from older servers, or on an older kernel, the command
-starts as it is. `cmdterm-remote --cmdterm-proxy-bridge ...` is that bridge mode; it
+starts as it is. `scriptschnell-term-remote --cmdterm-proxy-bridge ...` is that bridge mode; it
 is not meant to be run by hand.
 
 ## Shared projects
@@ -275,8 +275,8 @@ before shared projects tries to run the program and fails too.
 
 ## Web links
 
-`cmdterm-remote link https://web.example CODE` links this machine to a
-cmdterm-web server (`crates/cmdterm-web`), whose web app then reaches it from
+`scriptschnell-term-remote link https://web.example CODE` links this machine to a
+scriptschnell-term-web server (`crates/cmdterm-web`), whose web app then reaches it from
 browsers and phones. The code comes from the web app. The machine sends its
 public key with it over HTTPS and gets back the web server's key and the
 address machines connect to; both go into `links.json` next to the keys, mode
@@ -284,7 +284,7 @@ address machines connect to; both go into `links.json` next to the keys, mode
 the web server's key fingerprint after linking: compare it with the machine
 key the web app shows, or pin it beforehand with
 `--fingerprint SHA3-256:...`, which refuses the link when the answer carries
-another key. `cmdterm-remote links` lists the links and `cmdterm-remote
+another key. `scriptschnell-term-remote links` lists the links and `scriptschnell-term-remote
 unlink URL` removes one.
 
 Every server on the machine, `serve` or the app's `--serve`, reads
@@ -305,7 +305,7 @@ starts over at 1 second. Errors are logged once, not on every retry.
 The quickest way to VMs is a ready-made image, built without root:
 
 ```sh
-cmdterm-remote image ubuntu      # or alpine
+scriptschnell-term-remote image ubuntu      # or alpine
 scriptschnell-term vm://ubuntu/~/           # a VM called ubuntu or ubuntu-<anything> uses it
 ```
 
@@ -362,7 +362,7 @@ The VM records its image in `image` next to its disk.
 
 `offer_host: false` turns the server into a pure compute provider. A client
 selects a VM with `?vm=name`. `web_links_vm_only: true` does the same for the
-web servers in `links.json`, whatever `offer_host` says: a linked cmdterm-web
+web servers in `links.json`, whatever `offer_host` says: a linked scriptschnell-term-web
 then serves its browsers only VMs. Each client key gets its own VMs under
 `state_dir/<key id>/<name>/`, and each VM starts with a copy of `rootfs` that
 it keeps between boots (reflinked where the filesystem allows). The server
@@ -382,7 +382,7 @@ host's loopback; it can reach the host's network like any other program.
 A hand-made guest image must run the agent at boot:
 
 ```sh
-cmdterm-remote guest --vsock-port 7723
+scriptschnell-term-remote guest --vsock-port 7723
 ```
 
 The agent serves channels over vsock without encryption, because only the
@@ -395,8 +395,8 @@ unprivileged user if VMs run untrusted code.
 
 The same `firecracker` section gives this machine's own user VMs, without a
 server. Open `vm://name/path` in scriptschnell-term, or run
-`cmdterm-remote exec --local-vm name -- cmd`. `exec` talks to the local VM
-daemon (`cmdterm-remote vmd`) over a Unix socket in
+`scriptschnell-term-remote exec --local-vm name -- cmd`. `exec` talks to the local VM
+daemon (`scriptschnell-term-remote vmd`) over a Unix socket in
 `$XDG_RUNTIME_DIR/cmdterm-remote/`, starting it when needed. Its VMs live
 under `state_dir/local/<name>/` and stop after `idle_secs` without channels;
 the daemon exits once none runs, and SIGTERM stops it with its VMs. When
@@ -405,7 +405,7 @@ image works without a restart. The socket directory is mode 0700, which is
 the only access check.
 
 A VM keeps its disk, but it does not see your files. Copy a project in
-(`tar -c app | cmdterm-remote exec --local-vm dev -- tar -x -C /root/src`)
+(`tar -c app | scriptschnell-term-remote exec --local-vm dev -- tar -x -C /root/src`)
 or clone it inside if the VM has a network. Extensions can copy setup
 files in with `term.copy` when the VM's project first shows
 (`extensions/claude-code` does this for Claude Code).

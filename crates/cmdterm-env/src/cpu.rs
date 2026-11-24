@@ -19,7 +19,7 @@
 //! on the efficiency cores and a specific performance core free.
 //!
 //! On Windows, job objects do the same without a script (`windows.rs`).
-//! A cmdterm-remote server applies the limit itself to the terminals it
+//! A scriptschnell-term-remote server applies the limit itself to the terminals it
 //! starts ([`CpuLimit::to_spec`]) and answers [`REMOTE_PROGRAM`] for the
 //! changes after, so this works on Windows servers too.
 
@@ -43,7 +43,7 @@ pub const SLICE_VAR: &str = "SCRIPTSCHNELL_TERM_CPU_SLICE";
 /// The weight of a scope that nothing lowered: systemd's default.
 pub const DEFAULT_WEIGHT: u32 = 100;
 
-/// The program of a cmdterm-remote channel that changes CPU limits on the
+/// The program of a scriptschnell-term-remote channel that changes CPU limits on the
 /// server instead of running anything, with the arguments [`answer`]
 /// takes. Older servers fail to start it, which leaves their limits alone.
 pub const REMOTE_PROGRAM: &str = "cmdterm-remote:cpu";
@@ -342,7 +342,7 @@ impl CpuLimit {
     }
 
     /// The limit as one word, `unit:reserve:percent:weight`, for a
-    /// cmdterm-remote server to apply to the terminal it starts.
+    /// scriptschnell-term-remote server to apply to the terminal it starts.
     pub fn to_spec(&self) -> String {
         format!(
             "{}:{}:{}:{}",
@@ -395,7 +395,7 @@ pub(crate) fn by_job(env: &Environment) -> bool {
     cfg!(windows) && matches!(env, Environment::Local)
 }
 
-/// Whether `env` is a cmdterm-remote machine, whose server applies the
+/// Whether `env` is a scriptschnell-term-remote machine, whose server applies the
 /// limit.
 pub(crate) fn by_server(env: &Environment) -> bool {
     matches!(env, Environment::Remote(_) | Environment::Vm(_))
@@ -474,7 +474,7 @@ fn local(op: &str, args: &[String]) -> Option<String> {
     run_sh(&Environment::Local, script, args)
 }
 
-/// Answers a [`REMOTE_PROGRAM`] channel on a cmdterm-remote server: the
+/// Answers a [`REMOTE_PROGRAM`] channel on a scriptschnell-term-remote server: the
 /// exit code and output of `topology`, `share RESERVE PERCENT [CORES]` or
 /// `scope UNIT.scope WEIGHT [CORES]` on this machine.
 pub fn answer(args: &[String]) -> (i32, String) {

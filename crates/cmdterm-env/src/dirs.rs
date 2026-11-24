@@ -1,4 +1,4 @@
-//! Where the app and `cmdterm-remote` keep their files, per platform.
+//! Where the app and `scriptschnell-term-remote` keep their files, per platform.
 //!
 //! | Kind | Linux and BSD | macOS | Windows |
 //! | --- | --- | --- | --- |

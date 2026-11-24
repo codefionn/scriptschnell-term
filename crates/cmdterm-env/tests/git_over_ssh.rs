@@ -60,7 +60,9 @@ fn git_in_a_sandbox_clones_and_pushes_over_ssh() {
         eprintln!("bwrap or git unavailable here; skipped");
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let (server, seed, work) = (
         dir.path().join("server"),

@@ -1,9 +1,9 @@
 //! The remote machine server.
 //!
-//! `cmdterm-remote serve` runs it as a dedicated server, and the desktop app
-//! runs it in a thread with `cmdterm --serve`. Each TCP connection gets a
+//! `scriptschnell-term-remote serve` runs it as a dedicated server, and the desktop app
+//! runs it in a thread with `scriptschnell-term --serve`. Each TCP connection gets a
 //! thread: handshake, then [`mux::serve`] until the client leaves.
-//! `authorized_keys` is read per connection, so `cmdterm-remote authorize`
+//! `authorized_keys` is read per connection, so `scriptschnell-term-remote authorize`
 //! takes effect without a restart. A server also dials the web servers in
 //! `links.json` ([`crate::link`]) and serves them over that connection.
 
@@ -543,7 +543,7 @@ fn closer(stream: &TcpStream) -> io::Result<impl FnOnce() + Send + 'static> {
 }
 
 pub(crate) fn log(message: &str) {
-    eprintln!("cmdterm-remote: {message}");
+    eprintln!("scriptschnell-term-remote: {message}");
 }
 
 #[cfg(test)]

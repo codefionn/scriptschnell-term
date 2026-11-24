@@ -71,7 +71,7 @@ number wins.
 - **Not an editor or an IDE.** scriptschnell-term hosts editors in terminals. It does not grow a text
   editor, a language server client, or a debugger UI.
 - **Not a web shell.** The chrome is native SchnellUI. Servo renders page content inside a
-  panel; it never renders scriptschnell-term itself. The one exception is `cmdterm-web`, a
+  panel; it never renders scriptschnell-term itself. The one exception is `scriptschnell-term-web`, a
   separate server for the devices that cannot run the app, such as a phone: it lists your
   machines and projects and attaches to their terminal sessions in a browser. It never
   grows into a second app, and the native app never depends on it.

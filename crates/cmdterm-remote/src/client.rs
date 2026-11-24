@@ -105,7 +105,7 @@ pub fn connect(paths: &Paths, address: &str) -> io::Result<Session<TcpStream>> {
                 io::ErrorKind::PermissionDenied,
                 format!(
                     "the key of {address} is not trusted yet ({}). \
-                     Run `cmdterm-remote trust {address}` and compare the fingerprint",
+                     Run `scriptschnell-term-remote trust {address}` and compare the fingerprint",
                     key.fingerprint()
                 ),
             )),
@@ -189,7 +189,7 @@ pub fn fetch_host_key(paths: &Paths, address: &str) -> io::Result<(PublicKey, Ho
     let stash = seen.clone();
     let result = connect_with(paths, address, move |key| {
         *stash.lock().unwrap() = Some(key.clone());
-        Err(io::Error::other("cmdterm-remote: key fetched"))
+        Err(io::Error::other("scriptschnell-term-remote: key fetched"))
     });
     let Some(key) = seen.lock().unwrap().take() else {
         return Err(result
@@ -350,7 +350,7 @@ pub fn master_connection(paths: &Paths, address: &str) -> io::Result<UnixStream>
 }
 
 /// Connects to the background helper listening on `socket`. If none
-/// listens, starts `cmdterm-remote <args>`, which prints `ready` or
+/// listens, starts `scriptschnell-term-remote <args>`, which prints `ready` or
 /// `error: ...` once it listens or gives up.
 pub(crate) fn helper_connection(
     paths: &Paths,
@@ -441,7 +441,7 @@ pub fn exec(paths: &Paths, mut options: ExecOptions) -> i32 {
     match result {
         Ok(code) => code,
         Err(error) => {
-            eprintln!("cmdterm-remote: {}: {error}", options.target);
+            eprintln!("scriptschnell-term-remote: {}: {error}", options.target);
             255
         }
     }

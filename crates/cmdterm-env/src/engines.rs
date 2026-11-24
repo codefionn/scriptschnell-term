@@ -12,7 +12,7 @@
 //! default, or where `DOCKER_HOST`, `CONTAINER_HOST`, `CONTAINERD_ADDRESS`
 //! or `BUILDKIT_HOST` point, and the sandbox gets the same variable set to
 //! the socket it can reach. Without a docker socket, `DOCKER_HOST` points to
-//! podman's, which speaks the same API. On Windows the `cmdterm-sandbox`
+//! podman's, which speaks the same API. On Windows the `scriptschnell-term-sandbox`
 //! launcher relays the engines' named pipes, see [`SandboxPolicy::pipes`].
 
 use std::path::{Path, PathBuf};

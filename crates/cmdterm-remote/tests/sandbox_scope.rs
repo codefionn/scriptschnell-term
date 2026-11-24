@@ -16,7 +16,7 @@ use cmdterm_remote::Paths;
 use cmdterm_remote::keys::{self, Identity};
 use cmdterm_remote::server::{Server, ServerConfig};
 
-const BIN: &str = env!("CARGO_BIN_EXE_cmdterm-remote");
+const BIN: &str = env!("CARGO_BIN_EXE_scriptschnell-term-remote");
 const NAME_VAR: &str = "CMDTERM_TEST_ABSTRACT_NAME";
 const PORT_VAR: &str = "CMDTERM_TEST_TCP_PORT";
 

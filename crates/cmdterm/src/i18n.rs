@@ -1021,7 +1021,7 @@ pub struct Strings {
     /// The switch that tells clients this machine's projects.
     pub share_projects: &'static str,
     pub share_projects_note: &'static str,
-    /// The switch that keeps web links (cmdterm-web) to VMs.
+    /// The switch that keeps web links (scriptschnell-term-web) to VMs.
     pub web_links_vm_only: &'static str,
     pub web_links_vm_only_note: &'static str,
     pub allowed_keys: &'static str,
@@ -2539,7 +2539,9 @@ pub static EN: Strings = Strings {
     fused_unreachable: "Unreachable, retrying…",
     fetching_key: |address| format!("Fetching key from {address}…"),
     compare_key: |address| {
-        format!("{address} has this key. Compare it with cmdterm-remote keygen on that machine.")
+        format!(
+            "{address} has this key. Compare it with scriptschnell-term-remote keygen on that machine."
+        )
     },
     trust: "Trust",
     trust_named: |address| format!("Trust {address}"),
@@ -3857,7 +3859,7 @@ pub static DE: Strings = Strings {
     fetching_key: |address| format!("Schlüssel von {address} wird abgerufen…"),
     compare_key: |address| {
         format!(
-            "{address} hat diesen Schlüssel. Vergleiche ihn mit cmdterm-remote keygen auf dem Rechner."
+            "{address} hat diesen Schlüssel. Vergleiche ihn mit scriptschnell-term-remote keygen auf dem Rechner."
         )
     },
     trust: "Vertrauen",

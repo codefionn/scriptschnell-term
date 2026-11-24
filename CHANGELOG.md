@@ -81,6 +81,18 @@ All notable changes to scriptschnell-term are in this file. The format is
   for the first time run (`default_runtime`), and the palette still switches one
   worktree. Rebuild the devcontainer moved to the Project page.
 
+### Changed
+
+- The helper programs are named after the app: `cmdterm-remote` is now
+  `scriptschnell-term-remote`, `cmdterm-web` is `scriptschnell-term-web`,
+  `cmdterm-proxy-bridge` is `scriptschnell-term-proxy-bridge`, `cmdterm-sandbox.exe`
+  is `scriptschnell-term-sandbox.exe` and `cmdterm-release` is
+  `scriptschnell-term-release`. Scripts and service files that start them by the old
+  names need the new ones. The crates keep their `cmdterm-*` names, and channel
+  programs, AppContainer profiles, data directories and the `--cmdterm-proxy-bridge`
+  flag stay as they were, so older remote machines and existing sandboxes keep working.
+  The Windows installer removes the old `cmdterm-sandbox.exe`.
+
 ### Fixed
 
 - The installed app on Windows no longer opens a console window next to its own

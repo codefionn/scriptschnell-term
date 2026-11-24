@@ -4,7 +4,7 @@
 //! A machine dials in and logs in with its host key, as the client of the
 //! usual handshake ([`cmdterm_remote::handshake`]). Only keys of linked
 //! machines get in. After that this side opens channels like any client of
-//! a `cmdterm-remote` server: shells in sessions, and the programs that list
+//! a `scriptschnell-term-remote` server: shells in sessions, and the programs that list
 //! projects and sessions. One thread per machine reads its frames and hands
 //! each message to the channel it belongs to.
 
@@ -176,7 +176,7 @@ impl Hub {
                         let peer = stream.peer_addr().ok();
                         if let Err(error) = hub.connection(stream) {
                             eprintln!(
-                                "cmdterm-web: machine at {}: {error}",
+                                "scriptschnell-term-web: machine at {}: {error}",
                                 peer.map(|p| p.to_string()).unwrap_or_default()
                             );
                         }

@@ -585,7 +585,7 @@ impl Workspace {
         }
     }
 
-    /// Whether web servers this machine is linked to (cmdterm-web) may run
+    /// Whether web servers this machine is linked to (scriptschnell-term-web) may run
     /// channels on this machine itself, or only in its VMs.
     pub fn set_web_links_vm_only(&self, on: bool) {
         let saved = self.edit_server_config(|map| {
@@ -1715,8 +1715,8 @@ mod tests {
             .unwrap()
             .parent()
             .unwrap()
-            .join("cmdterm-remote");
-        assert!(remote.is_file(), "build cmdterm-remote first");
+            .join("scriptschnell-term-remote");
+        assert!(remote.is_file(), "build scriptschnell-term-remote first");
         cmdterm_env::set_remote_client(cmdterm_env::RemoteClient {
             program: remote,
             config_dir: Some(dir.path().join("cfg")),

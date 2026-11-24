@@ -1,6 +1,6 @@
 //! cmdterm remote machines.
 //!
-//! A remote machine runs `cmdterm-remote serve`, either as a dedicated server
+//! A remote machine runs `scriptschnell-term-remote serve`, either as a dedicated server
 //! or inside a desktop cmdterm started with `--serve`. Clients reach it over
 //! TCP. The handshake ([`handshake`]) combines X25519 with ML-KEM-768 for the
 //! session keys and signs the transcript with both Ed25519 and ML-DSA-65, so
@@ -13,7 +13,7 @@
 //! the server's host or in a Firecracker microVM ([`vm`]), so a machine can
 //! offer its own environment, its compute resources, or both.
 //!
-//! `cmdterm-env`'s `Environment::Remote` runs `cmdterm-remote exec`, which
+//! `cmdterm-env`'s `Environment::Remote` runs `scriptschnell-term-remote exec`, which
 //! hands its channel to a per-server background master ([`client`]), so a VCS
 //! poll opens a channel instead of repeating the handshake. `exec --forward`
 //! carries a Unix socket of the client to the remote machine ([`relay`]).

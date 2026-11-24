@@ -2,7 +2,7 @@
 //!
 //! The AppImage runtime mounts the image under `/tmp/.mount_*`, starts the
 //! app from there and unmounts it when the app quits. Two things follow.
-//! Programs beside the app (`cmdterm-remote`, `cmdterm-proxy-bridge`) vanish
+//! Programs beside the app (`scriptschnell-term-remote`, `scriptschnell-term-proxy-bridge`) vanish
 //! with the mount, though some outlive the app, such as the remote helper
 //! that keeps connections to remote machines, and bubblewrap sandboxes get a
 //! fresh `/tmp` without the mount. [`install_helpers`] copies them to a
@@ -22,7 +22,10 @@ use std::time::SystemTime;
 pub(crate) const RUNTIME_VARS: [&str; 4] = ["APPIMAGE", "APPDIR", "ARGV0", "OWD"];
 
 /// The programs the app starts from beside its own executable.
-pub const HELPERS: [&str; 2] = ["cmdterm-remote", "cmdterm-proxy-bridge"];
+pub const HELPERS: [&str; 2] = [
+    "scriptschnell-term-remote",
+    "scriptschnell-term-proxy-bridge",
+];
 
 /// Whether this process inherited the AppImage runtime's variables, its own
 /// or those of an AppImage that started it, so commands lose them.

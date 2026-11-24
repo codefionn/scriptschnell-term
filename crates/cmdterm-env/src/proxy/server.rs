@@ -913,7 +913,7 @@ fn percent_decode(text: &str) -> String {
 }
 
 #[cfg(unix)]
-/// The `cmdterm-proxy-bridge` program: `[--scope] [--port PORT --socket
+/// The `scriptschnell-term-proxy-bridge` program: `[--scope] [--port PORT --socket
 /// PATH] [--ports PATH] -- PROGRAM [ARG]...`. With `--scope` it first
 /// keeps itself and the program from the abstract Unix sockets and the
 /// processes outside the sandbox (see `landlock.rs`), or exits when it
@@ -939,7 +939,7 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
     let mut scope = false;
     loop {
         let Some(flag) = args.next() else {
-            eprintln!("cmdterm-proxy-bridge: missing `-- PROGRAM`");
+            eprintln!("scriptschnell-term-proxy-bridge: missing `-- PROGRAM`");
             return 125;
         };
         if flag == "--" {
@@ -957,30 +957,33 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
             (Some("--socket"), Some(value)) => socket = Some(PathBuf::from(value)),
             (Some("--ports"), Some(value)) => ports = Some(PathBuf::from(value)),
             _ => {
-                eprintln!("cmdterm-proxy-bridge: bad flag {}", flag.to_string_lossy());
+                eprintln!(
+                    "scriptschnell-term-proxy-bridge: bad flag {}",
+                    flag.to_string_lossy()
+                );
                 return 125;
             }
         }
     }
     let Some(program) = args.next() else {
-        eprintln!("cmdterm-proxy-bridge: needs PROGRAM");
+        eprintln!("scriptschnell-term-proxy-bridge: needs PROGRAM");
         return 125;
     };
     if port.is_some() != socket.is_some() {
-        eprintln!("cmdterm-proxy-bridge: --port and --socket go together");
+        eprintln!("scriptschnell-term-proxy-bridge: --port and --socket go together");
         return 125;
     }
     // Before any thread starts, since a restriction covers only the
     // calling thread and what it starts later.
     if scope && let Err(error) = crate::landlock::scope() {
-        eprintln!("cmdterm-proxy-bridge: Landlock scope: {error}");
+        eprintln!("scriptschnell-term-proxy-bridge: Landlock scope: {error}");
         return 125;
     }
     if port.is_none() && ports.is_none() {
         use std::os::unix::process::CommandExt;
         let error = std::process::Command::new(&program).args(args).exec();
         eprintln!(
-            "cmdterm-proxy-bridge: {}: {error}",
+            "scriptschnell-term-proxy-bridge: {}: {error}",
             program.to_string_lossy()
         );
         return 127;
@@ -989,7 +992,7 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
         let listener = match TcpListener::bind(("127.0.0.1", port)) {
             Ok(listener) => listener,
             Err(error) => {
-                eprintln!("cmdterm-proxy-bridge: 127.0.0.1:{port}: {error}");
+                eprintln!("scriptschnell-term-proxy-bridge: 127.0.0.1:{port}: {error}");
                 return 125;
             }
         };
@@ -1008,7 +1011,7 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
         && let Err(error) = crate::ports::run_bridge(&hub, port.into_iter().collect())
     {
         eprintln!(
-            "cmdterm-proxy-bridge: {}: {error}; running without port forwarding",
+            "scriptschnell-term-proxy-bridge: {}: {error}; running without port forwarding",
             hub.display()
         );
     }
@@ -1016,7 +1019,7 @@ pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
         Ok(status) => status,
         Err(error) => {
             eprintln!(
-                "cmdterm-proxy-bridge: {}: {error}",
+                "scriptschnell-term-proxy-bridge: {}: {error}",
                 program.to_string_lossy()
             );
             return 127;

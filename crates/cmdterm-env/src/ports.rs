@@ -4,7 +4,7 @@
 //! server it starts binds no host port. A [`PortHub`] is the host's end of
 //! the forwarding for one scope, such as a project. It listens on a Unix
 //! socket that the sandboxes of the scope get at a fixed path, and
-//! `cmdterm-proxy-bridge --ports` (the bridge) inside each sandbox talks to
+//! `scriptschnell-term-proxy-bridge --ports` (the bridge) inside each sandbox talks to
 //! it. The protocol is line based, ASCII, and every line ends in `\n`.
 //!
 //! The bridge opens one control connection and sends `HELLO <sandbox-id>`.

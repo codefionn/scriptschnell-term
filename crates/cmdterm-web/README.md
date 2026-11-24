@@ -11,12 +11,12 @@ desk.
 ## How it fits together
 
 ```
-browser / phone ──HTTPS + WebSocket──▶ cmdterm-web ◀──TCP, hybrid handshake── cmdterm-remote server
+browser / phone ──HTTPS + WebSocket──▶ scriptschnell-term-web ◀──TCP, hybrid handshake── scriptschnell-term-remote server
                                                                          (laptop, desktop app, VM host)
 ```
 
 Machines dial out to the web server, so they can sit behind NAT or move between networks.
-A machine is any `cmdterm-remote` server: `cmdterm-remote serve`, or the desktop app
+A machine is any `scriptschnell-term-remote` server: `scriptschnell-term-remote serve`, or the desktop app
 when it serves this machine (Settings, Remote machines). The connection uses the same
 hybrid post-quantum handshake as remote machines (`crates/cmdterm-remote/README.md`),
 with the roles of the TCP connection reversed: the machine connects, logs in with its host
@@ -29,8 +29,8 @@ Run it on a machine you trust.
 ## Running it
 
 ```sh
-cmdterm-web user add alice              # asks for a password
-cmdterm-web serve --data-dir /var/lib/cmdterm-web
+scriptschnell-term-web user add alice              # asks for a password
+scriptschnell-term-web serve --data-dir /var/lib/cmdterm-web
 ```
 
 For development, `--dev` creates a user `dev` and prints a login link with a token that
@@ -38,8 +38,8 @@ lasts until the process exits. The token rides in the URL fragment, which the br
 never sends to the server, and the page POSTs it, so it stays out of logs and history:
 
 ```sh
-cmdterm-web serve --data-dir "$SCRATCH/web" --dev
-# cmdterm-web: dev login: http://127.0.0.1:8080/auth/token#token=...
+scriptschnell-term-web serve --data-dir "$SCRATCH/web" --dev
+# scriptschnell-term-web: dev login: http://127.0.0.1:8080/auth/token#token=...
 ```
 
 ### Linking a machine
@@ -48,17 +48,17 @@ In the web app, open Machines, then Link a machine. It shows a code that works o
 ten minutes, and the command to run on the machine:
 
 ```sh
-cmdterm-remote link https://web.example ABCD-EFGH-JK --name laptop
+scriptschnell-term-remote link https://web.example ABCD-EFGH-JK --name laptop
 ```
 
 The command prints the web server's key fingerprint after linking. Compare it with the
 machine key the Machines page shows, or pin it before linking with `--fingerprint
 SHA3-256:...`, which refuses the link when the answer carries another key.
 
-The machine stores the link in `links.json` next to its keys. Every `cmdterm-remote`
+The machine stores the link in `links.json` next to its keys. Every `scriptschnell-term-remote`
 server on that machine, including the one the desktop app runs, then keeps a connection
 to the web server and reconnects when it drops: after 1 second, then twice as long each
-time, up to a minute. `cmdterm-remote links` lists the links, `cmdterm-remote unlink
+time, up to a minute. `scriptschnell-term-remote links` lists the links, `scriptschnell-term-remote unlink
 https://web.example` removes one. Removing a machine in the web app refuses its key from
 then on.
 
@@ -166,7 +166,7 @@ seconds.
 | `GET /api/machines/{id}/projects` | `[{"name", "root", "vcs"}]`, asked now; `503` while offline |
 | `GET /api/machines/{id}/sessions` | `[{"name", "attached", "exited"}]`, asked now; `503` while offline |
 | `DELETE /api/machines/{id}/sessions/{name}` | `204`, ends the session |
-| `POST /v1/link/redeem` `{"code", "name", "key"}` | For `cmdterm-remote link`: `{"machine", "server_key", "address"}` |
+| `POST /v1/link/redeem` `{"code", "name", "key"}` | For `scriptschnell-term-remote link`: `{"machine", "server_key", "address"}` |
 
 ### Terminals
 

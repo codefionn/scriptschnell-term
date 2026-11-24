@@ -27,7 +27,9 @@ fn a_server_in_a_sandbox_is_reachable_only_after_expose() {
         eprintln!("bwrap or python3 unavailable here; skipped");
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let hub = PortHub::start(&dir.path().join("hub.sock")).unwrap();
     // A port that is free on the host now, and that the sandbox takes.
@@ -85,7 +87,7 @@ fn a_bridge_that_cannot_reach_the_hub_still_runs_the_program() {
     let dir = std::env::temp_dir().join(format!("cmdterm-bridge-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
     let missing = dir.join("missing.sock");
-    let out = std::process::Command::new(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge"))
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"))
         .arg("--ports")
         .arg(&missing)
         .args(["--", "sh", "-c", "exit 7"])

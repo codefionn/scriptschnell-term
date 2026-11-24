@@ -45,7 +45,7 @@ Locations are a local path, `host:/path`, or `ssh://[user@]host[:port]/path`. SS
 your `~/.ssh/config` and shares one connection per host. Set `SCRIPTSCHNELL_TERM_SSH_PROGRAM`
 to run another executable than `ssh`, such as a wrapper script around `tsh ssh`.
 `cmdterm://host[:port]/path[?vm=name]` opens a project on another machine that runs
-`cmdterm-remote serve` or `cmdterm --serve`, and `vm://name/path` opens one inside a
+`scriptschnell-term-remote serve` or `scriptschnell-term --serve`, and `vm://name/path` opens one inside a
 Firecracker VM on this machine. `crates/cmdterm-remote/README.md` covers keys and VMs.
 Extensions with the `environments` permission add their own schemes for other remote
 coding environments, such as `k8s://pod/path` and `coder://workspace/path` from the
@@ -73,7 +73,7 @@ devcontainer, or in a sandbox that may write only the worktree and cannot read y
 keys. Coding agents (Claude Code, Codex, opencode, pi, Copilot CLI, Qwen Code, Gemini
 CLI, Antigravity CLI, Kimi Code, Mistral Vibe) may also write their login,
 sessions and state in a sandbox, but not their settings, hooks, plugins and skills. Linux uses bubblewrap and macOS uses `sandbox-exec`, where `/tmp` stays shared. On
-Windows the `cmdterm-sandbox` launcher, shipped next to `scriptschnell-term.exe`, runs terminals with a
+Windows the `scriptschnell-term-sandbox` launcher, shipped next to `scriptschnell-term.exe`, runs terminals with a
 write-restricted token: they can write only the worktree and the writable paths, but they
 can still read your keys and reach the network. Each project has its own sandbox identity and temp
 dir, so one project's sandbox cannot write another's files. Agent settings and hooks are
@@ -88,7 +88,7 @@ npm, PyPI and Go registries. The first start asks which of these groups to allow
 Sandboxing > Hosts page asks again from "Choose common hosts". Limited sandboxes on Linux and macOS
 have no network of their own. They reach the allowed hosts through a filtering HTTP proxy
 in scriptschnell-term that `HTTP_PROXY` and `HTTPS_PROXY` point to, and other hosts get `403`. On
-Linux, `cmdterm-proxy-bridge` (built next to `scriptschnell-term`) carries the connections from the
+Linux, `scriptschnell-term-proxy-bridge` (built next to `scriptschnell-term`) carries the connections from the
 sandbox to the proxy. Without one next to it, `scriptschnell-term` runs itself as the bridge. A remote project's sandbox cannot reach the proxy and gets no network.
 On Linux a local sandbox with the whole network has a loopback of its own too, unless `host_network` is on:
 servers in it bind no ports on your machine, only HTTP and HTTPS leave (through the same proxy, which then

@@ -130,7 +130,7 @@ pub struct BuildOptions {
     /// `podman`, `docker`, or a path. `None` prefers podman, which needs no
     /// daemon.
     pub engine: Option<String>,
-    /// The `cmdterm-remote` executable to put into the image.
+    /// The `scriptschnell-term-remote` executable to put into the image.
     pub guest: PathBuf,
     /// Full command output goes here.
     pub log: PathBuf,
@@ -367,8 +367,8 @@ fn build_in(
     let bundle = work.join("cmdterm");
     std::fs::create_dir_all(bundle.join("bin"))?;
     std::fs::create_dir_all(bundle.join("lib"))?;
-    std::fs::copy(&guest, bundle.join("bin/cmdterm-remote"))?;
-    set_mode(&bundle.join("bin/cmdterm-remote"), 0o755)?;
+    std::fs::copy(&guest, bundle.join("bin/scriptschnell-term-remote"))?;
+    set_mode(&bundle.join("bin/scriptschnell-term-remote"), 0o755)?;
     let mut loader = None;
     for library in &libraries {
         std::fs::copy(&library.path, bundle.join("lib").join(&library.name))?;
@@ -454,13 +454,13 @@ fn init_script(loader: Option<&str>) -> String {
     let agent = match loader {
         Some(loader) => format!(
             "/opt/cmdterm/lib/{loader} --library-path /opt/cmdterm/lib \
-             /opt/cmdterm/bin/cmdterm-remote"
+             /opt/cmdterm/bin/scriptschnell-term-remote"
         ),
-        None => "/opt/cmdterm/bin/cmdterm-remote".to_owned(),
+        None => "/opt/cmdterm/bin/scriptschnell-term-remote".to_owned(),
     };
     format!(
         r#"#!/bin/sh
-# PID 1 of cmdterm VMs, written by cmdterm-remote image build.
+# PID 1 of cmdterm VMs, written by scriptschnell-term-remote image build.
 mount -t proc proc /proc
 mount -t sysfs sys /sys
 mount -t devtmpfs dev /dev 2>/dev/null
@@ -584,10 +584,10 @@ mod tests {
         let init = init_script(Some("ld-linux-x86-64.so.2"));
         assert!(init.contains(
             "/opt/cmdterm/lib/ld-linux-x86-64.so.2 --library-path /opt/cmdterm/lib \
-             /opt/cmdterm/bin/cmdterm-remote guest --vsock-port 7723 &"
+             /opt/cmdterm/bin/scriptschnell-term-remote guest --vsock-port 7723 &"
         ));
         assert!(init.contains("dns=${word#cmdterm.dns=}"));
-        assert!(init_script(None).contains("\n/opt/cmdterm/bin/cmdterm-remote guest"));
+        assert!(init_script(None).contains("\n/opt/cmdterm/bin/scriptschnell-term-remote guest"));
     }
 
     #[test]

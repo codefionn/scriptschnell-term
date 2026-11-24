@@ -3,13 +3,13 @@
 //! A server with a `firecracker` section in `server.json` offers VMs. A
 //! client names one (`cmdterm://host/path?vm=ci`), and the server starts it
 //! on first use. Every owner gets its own VMs: the same name from two client
-//! keys means two machines. The local VM daemon (`cmdterm-remote vmd`) runs
+//! keys means two machines. The local VM daemon (`scriptschnell-term-remote vmd`) runs
 //! VMs from the same configuration for this machine's own user, under the
 //! owner `local`. A VM keeps its writable root disk between runs,
 //! so clones and builds inside it survive. It stops after `idle_secs`
 //! without channels.
 //!
-//! The root filesystem image must start `cmdterm-remote guest` at boot (see
+//! The root filesystem image must start `scriptschnell-term-remote guest` at boot (see
 //! the crate README). The server reaches that agent through Firecracker's
 //! vsock device: it connects to the VM's vsock Unix socket and sends
 //! `CONNECT <port>`. Channels then use the same messages as over TCP, without
@@ -693,7 +693,7 @@ impl Channel for VmChannel {
         let sent = self.tx.send(Msg::Data(0, data), cost, Some(wait));
         if sent == Err(crate::queue::SendError::Full) && !self.pty {
             let note = format!(
-                "cmdterm-remote: the VM read none of the command's input for {}s; ended it\n",
+                "scriptschnell-term-remote: the VM read none of the command's input for {}s; ended it\n",
                 wait.as_secs()
             );
             let _ = self.out.try_send(Msg::Stderr(self.id, note.into_bytes()));

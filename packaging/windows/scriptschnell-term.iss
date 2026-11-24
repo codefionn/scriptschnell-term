@@ -50,7 +50,11 @@ Name: "desktopicon"; Description: "{cm:CreateDesktopIcon}"; GroupDescription: "{
 
 [Files]
 Source: "{#SourceDir}\scriptschnell-term.exe"; DestDir: "{app}"; Flags: ignoreversion
-Source: "{#SourceDir}\cmdterm-sandbox.exe"; DestDir: "{app}"; Flags: ignoreversion
+Source: "{#SourceDir}\scriptschnell-term-sandbox.exe"; DestDir: "{app}"; Flags: ignoreversion
+
+[InstallDelete]
+; The launcher was called cmdterm-sandbox.exe before 0.1.3.
+Type: files; Name: "{app}\cmdterm-sandbox.exe"
 
 [Icons]
 Name: "{autoprograms}\scriptschnell-term"; Filename: "{app}\scriptschnell-term.exe"

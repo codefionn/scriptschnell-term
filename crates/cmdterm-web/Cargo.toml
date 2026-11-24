@@ -7,7 +7,7 @@ license.workspace = true
 rust-version.workspace = true
 
 [[bin]]
-name = "cmdterm-web"
+name = "scriptschnell-term-web"
 path = "src/main.rs"
 
 [dependencies]

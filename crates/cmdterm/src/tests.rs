@@ -47,7 +47,7 @@ fn repo(root: &Path) -> std::path::PathBuf {
 }
 
 fn workspace(root: &Path) -> Workspace {
-    // Test binaries have no `cmdterm-proxy-bridge` beside them, so their
+    // Test binaries have no `scriptschnell-term-proxy-bridge` beside them, so their
     // sandboxes keep the host's network instead of the default allowlist
     // and their own namespace, which both need the bridge.
     let settings = SettingsStore::new(root.join("cfg/settings.json"));
@@ -1798,7 +1798,7 @@ fn ssh_hosts_get_the_sandbox_bridge_once_and_never_run_a_changed_one() {
     }))
     .unwrap();
     // A stand-in for the bridge that says when it runs.
-    let local = dir.path().join("bin/cmdterm-proxy-bridge");
+    let local = dir.path().join("bin/scriptschnell-term-proxy-bridge");
     std::fs::create_dir(local.parent().unwrap()).unwrap();
     std::fs::write(
         &local,

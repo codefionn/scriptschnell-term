@@ -1,8 +1,8 @@
 //! The built app opens terminals in a sandbox with the default settings.
 //!
-//! `cargo build -p cmdterm` builds no `cmdterm-proxy-bridge`, so the app has
+//! `cargo build -p cmdterm` builds no `scriptschnell-term-proxy-bridge`, so the app has
 //! to stand in for it. Before it did, every sandboxed shell died with
-//! `bwrap: execvp cmdterm-proxy-bridge` and its pane closed at once: no
+//! `bwrap: execvp scriptschnell-term-proxy-bridge` and its pane closed at once: no
 //! panel could be opened.
 
 #![cfg(target_os = "linux")]

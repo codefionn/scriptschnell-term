@@ -1,6 +1,6 @@
 //! The local VM daemon: Firecracker VMs for this machine's own user.
 //!
-//! `cmdterm-remote exec --local-vm NAME` (what `Environment::Vm` runs)
+//! `scriptschnell-term-remote exec --local-vm NAME` (what `Environment::Vm` runs)
 //! connects to the daemon's Unix socket in [`crate::runtime_dir`] and starts
 //! the daemon when none listens, the same way `exec` starts a master. The
 //! socket directory is mode 0700, so only this user reaches it; there is no

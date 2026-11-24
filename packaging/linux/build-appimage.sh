@@ -3,8 +3,8 @@
 #
 #     packaging/linux/build-appimage.sh <target dir> <version> <out file>
 #
-# <target dir> holds scriptschnell-term, cmdterm-remote and
-# cmdterm-proxy-bridge from `cargo build --release`. APPIMAGETOOL names the
+# <target dir> holds scriptschnell-term, scriptschnell-term-remote and
+# scriptschnell-term-proxy-bridge from `cargo build --release`. APPIMAGETOOL names the
 # appimagetool binary (default: appimagetool on PATH). APPIMAGE_RUNTIME names
 # the type2 runtime file; without it appimagetool downloads the runtime
 # itself. fontconfig and
@@ -23,7 +23,7 @@ mkdir -p "$appdir/usr/bin" \
   "$appdir/usr/share/applications" \
   "$appdir/usr/share/icons/hicolor/scalable/apps" \
   "$appdir/usr/share/icons/hicolor/256x256/apps"
-for bin in scriptschnell-term cmdterm-remote cmdterm-proxy-bridge; do
+for bin in scriptschnell-term scriptschnell-term-remote scriptschnell-term-proxy-bridge; do
   install -m 755 "$target_dir/$bin" "$appdir/usr/bin/$bin"
 done
 install -m 755 "$here/AppRun" "$appdir/AppRun"

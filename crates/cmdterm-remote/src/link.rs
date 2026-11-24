@@ -1,7 +1,7 @@
-//! Links to cmdterm-web servers, which let browsers and phones reach this
+//! Links to scriptschnell-term-web servers, which let browsers and phones reach this
 //! machine.
 //!
-//! `cmdterm-remote link URL CODE` hands this machine's public key and a
+//! `scriptschnell-term-remote link URL CODE` hands this machine's public key and a
 //! pairing code from the web app to the web server, which answers with its
 //! own key and the address machines connect to. Both go into `links.json`.
 //!

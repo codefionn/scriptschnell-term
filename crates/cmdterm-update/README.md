@@ -2,7 +2,7 @@
 
 scriptschnell-term looks for new releases on GitHub and on a mirror at codefionn.eu.
 Windows installs and AppImages install them themselves; other copies tell the user. This
-crate checks the releases, verifies what it finds, and swaps the files. `cmdterm-release`
+crate checks the releases, verifies what it finds, and swaps the files. `scriptschnell-term-release`
 signs the manifests in the release workflow.
 
 ### Release layout
@@ -16,7 +16,7 @@ https://github.com/codefionn/scriptschnell-term/releases/
   latest/download/manifest-windows-x86_64.json.sig     its signature, one line of base64
   latest/download/manifest-linux-x86_64.json(.sig)     the same for the AppImage
   download/v0.2.0/windows-x86_64-scriptschnell-term.exe
-  download/v0.2.0/windows-x86_64-cmdterm-sandbox.exe
+  download/v0.2.0/windows-x86_64-scriptschnell-term-sandbox.exe
   download/v0.2.0/linux-x86_64-scriptschnell-term.AppImage
   download/v0.2.0/scriptschnell-term-0.2.0-windows-x86_64-setup.exe   for first installs
 ```
@@ -74,7 +74,7 @@ in its install record is left to cargo and only notified.
 ### Setting up the key
 
 ```sh
-cargo run -p cmdterm-update --bin cmdterm-release -- keygen release.key
+cargo run -p cmdterm-update --bin scriptschnell-term-release -- keygen release.key
 ```
 
 This writes the secret to `release.key`, the public line to `release.key.pub`, and
@@ -91,8 +91,8 @@ the new public key by hand.
 
 ```sh
 SCRIPTSCHNELL_RELEASE_SIGNING_KEY="$(cat release.key)" \
-  cmdterm-release sign --version 0.2.0 --platform windows-x86_64 --out assets dist/windows-x86_64
-cmdterm-release verify --public-key "$(cat release.key.pub)" --platform windows-x86_64 assets
+  scriptschnell-term-release sign --version 0.2.0 --platform windows-x86_64 --out assets dist/windows-x86_64
+scriptschnell-term-release verify --public-key "$(cat release.key.pub)" --platform windows-x86_64 assets
 ```
 
 `sign` hashes every file in `dist/windows-x86_64/`, copies each into `assets/` under its

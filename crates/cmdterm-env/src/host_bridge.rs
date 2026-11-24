@@ -3,7 +3,7 @@
 //! scope themselves away from its abstract Unix sockets (see `landlock.rs`).
 //!
 //! Those hosts have no program of ours. [`install_host_bridge`] copies this
-//! machine's `cmdterm-proxy-bridge` to
+//! machine's `scriptschnell-term-proxy-bridge` to
 //! `${XDG_CACHE_HOME:-~/.cache}/scriptschnell-term/bin/HASH/` there, with
 //! the directory and the file readable by the user alone, when the host
 //! runs Linux on this build's architecture. A file with the same SHA-256
@@ -59,7 +59,7 @@ pub fn host_bridge_wanted(host: &Environment) -> bool {
     true
 }
 
-/// The `cmdterm-proxy-bridge` program of this machine that hosts get a
+/// The `scriptschnell-term-proxy-bridge` program of this machine that hosts get a
 /// copy of. Only the standalone program, which release builds put beside
 /// the app: the app itself, which a `cargo build -p cmdterm` runs as the
 /// bridge, is far too large to copy. `None` off Linux.
@@ -112,8 +112,11 @@ fn install(host: &Environment, local: &Path) -> Result<(String, String, HostBrid
     if !cfg!(target_os = "linux") || theirs != ours {
         return Err(format!("the host runs {theirs}, this bridge {ours}"));
     }
-    if local.file_name() != Some("cmdterm-proxy-bridge".as_ref()) {
-        return Err(format!("{} is not a cmdterm-proxy-bridge", local.display()));
+    if local.file_name() != Some("scriptschnell-term-proxy-bridge".as_ref()) {
+        return Err(format!(
+            "{} is not a scriptschnell-term-proxy-bridge",
+            local.display()
+        ));
     }
     let sha256 = text(Environment::Local.command("sha256sum").arg(local).stdout())?;
     let sha256 = sha256.get(..64).unwrap_or_default().to_owned();
@@ -130,7 +133,7 @@ fn install(host: &Environment, local: &Path) -> Result<(String, String, HostBrid
     } else if let Some(dir) = answer.strip_prefix("copy ") {
         host.copy_in(local, dir, &[])
             .map_err(|error| format!("cannot copy the bridge: {error}"))?;
-        let path = format!("{dir}/cmdterm-proxy-bridge");
+        let path = format!("{dir}/scriptschnell-term-proxy-bridge");
         (path.clone(), HostBridge::Copied(path))
     } else {
         return Err(format!("unexpected answer from the host: {answer}"));
@@ -155,7 +158,7 @@ fn text(output: Result<Vec<u8>, crate::CommandError>) -> Result<String, String> 
 /// the cache with that SHA-256, else makes its directory, readable by the
 /// user alone, removes what is there and prints `copy DIR`.
 const PROBE: &str = r#"d=${XDG_CACHE_HOME:-$HOME/.cache}/scriptschnell-term/bin/$1
-f=$d/cmdterm-proxy-bridge
+f=$d/scriptschnell-term-proxy-bridge
 if [ -f "$f" ] && [ "$(sha256sum < "$f" | cut -c1-64)" = "$2" ]; then
   echo "same $f"
 else

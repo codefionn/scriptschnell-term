@@ -449,8 +449,8 @@ fn sources_and_assets_follow_the_github_layout() {
     );
     assert_eq!(manifest_asset("linux-x86_64"), "manifest-linux-x86_64.json");
     assert_eq!(
-        file_asset("windows-x86_64", "cmdterm-sandbox.exe"),
-        "windows-x86_64-cmdterm-sandbox.exe"
+        file_asset("windows-x86_64", "scriptschnell-term-sandbox.exe"),
+        "windows-x86_64-scriptschnell-term-sandbox.exe"
     );
     assert!(valid_repo("codefionn/scriptschnell-term"));
     for bad in ["", "a", "a/b/c", "../b", "a/..", "a/b c", "a/b?x"] {

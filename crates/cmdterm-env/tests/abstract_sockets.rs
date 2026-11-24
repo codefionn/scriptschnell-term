@@ -89,7 +89,9 @@ fn host_network_sandboxes_cannot_reach_the_hosts_abstract_sockets() {
         eprintln!("this kernel has no Landlock ABI 6; skipped");
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
 
     let name = format!("cmdterm-test-abstract-{}", std::process::id());
     let addr = SocketAddr::from_abstract_name(name.as_bytes()).unwrap();
@@ -155,7 +157,7 @@ fn host_network_sandboxes_cannot_reach_the_hosts_abstract_sockets() {
     let sandbox = Environment::Sandbox(Box::new(SandboxTarget::new(ssh.clone(), policy)));
     let (abstract_socket, _) = run_client(&sandbox, &name, port);
     assert_eq!(abstract_socket, "got u");
-    let bridge = PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge"));
+    let bridge = PathBuf::from(env!("CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"));
     cmdterm_env::install_host_bridge(&ssh, &bridge).unwrap();
     let (abstract_socket, tcp) = run_client(&sandbox, &name, port);
     assert!(

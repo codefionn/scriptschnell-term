@@ -212,7 +212,7 @@ impl Channel for PipeChannel {
         let cost = data.len();
         if input.send(data, cost, Some(INPUT_WAIT)) == Err(crate::queue::SendError::Full) {
             let note = format!(
-                "cmdterm-remote: the command read none of its input for {}s; ended it\n",
+                "scriptschnell-term-remote: the command read none of its input for {}s; ended it\n",
                 INPUT_WAIT.as_secs()
             );
             let _ = self.out.try_send(Msg::Stderr(self.id, note.into_bytes()));

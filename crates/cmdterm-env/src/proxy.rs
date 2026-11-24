@@ -10,7 +10,7 @@
 //! (`network` and `host_network`): it has a network namespace with only a
 //! loopback, so servers inside never bind the host's ports. The proxy
 //! socket is bound into it, and [`proxy_bridge_main`] (the
-//! `cmdterm-proxy-bridge` program) listens on the sandbox's loopback at the
+//! `scriptschnell-term-proxy-bridge` program) listens on the sandbox's loopback at the
 //! same port, forwards each connection to the socket, and runs the command.
 //! That makes the proxy the only way out, for a sandbox with the network
 //! and one without. The same bridge joins the port hub (`ports.rs`) when
@@ -273,7 +273,7 @@ fn normalize(host: &str) -> String {
 static BRIDGE: OnceLock<Vec<OsString>> = OnceLock::new();
 static BUILT_IN_BRIDGE: OnceLock<OsString> = OnceLock::new();
 
-/// Sets the `cmdterm-proxy-bridge` executable for this process. Only the
+/// Sets the `scriptschnell-term-proxy-bridge` executable for this process. Only the
 /// first call counts.
 pub fn set_proxy_bridge(program: PathBuf) {
     let _ = BRIDGE.set(vec![program.into_os_string()]);
@@ -281,7 +281,7 @@ pub fn set_proxy_bridge(program: PathBuf) {
 
 /// Says that the running executable calls [`proxy_bridge_main`] when its
 /// first argument is `flag`. Sandboxes then run it as the bridge when no
-/// `cmdterm-proxy-bridge` sits next to it, as after `cargo build -p cmdterm`.
+/// `scriptschnell-term-proxy-bridge` sits next to it, as after `cargo build -p cmdterm`.
 pub fn set_built_in_proxy_bridge(flag: &str) {
     let _ = BUILT_IN_BRIDGE.set(flag.into());
 }
@@ -305,14 +305,17 @@ pub(crate) fn known_proxy_bridge() -> Option<&'static [OsString]> {
     found.then_some(bridge)
 }
 
-/// A `cmdterm-proxy-bridge` next to `exe`, otherwise `exe` itself with the
+/// A `scriptschnell-term-proxy-bridge` next to `exe`, otherwise `exe` itself with the
 /// `built_in` flag, otherwise the bridge on `PATH`.
 fn bridge_command(
     exe: Option<&Path>,
     built_in: Option<&OsString>,
     exists: impl Fn(&Path) -> bool,
 ) -> Vec<OsString> {
-    let name = format!("cmdterm-proxy-bridge{}", std::env::consts::EXE_SUFFIX);
+    let name = format!(
+        "scriptschnell-term-proxy-bridge{}",
+        std::env::consts::EXE_SUFFIX
+    );
     if let Some(beside) = exe.and_then(|exe| Some(exe.parent()?.join(&name)))
         && exists(&beside)
     {
@@ -347,7 +350,7 @@ mod tests {
     fn the_bridge_is_the_program_beside_the_app_else_the_app_itself() {
         let exe = Path::new("/opt/term/scriptschnell-term");
         let beside = Path::new("/opt/term").join(format!(
-            "cmdterm-proxy-bridge{}",
+            "scriptschnell-term-proxy-bridge{}",
             std::env::consts::EXE_SUFFIX
         ));
         let flag = OsString::from("--proxy-bridge");
@@ -356,7 +359,7 @@ mod tests {
             [OsString::from(&beside)]
         );
         // `cargo build -p cmdterm` builds no bridge: the app stands in, so
-        // sandboxed terminals do not die with `execvp cmdterm-proxy-bridge`.
+        // sandboxed terminals do not die with `execvp scriptschnell-term-proxy-bridge`.
         assert_eq!(
             bridge_command(Some(exe), Some(&flag), |_| false),
             [exe.as_os_str().to_owned(), flag]
@@ -364,7 +367,7 @@ mod tests {
         assert_eq!(
             bridge_command(Some(exe), None, |_| false),
             [OsString::from(format!(
-                "cmdterm-proxy-bridge{}",
+                "scriptschnell-term-proxy-bridge{}",
                 std::env::consts::EXE_SUFFIX
             ))]
         );

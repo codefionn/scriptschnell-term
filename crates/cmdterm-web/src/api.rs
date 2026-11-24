@@ -79,7 +79,7 @@ impl IntoResponse for ApiError {
 }
 
 fn internal(error: impl std::fmt::Display) -> ApiError {
-    eprintln!("cmdterm-web: {error}");
+    eprintln!("scriptschnell-term-web: {error}");
     ApiError::new(
         StatusCode::INTERNAL_SERVER_ERROR,
         "something went wrong on the server",
@@ -383,7 +383,7 @@ async fn oidc_start(
     match url {
         Ok(url) => Ok(Redirect::to(&url).into_response()),
         Err(error) => {
-            eprintln!("cmdterm-web: sign-in: {error}");
+            eprintln!("scriptschnell-term-web: sign-in: {error}");
             Ok(login_error("the sign-in provider cannot be reached"))
         }
     }
@@ -427,7 +427,10 @@ async fn oidc_callback(
     let claims = match claims {
         Ok(claims) => claims,
         Err(error) => {
-            eprintln!("cmdterm-web: sign-in with {}: {error}", provider.id);
+            eprintln!(
+                "scriptschnell-term-web: sign-in with {}: {error}",
+                provider.id
+            );
             return Ok(login_error("the sign-in failed"));
         }
     };
@@ -675,7 +678,7 @@ async fn pair(State(app): Shared, CurrentUser(user): CurrentUser) -> Json<serde_
     Json(json!({
         "code": shown,
         "expires": now() + PAIRING_FOR.as_secs(),
-        "command": format!("cmdterm-remote link {} {shown}", app.config.public_url()),
+        "command": format!("scriptschnell-term-remote link {} {shown}", app.config.public_url()),
     }))
 }
 
@@ -697,7 +700,7 @@ fn valid_name(name: &str) -> Result<String, ApiError> {
     Ok(name.to_owned())
 }
 
-/// `cmdterm-remote link`: trades a pairing code for the link.
+/// `scriptschnell-term-remote link`: trades a pairing code for the link.
 async fn redeem(
     State(app): Shared,
     ConnectInfo(peer): ConnectInfo<SocketAddr>,

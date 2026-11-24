@@ -144,7 +144,7 @@ enum Command {
     },
 }
 
-/// First argument that runs this executable as `cmdterm-proxy-bridge`.
+/// First argument that runs this executable as `scriptschnell-term-proxy-bridge`.
 #[cfg(unix)]
 const PROXY_BRIDGE_FLAG: &str = cmdterm_env::BUILT_IN_BRIDGE_FLAG;
 
@@ -169,7 +169,7 @@ pub fn main() -> ExitCode {
         dirs.migrate();
         let helpers = appimage_helpers(&dirs);
         if let Some(bin) = &helpers {
-            cmdterm_env::set_proxy_bridge(bin.join("cmdterm-proxy-bridge"));
+            cmdterm_env::set_proxy_bridge(bin.join("scriptschnell-term-proxy-bridge"));
         }
         // The references the prompt names, even when the app never started.
         for error in bundle::install(&dirs) {
@@ -213,8 +213,8 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let helpers = appimage_helpers(&dirs);
     let mut client = cmdterm_env::RemoteClient::discover();
     if let Some(bin) = &helpers {
-        cmdterm_env::set_proxy_bridge(bin.join("cmdterm-proxy-bridge"));
-        client.program = bin.join("cmdterm-remote");
+        cmdterm_env::set_proxy_bridge(bin.join("scriptschnell-term-proxy-bridge"));
+        client.program = bin.join("scriptschnell-term-remote");
     }
     // Remote machine clients use this run's keys, not the default directory's.
     cmdterm_env::set_remote_client(cmdterm_env::RemoteClient {

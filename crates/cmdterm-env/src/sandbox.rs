@@ -37,7 +37,7 @@
 //! (`files`), such as a config file whose credentials an extension
 //! replaced with fakes.
 //!
-//! On Windows the `cmdterm-sandbox` launcher runs the command with a
+//! On Windows the `scriptschnell-term-sandbox` launcher runs the command with a
 //! write-restricted token: writes need a grant to the sandbox's own SID,
 //! which the launcher adds to the writable paths. Each project can have its
 //! own SID and temporary directory (`profile`), so sandboxes of different
@@ -73,7 +73,7 @@ pub enum SandboxKind {
     Bwrap,
     /// `sandbox-exec` with a Seatbelt profile, on macOS.
     Seatbelt,
-    /// The `cmdterm-sandbox` launcher, on Windows.
+    /// The `scriptschnell-term-sandbox` launcher, on Windows.
     Windows,
 }
 
@@ -200,7 +200,7 @@ pub struct SandboxPolicy {
     /// With `network`, share the host's network namespace instead of
     /// running isolated behind the proxy. Only bubblewrap reads it. Servers
     /// inside then bind the host's ports, and `ports` is useless. Here and
-    /// on cmdterm-remote servers and VMs a bridge keeps such a sandbox from
+    /// on scriptschnell-term-remote servers and VMs a bridge keeps such a sandbox from
     /// the host's abstract Unix sockets with Landlock, where the kernel has
     /// it (see `landlock.rs`).
     #[serde(default)]
@@ -784,7 +784,7 @@ impl SandboxPolicy {
         args
     }
 
-    /// `cmdterm-sandbox` arguments up to, not including, the command, whose
+    /// `scriptschnell-term-sandbox` arguments up to, not including, the command, whose
     /// variables are `command_vars`.
     fn launcher_args(&self, command_vars: &[(OsString, OsString)]) -> Vec<OsString> {
         let mut args = Vec::new();
@@ -956,17 +956,17 @@ fn forward_sockets(mut lowered: EnvCommand, command: &EnvCommand) -> EnvCommand 
 
 static LAUNCHER: OnceLock<PathBuf> = OnceLock::new();
 
-/// Sets the `cmdterm-sandbox` executable for this process. Only the first
+/// Sets the `scriptschnell-term-sandbox` executable for this process. Only the first
 /// call counts.
 pub fn set_sandbox_launcher(program: PathBuf) {
     let _ = LAUNCHER.set(program);
 }
 
-/// What [`set_sandbox_launcher`] set, otherwise a `cmdterm-sandbox` next to
+/// What [`set_sandbox_launcher`] set, otherwise a `scriptschnell-term-sandbox` next to
 /// the running executable, otherwise the one on `PATH`.
 fn launcher() -> &'static Path {
     LAUNCHER.get_or_init(|| {
-        let name = format!("cmdterm-sandbox{}", std::env::consts::EXE_SUFFIX);
+        let name = format!("scriptschnell-term-sandbox{}", std::env::consts::EXE_SUFFIX);
         std::env::current_exe()
             .ok()
             .and_then(|exe| Some(exe.parent()?.join(&name)))
@@ -975,7 +975,7 @@ fn launcher() -> &'static Path {
     })
 }
 
-/// A command for the `cmdterm-sandbox` launcher, parsed from its arguments:
+/// A command for the `scriptschnell-term-sandbox` launcher, parsed from its arguments:
 /// `[--write PATH] [--read PATH] [--unset VAR] [--set KEY=VALUE]
 /// [--pipe VAR=PIPE] [--profile NAME] [--read-only PATH] [--appcontainer NAME]
 /// [--hide PATH] [--ports-tcp PORT:TOKEN] [--cwd DIR] -- PROGRAM [ARG]...`.
@@ -1997,7 +1997,7 @@ mod tests {
             lowered
                 .program
                 .to_string_lossy()
-                .contains("cmdterm-sandbox")
+                .contains("scriptschnell-term-sandbox")
         );
         let launch = SandboxLaunch::parse(lowered.args.iter().cloned()).unwrap();
         assert_eq!(
@@ -2309,7 +2309,7 @@ mod tests {
         );
         assert_eq!(var("SSL_CERT_FILE").as_deref(), Some(INNER_CA));
         let end = args.iter().position(|a| a == "--").unwrap();
-        assert!(args[end + 1].contains("cmdterm-proxy-bridge"));
+        assert!(args[end + 1].contains("scriptschnell-term-proxy-bridge"));
         assert_eq!(
             args[end + 2..],
             ["--port", "4321", "--socket", INNER_SOCKET, "--", "ls"]
@@ -2335,7 +2335,7 @@ mod tests {
         let args = strings(&target.lower(&Environment::Local.command("ls"), true).args);
         assert!(!args.contains(&"--share-net".to_owned()));
         let end = args.iter().position(|a| a == "--").unwrap();
-        assert!(args[end + 1].contains("cmdterm-proxy-bridge"));
+        assert!(args[end + 1].contains("scriptschnell-term-proxy-bridge"));
         assert_eq!(
             args[end + 2..],
             ["--port", "4321", "--socket", INNER_SOCKET, "--", "ls"]
@@ -2351,7 +2351,7 @@ mod tests {
         assert!(
             !args
                 .iter()
-                .any(|a| a == INNER_SOCKET || a.contains("cmdterm-proxy-bridge"))
+                .any(|a| a == INNER_SOCKET || a.contains("scriptschnell-term-proxy-bridge"))
         );
         assert!(
             (lowered.vars.iter()).any(|(k, v)| k == "HTTP_PROXY" && v == "http://127.0.0.1:4321")
@@ -2372,7 +2372,7 @@ mod tests {
     #[test]
     fn the_bridge_is_bound_where_the_sandbox_replaces_its_directory() {
         let mut args: Vec<OsString> = vec!["--tmpfs".into(), "/tmp".into()];
-        let bridge: OsString = "/tmp/.mount_abc/usr/bin/cmdterm-proxy-bridge".into();
+        let bridge: OsString = "/tmp/.mount_abc/usr/bin/scriptschnell-term-proxy-bridge".into();
         bind_wrapper(&mut args, &[bridge.clone(), "--scope".into()]);
         assert_eq!(
             args,
@@ -2402,8 +2402,8 @@ mod tests {
             Some("'/opt/my term/app' --cmdterm-proxy-bridge --git-ssh")
         );
         assert_eq!(
-            git_ssh_command(&["/b/cmdterm-proxy-bridge".into()]).as_deref(),
-            Some("/b/cmdterm-proxy-bridge --git-ssh")
+            git_ssh_command(&["/b/scriptschnell-term-proxy-bridge".into()]).as_deref(),
+            Some("/b/scriptschnell-term-proxy-bridge --git-ssh")
         );
     }
 
@@ -2418,7 +2418,11 @@ mod tests {
         // Nothing to forward, no bridge. Still no host network.
         let args = lower(&policy);
         assert!(!args.contains(&"--share-net".to_owned()));
-        assert!(!args.iter().any(|a| a.contains("cmdterm-proxy-bridge")));
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.contains("scriptschnell-term-proxy-bridge"))
+        );
 
         // A hub alone.
         policy.ports = Some("/run/hub.sock".into());
@@ -2430,7 +2434,7 @@ mod tests {
             ("--bind", INNER_PORTS)
         );
         let end = args.iter().position(|a| a == "--").unwrap();
-        assert!(args[end + 1].contains("cmdterm-proxy-bridge"));
+        assert!(args[end + 1].contains("scriptschnell-term-proxy-bridge"));
         assert_eq!(args[end + 2..], ["--ports", INNER_PORTS, "--", "ls"]);
 
         // Both.
@@ -2463,7 +2467,7 @@ mod tests {
         assert!(
             !args
                 .iter()
-                .any(|a| a == INNER_PORTS || a.contains("cmdterm-proxy-bridge"))
+                .any(|a| a == INNER_PORTS || a.contains("scriptschnell-term-proxy-bridge"))
         );
 
         // host_network does nothing without network.

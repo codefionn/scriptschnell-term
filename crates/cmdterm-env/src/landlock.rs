@@ -13,11 +13,11 @@
 //! inside the same restriction, and signal only processes inside it. A
 //! restriction applies to the calling thread and is inherited across fork
 //! and exec, so the proxy bridge applies it first thing inside the sandbox
-//! (`cmdterm-proxy-bridge --scope`) and then replaces itself with the shell.
+//! (`scriptschnell-term-proxy-bridge --scope`) and then replaces itself with the shell.
 //! Binding is not scoped: a sandbox can still take an unused abstract name
 //! that a program outside connects to later.
 //!
-//! A sandbox on a cmdterm-remote server or VM runs on that machine, where
+//! A sandbox on a scriptschnell-term-remote server or VM runs on that machine, where
 //! the client cannot name a program. The server puts the path of its own
 //! bridge into [`SCOPE_EXE_VAR`] for the commands it starts, and a short
 //! `sh` script at the start of the sandbox runs that bridge with
@@ -34,11 +34,11 @@ use std::ffi::{OsStr, OsString};
 
 use crate::Environment;
 
-/// The first argument with which the app and `cmdterm-remote` run as the
-/// proxy bridge. The `cmdterm-proxy-bridge` program skips it.
+/// The first argument with which the app and `scriptschnell-term-remote` run as the
+/// proxy bridge. The `scriptschnell-term-proxy-bridge` program skips it.
 pub const BUILT_IN_BRIDGE_FLAG: &str = "--cmdterm-proxy-bridge";
 
-/// The variable in which a cmdterm-remote server names its bridge for the
+/// The variable in which a scriptschnell-term-remote server names its bridge for the
 /// commands it starts, see [`scope_exe`].
 pub const SCOPE_EXE_VAR: &str = "CMDTERM_SCOPE_EXE";
 
@@ -99,7 +99,7 @@ pub(crate) fn scope() -> std::io::Result<()> {
     ))
 }
 
-/// What a cmdterm-remote server puts into [`SCOPE_EXE_VAR`]: its bridge,
+/// What a scriptschnell-term-remote server puts into [`SCOPE_EXE_VAR`]: its bridge,
 /// when it has one that sandboxes started from [`REMOTE_SCOPE`] can run.
 /// `None` off Linux, and in test binaries without a known bridge.
 pub fn scope_exe() -> Option<&'static OsStr> {
@@ -116,7 +116,7 @@ pub fn scope_exe() -> Option<&'static OsStr> {
 /// What goes before the command of a bubblewrap sandbox with the host's
 /// network on `host`, so the sandbox cannot reach abstract Unix sockets
 /// bound outside it, or `None` to start it as it is. This machine runs its
-/// bridge with `--scope` where its kernel can, and a cmdterm-remote server
+/// bridge with `--scope` where its kernel can, and a scriptschnell-term-remote server
 /// or VM runs [`REMOTE_SCOPE`]. SSH hosts and extension environments run
 /// the copy `host_bridge.rs` put there, once it is there. Containers have
 /// no bridge of ours, and a bridge here that is only a guess at `PATH`, as
@@ -308,7 +308,10 @@ mod tests {
         };
         // Without a server's bridge, or with one that is gone, as it is.
         assert_eq!(run(None), "[unset] arg\n");
-        assert_eq!(run(Some("/nonexistent/cmdterm-remote")), "[unset] arg\n");
+        assert_eq!(
+            run(Some("/nonexistent/scriptschnell-term-remote")),
+            "[unset] arg\n"
+        );
         // `echo` stands in for the bridge: it prints the flags and the
         // command it got. (A script written here could fail to start with
         // ETXTBSY while another test thread forks.)

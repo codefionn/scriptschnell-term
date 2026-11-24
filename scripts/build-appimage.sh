@@ -58,7 +58,7 @@ export APPIMAGE_RUNTIME
 export APPIMAGE_EXTRACT_AND_RUN=1
 
 cargo build --release --locked \
-  --bin scriptschnell-term --bin cmdterm-remote --bin cmdterm-proxy-bridge
+  --bin scriptschnell-term --bin scriptschnell-term-remote --bin scriptschnell-term-proxy-bridge
 
 mkdir -p "$(dirname "$out")"
 packaging/linux/build-appimage.sh target/release "$version" "$out"

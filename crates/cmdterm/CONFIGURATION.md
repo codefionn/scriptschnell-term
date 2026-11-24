@@ -23,7 +23,7 @@ with the same file names. Use it for a scratch configuration.
 | Data: `CONFIGURATION.md` | This file | The app, on every start |
 | Data: `extensions/` | The shipped extensions, `README.md` (the extension reference) and `types/` | The app, on every start |
 | Data: `remote/` | VM images and disks | Settings page Virtual machines |
-| Data: `bin/` | `cmdterm-remote` and `cmdterm-proxy-bridge`, copied out of the AppImage, which takes them along when it quits and which sandboxes do not see | The app, on every start from an AppImage |
+| Data: `bin/` | `scriptschnell-term-remote` and `scriptschnell-term-proxy-bridge`, copied out of the AppImage, which takes them along when it quits and which sandboxes do not see | The app, on every start from an AppImage |
 | Data: `extension-data/` | What extensions keep with `term.store`, one directory per extension and one JSON file per key | Extensions |
 | Data: `project-data/` | What extensions keep per project with `term.project_store`, as `<project id>/<extension>/` | Extensions |
 | State: `state.json` | Projects, worktrees, panel layout per worktree | The app |
@@ -432,12 +432,12 @@ every project, a project can choose for itself on its Project page (`runtime` in
   X11 program you start outside the sandbox connects to it, so the sandbox sees what
   that program draws and copies, and can send it fake input.
   Sandboxes on a remote machine or a VM always keep that machine's network and its
-  abstract sockets. A scriptschnell-term server there (`cmdterm-remote serve`, or an app
+  abstract sockets. A scriptschnell-term server there (`scriptschnell-term-remote serve`, or an app
   that serves its machine) restricts them the same way when that machine's kernel has
   Landlock ABI 6. Older servers and kernels start them without the restriction, and no
   notice says so. Sandboxes on a host reached over SSH, or on a host of an extension's
   environment, keep its network too. The first sandbox there makes the app copy its
-  `cmdterm-proxy-bridge` to `${XDG_CACHE_HOME:-~/.cache}/scriptschnell-term/bin/` on that
+  `scriptschnell-term-proxy-bridge` to `${XDG_CACHE_HOME:-~/.cache}/scriptschnell-term/bin/` on that
   host, in a folder named after the program's SHA-256, readable by you alone. It skips
   the copy when the file there has the same SHA-256, and replaces it when not. Later
   sandboxes run that copy to restrict themselves as above, after checking its SHA-256
@@ -445,10 +445,10 @@ every project, a project can choose for itself on its Project page (`runtime` in
   without the restriction. The copy happens in the background, so sandboxes that start
   before it is done start without it. Hosts that do not run Linux on this machine's
   processor architecture, hosts whose C library is too old for the program, and app
-  builds without a `cmdterm-proxy-bridge` beside the app (a plain `cargo build -p
+  builds without a `scriptschnell-term-proxy-bridge` beside the app (a plain `cargo build -p
   cmdterm`) get no copy, and their sandboxes start without the restriction.
 - `sandbox.windows_appcontainer`: experimental, Windows only, off by default. The
-  `cmdterm-sandbox` launcher runs commands in an AppContainer (profile
+  `scriptschnell-term-sandbox` launcher runs commands in an AppContainer (profile
   `cmdterm-sandbox-<project id>`) instead of under a write-restricted token. Writable
   paths are granted to the AppContainer, and so are read and run rights on the toolchain
   directories of your user profile (`.cargo`, `.rustup`, `.dotnet`, `.nuget`, `.nvm`,
@@ -497,7 +497,7 @@ every project, a project can choose for itself on its Project page (`runtime` in
   ends once the access token expires.
 - Git over SSH reaches allowed hosts from local bubblewrap sandboxes with a network of
   their own and from Seatbelt sandboxes on macOS, when the sandbox has the proxy. These
-  sandboxes get `GIT_SSH_COMMAND`, which runs `cmdterm-proxy-bridge --git-ssh` in place of
+  sandboxes get `GIT_SSH_COMMAND`, which runs `scriptschnell-term-proxy-bridge --git-ssh` in place of
   `ssh`, and `GIT_SSH_VARIANT=ssh`. The bridge hands git's remote command to the proxy,
   and the proxy runs this machine's `ssh` for it, with your SSH configuration, agent and
   known hosts, so your keys never enter the sandbox. Only `git-upload-pack`,
@@ -540,7 +540,7 @@ every project, a project can choose for itself on its Project page (`runtime` in
   or `BUILDKIT_HOST` names, or else the engine's default socket. Sandboxes get these
   variables set to the socket they can reach, and `DOCKER_HOST` points to podman when
   there is no docker. Inside WSL, the interop socket stays open, so Windows programs such
-  as `wsl.exe`, `wslc.exe` and `docker.exe` start. On Windows the `cmdterm-sandbox`
+  as `wsl.exe`, `wslc.exe` and `docker.exe` start. On Windows the `scriptschnell-term-sandbox`
   launcher relays the engines' named pipes (`docker_engine`, `podman-machine-default`,
   `containerd-containerd`, `buildkitd`). The engines run outside the sandbox: a container
   a sandbox starts can mount any host path and reach any host, whatever `hidden` and
@@ -652,11 +652,11 @@ Extensions add hosts, paths, variables, fake credentials and guards on top of th
 - `remote.serve`: let other machines open projects here while the app runs.
 - `remote.listen`: address and port, default `0.0.0.0:7722`.
 
-The Remote machines page of the settings manages keys; `cmdterm-remote` has the same
+The Remote machines page of the settings manages keys; `scriptschnell-term-remote` has the same
 commands on the command line.
 
-While the app serves this machine, it also connects to the cmdterm-web servers this
-machine is linked to with `cmdterm-remote link`, so their web app reaches it from a
+While the app serves this machine, it also connects to the scriptschnell-term-web servers this
+machine is linked to with `scriptschnell-term-remote link`, so their web app reaches it from a
 browser or a phone. `crates/cmdterm-web/README.md` covers the web server.
 
 ### Projects of other machines
@@ -1005,7 +1005,7 @@ The app writes it after every structural change: projects (with their environmen
 VCS and forge), the active project and worktree, and per worktree its tabs, panels, extra
 environment variables (`env_vars`), where its terminals run and the titles of its last agent sessions
 (`agent_titles`, oldest first). A terminal on another machine, in a VM or in a container
-gets `env_vars` on the command line of the ssh, `cmdterm-remote` or container engine
+gets `env_vars` on the command line of the ssh, `scriptschnell-term-remote` or container engine
 process the app starts for it, where other users of this machine can read them with `ps`,
 so keep secrets out of them. On Unix the app writes `state.json` and `settings.json` with
 mode 0600. `allows_launches` is true for a project whose agents
@@ -1045,7 +1045,7 @@ command-line arguments.
 task (`term.task`) last ran, per project; delete an entry to make that task due again.
 A terminal on a remote machine or a local VM saves the name of its `session`. The shell
 keeps running on that machine when the connection drops or the app quits, and the
-terminal attaches to it again on the next start (see Sessions in the `cmdterm-remote`
+terminal attaches to it again on the next start (see Sessions in the `scriptschnell-term-remote`
 README). Closing the terminal ends the session. With the name it saves `control`: the
 name of the control socket forwarded to the shell and the shell's token, so the shell
 still reaches the socket after the terminal attaches again. Changing where a worktree's
@@ -1125,7 +1125,7 @@ machine, else the first one on `PATH`. On Windows the prompt is printed for you 
 A project folder named `fix` needs a path such as `./fix`.
 
 Locations are a local path, `host:/path`, `ssh://[user@]host[:port]/path`,
-`cmdterm://host[:port]/path[?vm=name]` for a machine that runs `cmdterm-remote serve`,
+`cmdterm://host[:port]/path[?vm=name]` for a machine that runs `scriptschnell-term-remote serve`,
 `vm://name/path` for a local VM, `scheme://target/path` for an environment an extension
 registers with `term.environment` (such as `k8s://pod/path` from the shipped
 `kubernetes` extension or `coder://workspace/path` from `coder`), or a repository URL to clone.
@@ -1230,7 +1230,7 @@ there lands in this machine's extensions, the ones the app runs:
 | This machine | Directly |
 | A sandbox here | The socket is bound into the sandbox (bubblewrap) or allowed (Seatbelt) |
 | An SSH host, also sandboxed there | `ssh -R` on the terminal's own connection, to `/tmp/scriptschnell-term-<random>.sock`, mode 0600; the shell removes it when it exits |
-| A remote machine or VM | The relay of `cmdterm-remote exec --forward`, over the connection both machines' keys authenticate, to the same kind of path |
+| A remote machine or VM | The relay of `scriptschnell-term-remote exec --forward`, over the connection both machines' keys authenticate, to the same kind of path |
 | A devcontainer of this machine's engine | The socket's directory is mounted at `/run/scriptschnell-term` when the container is created. Rebuild an older container to get it. The container's user must be yours (rootless podman, or `--userns=keep-id`, which the app adds) or root |
 | A devcontainer on another machine, a Windows sandbox | Not reached. `SCRIPTSCHNELL_TERM=1` is still set |
 
@@ -1240,7 +1240,7 @@ forward, the app checks once per run, with a throwaway forward over the shared
 connection, whether the host's `sshd` allows it (`AllowStreamLocalForwarding`). Hosts
 that refuse get no forward, so ssh prints no warning and keeps sharing its connection. A
 terminal that opens while the check still runs (it waits up to two seconds) goes without
-the socket. A remote machine whose `cmdterm-remote` is older than the relay runs the
+the socket. A remote machine whose `scriptschnell-term-remote` is older than the relay runs the
 terminal without it.
 
 The integrations on the Agents settings page install a client at

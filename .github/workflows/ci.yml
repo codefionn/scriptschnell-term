@@ -13,7 +13,7 @@
 #
 # --- Repository variables (Settings > Secrets and variables > Variables) ----
 #   SCRIPTSCHNELL_RELEASE_KEY   public release key line, built into the app
-#                               (`cmdterm-release keygen` prints it)
+#                               (`scriptschnell-term-release keygen` prints it)
 #
 # --- Secrets ----------------------------------------------------------------
 #   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file)
@@ -151,7 +151,7 @@ jobs:
       - name: Build
         run: >-
           cargo build --release --locked
-          --bin scriptschnell-term --bin cmdterm-remote --bin cmdterm-proxy-bridge
+          --bin scriptschnell-term --bin scriptschnell-term-remote --bin scriptschnell-term-proxy-bridge
 
       - name: Install appimagetool
         run: |
@@ -209,7 +209,7 @@ jobs:
         run: cargo test --workspace --locked --no-fail-fast
 
       - name: Build
-        run: cargo build --release --locked --bin scriptschnell-term --bin cmdterm-sandbox
+        run: cargo build --release --locked --bin scriptschnell-term --bin scriptschnell-term-sandbox
 
       # This directory holds exactly the files the updater installs next to
       # scriptschnell-term.exe.
@@ -218,7 +218,7 @@ jobs:
           set -euo pipefail
           out="$GITHUB_WORKSPACE/dist/windows-x86_64"
           mkdir -p "$out"
-          cp target/release/scriptschnell-term.exe target/release/cmdterm-sandbox.exe "$out/"
+          cp target/release/scriptschnell-term.exe target/release/scriptschnell-term-sandbox.exe "$out/"
 
       # A per-user installer into %LOCALAPPDATA%\Programs, where the updater
       # can replace files without admin rights.
@@ -267,8 +267,8 @@ jobs:
         with:
           key: publish
 
-      - name: Build cmdterm-release
-        run: cargo build --release --locked -p cmdterm-update --bin cmdterm-release
+      - name: Build scriptschnell-term-release
+        run: cargo build --release --locked -p cmdterm-update --bin scriptschnell-term-release
 
       - uses: actions/download-artifact@v8
         with:
@@ -290,9 +290,9 @@ jobs:
           set -euo pipefail
           assets="$GITHUB_WORKSPACE/dist/assets"
           for platform in windows-x86_64 linux-x86_64; do
-            target/release/cmdterm-release sign --version "$VERSION" --platform "$platform" \
+            target/release/scriptschnell-term-release sign --version "$VERSION" --platform "$platform" \
               --out "$assets" "$GITHUB_WORKSPACE/dist/$platform"
-            target/release/cmdterm-release verify \
+            target/release/scriptschnell-term-release verify \
               --public-key "$RELEASE_KEY" --platform "$platform" "$assets"
           done
           cp "$GITHUB_WORKSPACE"/dist/downloads/*-setup.exe "$assets/"

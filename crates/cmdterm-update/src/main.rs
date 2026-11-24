@@ -1,4 +1,4 @@
-//! `cmdterm-release`: makes release keys and signs the update manifests
+//! `scriptschnell-term-release`: makes release keys and signs the update manifests
 //! that `cmdterm-update` checks. The release workflow runs it; see the
 //! crate README.
 
@@ -13,7 +13,7 @@ use cmdterm_update::{FileEntry, Manifest, SIGNATURE_SUFFIX, SigningKey, Verifyin
 const KEY_VARIABLE: &str = "SCRIPTSCHNELL_RELEASE_SIGNING_KEY";
 
 #[derive(Parser)]
-#[command(name = "cmdterm-release", version, about)]
+#[command(name = "scriptschnell-term-release", version, about)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -66,7 +66,7 @@ fn main() -> ExitCode {
     match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("cmdterm-release: {error}");
+            eprintln!("scriptschnell-term-release: {error}");
             ExitCode::FAILURE
         }
     }

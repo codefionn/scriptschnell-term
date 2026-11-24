@@ -1,4 +1,4 @@
-//! End to end: a web server in this process, a `cmdterm-remote` server that
+//! End to end: a web server in this process, a `scriptschnell-term-remote` server that
 //! links to it with a pairing code, and a browser played by HTTP and
 //! WebSocket clients.
 

@@ -48,7 +48,9 @@ fn a_sandbox_with_a_proxy_reaches_only_allowed_hosts() {
         eprintln!("bwrap or curl unavailable here; skipped");
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let port = server();
     let proxy =
@@ -92,7 +94,9 @@ fn https_reaches_an_allowed_host_and_not_another() {
     if !available("bwrap", &["--ro-bind", "/", "/", "--unshare-all", "true"]) {
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let proxy =
         NetworkProxy::start(&dir.path().join("proxy.sock"), vec!["crates.io".into()]).unwrap();
@@ -116,7 +120,9 @@ fn intercepted_https_keeps_bad_certificates_untrusted() {
     if !available("bwrap", &["--ro-bind", "/", "/", "--unshare-all", "true"]) {
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let allowed = vec!["crates.io".into(), "self-signed.badssl.com".into()];
     let proxy = NetworkProxy::start(&dir.path().join("proxy.sock"), allowed).unwrap();
@@ -176,7 +182,9 @@ fn a_sandbox_with_the_whole_network_sends_real_secrets_only_through_the_proxy() 
     }
     // Sandboxes that share the host network start under the bridge too,
     // and the first test to look one up fixes it for the whole process.
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let port = auth_echo();
     // Any-host mode reaches this machine's loopback only for hosts listed by name.
@@ -234,7 +242,9 @@ fn a_guard_blocks_git_push_to_a_real_forge() {
     {
         return;
     }
-    cmdterm_env::set_proxy_bridge(PathBuf::from(env!("CARGO_BIN_EXE_cmdterm-proxy-bridge")));
+    cmdterm_env::set_proxy_bridge(PathBuf::from(env!(
+        "CARGO_BIN_EXE_scriptschnell-term-proxy-bridge"
+    )));
     let dir = tempfile::tempdir().unwrap();
     let proxy =
         NetworkProxy::start(&dir.path().join("proxy.sock"), vec!["github.com".into()]).unwrap();

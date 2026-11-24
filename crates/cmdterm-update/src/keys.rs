@@ -1,5 +1,5 @@
 //! Release signing keys: Ed25519 plus ML-DSA-65, like the remote machine
-//! keys of `cmdterm-remote`, but with a context of their own, so a release
+//! keys of `scriptschnell-term-remote`, but with a context of their own, so a release
 //! signature never verifies as a handshake signature or the other way round.
 //!
 //! The secret is one line of base64 holding the two 32-byte seeds. The

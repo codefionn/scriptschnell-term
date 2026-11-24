@@ -490,7 +490,7 @@ impl TerminalSession {
         }
     }
 
-    /// Tells the `cmdterm-remote exec` client the PTY runs, in a remote
+    /// Tells the `scriptschnell-term-remote exec` client the PTY runs, in a remote
     /// session, whether its terminal shows: `SIGUSR2` when it does,
     /// `SIGUSR1` when not. False when nothing was sent: before the client
     /// wrote anything, since until it handles the signals they end it,

@@ -1,4 +1,4 @@
-//! cmdterm-web: reach scriptschnell-term machines from a browser or a phone.
+//! scriptschnell-term-web: reach scriptschnell-term machines from a browser or a phone.
 //! The crate README covers setup, the protocol and the HTTP API.
 
 pub mod api;
