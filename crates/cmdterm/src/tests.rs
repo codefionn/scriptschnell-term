@@ -2723,6 +2723,30 @@ fn turning_an_extension_off_unloads_it_and_survives_a_restart() {
 }
 
 #[test]
+fn only_builds_with_third_party_extensions_load_the_users_own() {
+    let dir = tempfile::tempdir().unwrap();
+    let extensions = dir.path().join("cfg/extensions");
+    std::fs::create_dir_all(&extensions).unwrap();
+    std::fs::write(
+        extensions.join("hello.lua"),
+        "cmdterm.command{ name = 'hello', title = 'Say hello', run = function() end }",
+    )
+    .unwrap();
+    let ws = workspace(dir.path());
+    let listed = ws.borrow().ext.extensions().any(|ext| ext.name == "hello");
+    assert_eq!(listed, crate::bundle::THIRD_PARTY_EXTENSIONS);
+    let commands = usize::from(crate::bundle::THIRD_PARTY_EXTENSIONS);
+    assert_eq!(ws.borrow().ext.commands().len(), commands);
+    ws.reload_extensions();
+    assert_eq!(ws.borrow().ext.commands().len(), commands);
+    assert!(
+        ws.borrow().ext.extensions().all(
+            |ext| crate::bundle::THIRD_PARTY_EXTENSIONS || crate::bundle::is_shipped(&ext.name)
+        )
+    );
+}
+
+#[test]
 fn the_worktree_plus_button_adds_a_detached_or_branched_worktree_from_that_row() {
     use crate::ui::{InputMode, PALETTE_BRANCH_INPUT};
     use schnellui::UiKey;

@@ -11,7 +11,11 @@ name = "scriptschnell-term"
 path = "src/main.rs"
 
 [features]
-default = []
+default = ["third-party-extensions"]
+# Extensions besides the shipped ones: the user's own in the configuration
+# directory's `extensions/`, and changes agents make through the control
+# socket. Without it only the shipped extensions load, as shipped.
+third-party-extensions = []
 # Servo-rendered browser panels. Off by default: Servo adds a long first build.
 browser = ["dep:schnellui-servo", "dep:url", "dep:rustls"]
 # SchnellUI's debug server, for driving a headless instance from an agent.

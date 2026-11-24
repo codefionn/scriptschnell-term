@@ -28,6 +28,7 @@ design rules; `AGENTS.md` has the commands and conventions. What changed in each
 ```sh
 cargo run --release -p cmdterm -- ~/src/myrepo devbox:/srv/service
 cargo run --release -p cmdterm --features browser    # with Servo browser panels
+cargo build --release -p cmdterm --no-default-features    # only the shipped extensions
 ```
 
 The command palette (Ctrl+Shift+P, or the `+` in the rail) is how you open projects and

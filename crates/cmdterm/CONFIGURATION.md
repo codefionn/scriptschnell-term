@@ -32,7 +32,9 @@ with the same file names. Use it for a scratch configuration.
 | Logs | Devcontainer, job and VM image logs | The app |
 
 The app loads the shipped extensions and your own; one of yours replaces a shipped one of
-the same name. The app also writes `.luarc.json` and `tlconfig.lua` into your
+the same name. A build without the `third-party-extensions` Cargo feature, which is on by
+default, loads only the shipped extensions, as shipped, and never reads your
+`extensions/`. Its control socket refuses extension changes from agents with 403. The app also writes `.luarc.json` and `tlconfig.lua` into your
 `extensions/`, pointing lua-language-server and Teal at the type files.
 
 Older versions kept everything in `~/.config/scriptschnell-term` (before that

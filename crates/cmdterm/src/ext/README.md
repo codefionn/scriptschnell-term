@@ -23,7 +23,9 @@ type files are in `extensions/` of the data directory, `~/.local/share/scriptsch
 on Linux (`CONFIGURATION.md` lists the directories of every platform). One of yours
 replaces a shipped extension of the same name. With `--config-dir` both are the same
 `extensions/`. The app does not load `tlconfig.lua` or anything starting with a dot,
-and a directory without `init.lua`, such as `types/`, is skipped.
+and a directory without `init.lua`, such as `types/`, is skipped. A build without the
+`third-party-extensions` Cargo feature (on by default) loads only the shipped
+extensions and skips your `extensions/` entirely.
 
 ### Shipped extensions
 

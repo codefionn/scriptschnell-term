@@ -90,6 +90,26 @@ fn turned_off_extensions_are_listed_but_not_loaded() {
 }
 
 #[test]
+fn extensions_outside_the_allowed_ones_are_neither_loaded_nor_listed() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("alpha.lua"), "term.notify('alpha')").unwrap();
+    std::fs::write(dir.path().join("beta.lua"), "term.notify('beta')").unwrap();
+
+    let mut host = ExtensionHost::new();
+    host.allow_only(Some(&["beta"]));
+    assert!(host.load_dir(dir.path()).is_empty());
+    let listed: Vec<_> = host.extensions().map(|ext| ext.name.as_str()).collect();
+    assert_eq!(listed, ["beta"]);
+    assert_eq!(notes(&mut host), ["beta"]);
+
+    let mut host = ExtensionHost::new();
+    host.allow_only(Some(&["beta"]));
+    host.allow_only(None);
+    assert!(host.load_dir(dir.path()).is_empty());
+    assert_eq!(host.extensions().count(), 2);
+}
+
+#[test]
 fn extensions_off_by_default_load_once_turned_on() {
     let dir = tempfile::tempdir().unwrap();
     let quiet = dir.path().join("quiet");

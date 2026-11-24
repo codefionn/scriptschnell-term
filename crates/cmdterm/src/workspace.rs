@@ -994,7 +994,7 @@ impl Workspace {
         let scheme = resolve_scheme(&settings.color_scheme, true);
         let mut ext = extension_host(dirs, &settings);
         let errors = ext.load_dirs_except(
-            &[&shipped_dir, &extensions_dir],
+            &extension_dirs(&shipped_dir, &extensions_dir),
             &settings.disabled_extensions,
             &granted_permissions(&settings),
             &setting_values(&settings),
@@ -3029,7 +3029,7 @@ impl Workspace {
             let inner = &mut *inner;
             let mut host = extension_host(&inner.dirs, &inner.settings);
             let errors = host.load_dirs_except(
-                &[&inner.shipped_dir, &inner.extensions_dir],
+                &extension_dirs(&inner.shipped_dir, &inner.extensions_dir),
                 &inner.settings.disabled_extensions,
                 &granted_permissions(&inner.settings),
                 &setting_values(&inner.settings),
@@ -6013,7 +6013,20 @@ fn extension_host(dirs: &cmdterm_env::AppDirs, settings: &Settings) -> Extension
     });
     host.turn_on(&settings.enabled_extensions);
     host.set_forge_hosts(&settings.forge_hosts);
+    if !crate::bundle::THIRD_PARTY_EXTENSIONS {
+        host.allow_only(Some(&crate::bundle::EXTENSIONS));
+    }
     host
+}
+
+/// The directories extensions load from: the shipped ones, then the user's
+/// own in builds with the `third-party-extensions` feature.
+fn extension_dirs<'a>(shipped: &'a Path, own: &'a Path) -> Vec<&'a Path> {
+    if crate::bundle::THIRD_PARTY_EXTENSIONS {
+        vec![shipped, own]
+    } else {
+        vec![shipped]
+    }
 }
 
 /// The id `term.project_store` names a project by, such as

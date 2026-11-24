@@ -6,6 +6,25 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Added
+
+- The `third-party-extensions` Cargo feature of `cmdterm`, on by default. A build
+  without it (`--no-default-features`) loads only the shipped extensions, as shipped:
+  it skips your own `extensions/`, including changed copies of shipped extensions, and
+  the control socket answers extension changes from agents with 403.
+
+### Changed
+
+- The helper programs are named after the app: `cmdterm-remote` is now
+  `scriptschnell-term-remote`, `cmdterm-web` is `scriptschnell-term-web`,
+  `cmdterm-proxy-bridge` is `scriptschnell-term-proxy-bridge`, `cmdterm-sandbox.exe`
+  is `scriptschnell-term-sandbox.exe` and `cmdterm-release` is
+  `scriptschnell-term-release`. Scripts and service files that start them by the old
+  names need the new ones. The crates keep their `cmdterm-*` names, and channel
+  programs, AppContainer profiles, data directories and the `--cmdterm-proxy-bridge`
+  flag stay as they were, so older remote machines and existing sandboxes keep working.
+  The Windows installer removes the old `cmdterm-sandbox.exe`.
+
 ## [0.1.4] - 2026-11-24
 
 ### Fixed
@@ -80,18 +99,6 @@ All notable changes to scriptschnell-term are in this file. The format is
   longer picks where the shown worktree runs; it picks where worktrees the app opens
   for the first time run (`default_runtime`), and the palette still switches one
   worktree. Rebuild the devcontainer moved to the Project page.
-
-### Changed
-
-- The helper programs are named after the app: `cmdterm-remote` is now
-  `scriptschnell-term-remote`, `cmdterm-web` is `scriptschnell-term-web`,
-  `cmdterm-proxy-bridge` is `scriptschnell-term-proxy-bridge`, `cmdterm-sandbox.exe`
-  is `scriptschnell-term-sandbox.exe` and `cmdterm-release` is
-  `scriptschnell-term-release`. Scripts and service files that start them by the old
-  names need the new ones. The crates keep their `cmdterm-*` names, and channel
-  programs, AppContainer profiles, data directories and the `--cmdterm-proxy-bridge`
-  flag stay as they were, so older remote machines and existing sandboxes keep working.
-  The Windows installer removes the old `cmdterm-sandbox.exe`.
 
 ### Fixed
 

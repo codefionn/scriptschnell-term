@@ -2801,7 +2801,11 @@ fn extension_list(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
             query,
             inner.settings_ui.finding_extension,
             inner.regions.settings_focus,
-            inner.extensions_dir.clone(),
+            if crate::bundle::THIRD_PARTY_EXTENSIONS {
+                inner.extensions_dir.clone()
+            } else {
+                inner.shipped_dir.clone()
+            },
             inner.tr,
         )
     };

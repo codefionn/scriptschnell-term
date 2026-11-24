@@ -135,6 +135,9 @@ sh $control push hello ./hello        # upload it, wait for the user, print the 
 - `apply` and `push` wait until the user answers. Tell the user that a dialog in the app
   waits for them. Exit status 1 with "the user denied the change" means no; do not retry
   without asking.
+- A 403 saying the build runs only its shipped extensions means this scriptschnell-term
+  was built without third-party extensions. Nothing you or the user change at runtime
+  turns them on; tell the user.
 - The printed status shows `loaded`, `error` and `missing_permissions`. Missing
   permissions need the user's grant on the Extensions page; say which ones and why.
 - The API behind the client is in `{docs}/CONFIGURATION.md`, section Control socket.

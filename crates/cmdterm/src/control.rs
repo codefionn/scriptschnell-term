@@ -19,6 +19,8 @@
 //! staged files in front of the user in the approval overlay
 //! (`ui/approval.rs`) and waits for the answer; on Allow the UI thread
 //! writes them and reloads the extensions ([`crate::workspace::Workspace`]).
+//! A build without the `third-party-extensions` feature answers staging and
+//! applying with 403.
 //! `POST /v1/worktrees` and `POST /v1/agents` ask the same overlay to create
 //! a worktree in the terminal's project, or to open one of its worktrees,
 //! and to start coding agents in terminals there. On Allow the UI thread
@@ -241,6 +243,11 @@ pub const AGENT_LOCKED: [&str; 4] = [
     "remote",
     "debug_browser",
 ];
+
+/// Why staging and applying extension changes fail in a build without the
+/// `third-party-extensions` feature.
+const THIRD_PARTY_OFF: &str =
+    "this build of scriptschnell-term runs only its shipped extensions and cannot change them";
 
 /// Reports the proxy's recent refusals, on the connection's thread.
 pub type Refusals = std::sync::Arc<dyn Fn() -> Vec<Value> + Send + Sync>;
@@ -789,6 +796,9 @@ impl Control {
     /// Queues the files `token` staged for `name` as a change and waits for
     /// the user's answer.
     fn apply(&self, token: &str, name: &str) -> Result<Outcome, (u16, String)> {
+        if !crate::bundle::THIRD_PARTY_EXTENSIONS {
+            return Err((403, THIRD_PARTY_OFF.to_owned()));
+        }
         let state = self.lock();
         let terminal = state
             .terminals
@@ -1776,6 +1786,9 @@ impl Control {
     fn stage(&self, key: (String, String), path: String, content: Option<Vec<u8>>) -> Response {
         if content.as_ref().is_some_and(|c| c.len() > MAX_FILE) {
             return Response::error(413, "files are limited to 1 MiB");
+        }
+        if !crate::bundle::THIRD_PARTY_EXTENSIONS {
+            return Response::error(403, THIRD_PARTY_OFF);
         }
         let mut state = self.lock();
         let staged = state.staged.entry(key).or_default();
@@ -3065,5 +3078,24 @@ mod tests {
         for worker in workers {
             worker.join().unwrap();
         }
+    }
+
+    #[test]
+    #[cfg(not(feature = "third-party-extensions"))]
+    fn builds_without_third_party_extensions_refuse_extension_changes() {
+        let dir = tempfile::tempdir().unwrap();
+        let extensions = dir.path().join("extensions");
+        std::fs::create_dir_all(&extensions).unwrap();
+        let server = start(&extensions, dir.path(), || {}).unwrap();
+        let socket = server.control.socket().to_path_buf();
+        let token = server.control.register(terminal());
+        let path = "/v1/extensions/x/files/init.lua";
+        let (status, body) = call(&socket, "PUT", path, &token, b"term.notify('x')");
+        assert_eq!(status, 403);
+        assert!(body.contains("shipped extensions"), "{body}");
+        let (status, _) = call(&socket, "POST", "/v1/extensions/x/apply", &token, b"");
+        assert_eq!(status, 403);
+        assert!(server.control.pending().is_none());
+        assert!(!extensions.join("x").exists());
     }
 }

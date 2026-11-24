@@ -73,6 +73,8 @@ pub struct ExtensionHost {
     scratch: Vec<Ref>,
     /// Extensions whose manifest says `enabled = false` that load anyway.
     turned_on: Vec<String>,
+    /// The only extensions that load or are listed. `None` allows all.
+    allowed: Option<Vec<String>>,
 }
 
 impl Default for ExtensionHost {
@@ -112,6 +114,7 @@ impl ExtensionHost {
             watchdog: Watchdog::new(),
             scratch: Vec::new(),
             turned_on: Vec::new(),
+            allowed: None,
         }
     }
 
@@ -120,6 +123,13 @@ impl ExtensionHost {
     /// its `off` list stays off.
     pub fn turn_on(&mut self, names: &[String]) {
         self.turned_on = names.to_vec();
+    }
+
+    /// Limits the next loads to the extensions in `names`; the others in
+    /// the directories are neither loaded nor listed. `None` allows every
+    /// extension again.
+    pub fn allow_only(&mut self, names: Option<&[&str]>) {
+        self.allowed = names.map(|names| names.iter().map(|&name| name.to_owned()).collect());
     }
 
     #[must_use]
@@ -189,6 +199,9 @@ impl ExtensionHost {
                 found.retain(|known| known.0 != name);
                 found.push((name, file, module_dir));
             }
+        }
+        if let Some(allowed) = &self.allowed {
+            found.retain(|known| allowed.contains(&known.0));
         }
         found.sort_by(|a, b| a.0.cmp(&b.0));
         for (name, file, module_dir) in found {

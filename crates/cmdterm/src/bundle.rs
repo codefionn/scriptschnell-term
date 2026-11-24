@@ -189,6 +189,12 @@ pub fn guard_extension(guard_id: &str) -> Option<&'static str> {
     })
 }
 
+/// Whether this build loads extensions besides the shipped ones (the
+/// `third-party-extensions` feature). Without it the app loads only
+/// [`EXTENSIONS`] from the data directory, never the user's own
+/// `extensions/`, and the control socket refuses extension changes.
+pub const THIRD_PARTY_EXTENSIONS: bool = cfg!(feature = "third-party-extensions");
+
 /// True for an extension this app ships, by name.
 pub fn is_shipped(name: &str) -> bool {
     EXTENSIONS.contains(&name)
