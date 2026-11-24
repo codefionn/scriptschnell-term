@@ -267,7 +267,7 @@ fn cargo_installs_are_recognized() {
 }
 
 #[test]
-fn the_mirror_comes_first_and_github_takes_over_when_it_fails() {
+fn the_next_source_takes_over_when_the_first_fails() {
     let dir = tempfile::tempdir().unwrap();
     std::fs::write(dir.path().join("app.exe"), b"old").unwrap();
     let release = manifest(
@@ -307,6 +307,40 @@ fn the_mirror_comes_first_and_github_takes_over_when_it_fails() {
 
     let only_forged = Channel::new(&[forged], "test-platform", key().public(), None);
     assert!(matches!(only_forged.latest(), Err(Error::Signature)));
+}
+
+#[test]
+fn the_first_source_that_answers_decides_the_release() {
+    let dir = tempfile::tempdir().unwrap();
+    std::fs::write(dir.path().join("app.exe"), b"old").unwrap();
+    let old = manifest(
+        "0.1.2",
+        vec![entry("app.exe", "test-platform-app.exe", b"old app")],
+    );
+    let new = manifest(
+        "0.1.3",
+        vec![entry("app.exe", "test-platform-app.exe", b"new app")],
+    );
+    let stale = serve(release_files(
+        &old,
+        &key(),
+        &[("test-platform-app.exe", b"old app")],
+    ));
+    let github = serve(release_files(
+        &new,
+        &key(),
+        &[("test-platform-app.exe", b"new app")],
+    ));
+
+    // GitHub comes first, so a mirror that lags behind is never asked.
+    let channel = Channel::new(&[github, stale], "test-platform", key().public(), None);
+    let found = channel.check("0.1.2").unwrap().unwrap();
+    assert_eq!(found, new);
+    channel.install(&found, dir.path()).unwrap();
+    assert_eq!(
+        std::fs::read(dir.path().join("app.exe")).unwrap(),
+        b"new app"
+    );
 }
 
 #[test]
@@ -405,8 +439,8 @@ fn sources_and_assets_follow_the_github_layout() {
     assert_eq!(
         sources("codefionn/scriptschnell-term"),
         [
-            "https://releases.codefionn.eu/scriptschnell-term",
             "https://github.com/codefionn/scriptschnell-term/releases",
+            "https://releases.codefionn.eu/scriptschnell-term",
         ]
     );
     assert_eq!(

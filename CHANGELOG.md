@@ -6,6 +6,14 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+### Fixed
+
+- The update check finds a new release while the codefionn.eu mirror still serves an
+  older one. It used to take the mirror's release and ask GitHub only when the mirror
+  failed, so the Windows installer's copy and AppImages saw no update until the mirror
+  caught up. It now asks GitHub first, for the manifest and for each file, and the
+  mirror only when GitHub fails.
+
 ## [0.1.3] - 2026-11-23
 
 ### Added

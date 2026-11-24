@@ -24,7 +24,7 @@ https://github.com/codefionn/scriptschnell-term/releases/
 `https://releases.codefionn.eu/scriptschnell-term/` repeats these paths. The server pulls
 the latest GitHub release every few minutes and switches its `latest` only after every
 asset arrived (`../infra-infrazeug`, `src/nodes/external/release_mirror.rs`). The app asks
-the mirror first and GitHub when the mirror fails, for the manifest and for each file.
+GitHub first, for the manifest and for each file, and the mirror only when GitHub fails.
 Neither source is trusted: only the signature and the hashes are.
 
 The repository comes from `SCRIPTSCHNELL_RELEASE_REPO` at build time (the workflow sets

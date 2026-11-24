@@ -984,8 +984,9 @@ A devcontainer isolates a worktree on Windows without these limits.
   the sidebar, next to recent status bar notices. Update reinstalls the integration, or
   runs `npm install -g <package>@latest` or `mise upgrade <tool>` (`--bump` for a pinned
   version). The check also looks for a newer scriptschnell-term release. It asks the
-  mirror `https://releases.codefionn.eu/scriptschnell-term` first and the GitHub releases
-  of `codefionn/scriptschnell-term` when the mirror fails. A release counts only when its
+  GitHub releases of `codefionn/scriptschnell-term` first and the mirror
+  `https://releases.codefionn.eu/scriptschnell-term` only when GitHub fails. A release
+  counts only when its
   manifest's signature checks out against the release key built into the app. The
   Windows installer's copy and an AppImage install it; any other copy, such as one from a
   package manager or `cargo install`, only gets a notification with the release page.

@@ -11,7 +11,8 @@
 //!
 //! A source is `https://github.com/<repo>/releases` or a mirror that copies
 //! the same paths, such as `https://releases.codefionn.eu/scriptschnell-term`.
-//! The app asks the mirror first and GitHub when the mirror fails.
+//! The app asks GitHub first, for the manifest and for each file, and the
+//! mirror only when GitHub fails.
 //!
 //! The manifest names the version, the platform and every file with its
 //! size and SHA3-256 hash. The signature covers the manifest bytes, so a
@@ -35,7 +36,7 @@ use sha3::{Digest, Sha3_256};
 
 pub use keys::{SigningKey, VerifyingKey};
 
-/// The mirror the app asks before GitHub. It copies the GitHub release
+/// The mirror the app asks when GitHub fails. It copies the GitHub release
 /// paths of `<repo>` under `<MIRROR>/<repo name>/`.
 pub const MIRROR: &str = "https://releases.codefionn.eu";
 /// The GitHub repository releases come from, unless
@@ -101,13 +102,13 @@ fn valid_repo(repo: &str) -> bool {
     ok(parts.next()) && ok(parts.next()) && parts.next().is_none()
 }
 
-/// The sources of `repo`'s releases in the order the app asks them: the
-/// mirror, then GitHub.
+/// The sources of `repo`'s releases in the order the app asks them: GitHub,
+/// then the mirror.
 pub fn sources(repo: &str) -> Vec<String> {
     let name = repo.rsplit('/').next().unwrap_or(repo);
     vec![
-        format!("{MIRROR}/{name}"),
         format!("https://github.com/{repo}/releases"),
+        format!("{MIRROR}/{name}"),
     ]
 }
 
@@ -357,7 +358,8 @@ impl Channel {
     }
 
     /// The verified manifest of the newest release, from the first source
-    /// that serves a valid one.
+    /// that serves a valid one. Later sources are only asked when the
+    /// earlier ones fail.
     pub fn latest(&self) -> Result<Manifest, Error> {
         let mut last = Error::Manifest("no release source".into());
         for source in &self.sources {
