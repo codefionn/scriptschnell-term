@@ -3,7 +3,7 @@
 scriptschnell-term looks for new releases on GitHub and on a mirror at codefionn.eu.
 Windows installs and AppImages install them themselves; other copies tell the user. This
 crate checks the releases, verifies what it finds, and swaps the files. `scriptschnell-term-release`
-signs the manifests in the release workflow.
+signs the manifests in the release workflows.
 
 ### Release layout
 
@@ -86,6 +86,57 @@ prints the public line. In the GitHub repository:
 Keep `release.key` offline afterwards. Anyone with it can ship code to every
 installation that updates itself. Changing the key means users must install a build with
 the new public key by hand.
+
+### Releasing
+
+A `v<version>` tag runs `.github/workflows/ci.yml`. It builds and tests everything,
+signs the Linux manifest and creates the GitHub release as a draft with the AppImage. The
+Windows programs stay unsigned in the run's `windows-x86_64-unsigned` artifact. Then,
+on a Linux machine with the Certum certificate:
+
+```sh
+packaging/windows/sign-release.sh v0.2.0
+```
+
+The script downloads the unsigned programs, signs them, builds the installer from the
+signed programs with Inno Setup under Wine, signs the installer and uploads the three
+files to the draft. It then starts `.github/workflows/release-windows.yml`, which:
+
+1. checks on Windows that each file has a valid Authenticode signature with a timestamp,
+   from a certificate listed in the `WINDOWS_SIGNING_THUMBPRINTS` repository variable,
+2. checks with `scriptschnell-term-release check-signed` that each signed program is the
+   program ci.yml built with only the signature added (the PE checksum, the certificate
+   table entry and the certificate table at the end are all signing changes),
+3. signs the Windows manifest over the signed programs and publishes the release.
+
+Until then the release is a draft, which neither `releases/latest` nor the mirror sees,
+so Linux users get the release only together with Windows users. The uninstaller inside
+the installer stays unsigned: Inno Setup signs it only through a sign command it runs
+under Wine itself, and osslsigncode is a Linux program.
+
+### Signing the Windows files
+
+The script needs `gh` with write access to the repository, `osslsigncode` with libp11
+(its PKCS#11 engine), Wine with Inno Setup 6 installed into it, and SimplySign Desktop
+logged in, which provides the certificate's key over PKCS#11. Set:
+
+- `CERTUM_PKCS11_MODULE`: the PKCS#11 module SimplySign Desktop installs.
+- `CERTUM_KEY`: the key's `pkcs11:` URI. `p11tool --provider "$CERTUM_PKCS11_MODULE"
+  --list-all-privkeys --login` lists it.
+- `CERTUM_CERTS`: a PEM file with the code signing certificate, followed by the Certum
+  intermediate certificate that issued it, so Windows can build the chain offline.
+
+`CERTUM_PIN`, `CERTUM_PKCS11_ENGINE`, `CERTUM_TIMESTAMP_URL` and `ISCC` are optional;
+the script's header explains them. Put the certificate's SHA-1 thumbprint into the
+`WINDOWS_SIGNING_THUMBPRINTS` repository variable:
+
+```sh
+openssl x509 -in certificate.pem -noout -fingerprint -sha1 | sed 's/.*=//; s/://g'
+```
+
+A renewed certificate goes into the variable next to the old one, separated by a space,
+before the first release signed with it. Signatures carry a timestamp from
+`time.certum.pl`, so releases signed before the old certificate expired stay valid.
 
 ### Signing by hand
 

@@ -1,0 +1,174 @@
+# Finishes a release that ci.yml left as a draft. packaging/windows/sign-release.sh
+# starts it once it has uploaded the Windows programs and the installer, signed
+# with Certum. It checks every signature, its certificate and its timestamp,
+# checks that each signed program is the one ci.yml built with only a
+# signature added, signs the Windows update manifest and publishes the release.
+#
+#     gh workflow run release-windows.yml --ref v0.2.0 -f tag=v0.2.0
+#
+# --- Repository variables (Settings > Secrets and variables > Variables) ----
+#   WINDOWS_SIGNING_THUMBPRINTS SHA-1 thumbprints of the accepted code signing
+#                               certificates, 40 hex digits each, separated by
+#                               spaces or commas. List a renewed certificate
+#                               next to the old one before switching.
+#   SCRIPTSCHNELL_RELEASE_KEY   see ci.yml
+#
+# --- Secrets ----------------------------------------------------------------
+#   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   see ci.yml
+
+name: release-windows
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: The tag of the draft release, such as v0.2.0
+        required: true
+        type: string
+
+concurrency:
+  group: release-windows-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_INCREMENTAL: "0"
+  PLATFORM: windows-x86_64
+  TAG: ${{ inputs.tag }}
+
+jobs:
+  # Windows checks Authenticode signatures itself, against its own roots.
+  signatures:
+    runs-on: windows-latest
+    permissions:
+      # Only write access sees draft releases.
+      contents: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the signed and the unsigned files
+        shell: bash
+        run: |
+          set -euo pipefail
+          case "$TAG" in
+            v[0-9]*) ;;
+            *) echo "::error::$TAG is not a release tag"; exit 1 ;;
+          esac
+          version="${TAG#v}"
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          if [ "$draft" != true ]; then
+            echo "::error::$TAG is not a draft release"
+            exit 1
+          fi
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          run="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push \
+            --branch "$TAG" --commit "$sha" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$run" ]; then
+            echo "::error::no successful ci.yml run for $TAG"
+            exit 1
+          fi
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" --name "$PLATFORM-unsigned" --dir release/unsigned
+          mkdir -p release/signed
+          for path in release/unsigned/*; do
+            gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release/signed \
+              --pattern "$PLATFORM-$(basename "$path")"
+          done
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release/signed \
+            --pattern "scriptschnell-term-$version-$PLATFORM-setup.exe"
+          ls -l release/unsigned release/signed
+
+      # A timestamp keeps the signature valid after the certificate expires.
+      - name: Check the signatures
+        shell: pwsh
+        env:
+          THUMBPRINTS: ${{ vars.WINDOWS_SIGNING_THUMBPRINTS }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $allowed = @($env:THUMBPRINTS -split '[\s,]+' | Where-Object { $_ } | ForEach-Object { $_.ToUpperInvariant() })
+          if ($allowed.Count -eq 0) { throw 'set the WINDOWS_SIGNING_THUMBPRINTS repository variable' }
+          foreach ($file in Get-ChildItem -LiteralPath release/signed -File) {
+            $signature = Get-AuthenticodeSignature -LiteralPath $file.FullName
+            if ($signature.Status -ne 'Valid') {
+              throw "$($file.Name): the signature is $($signature.Status): $($signature.StatusMessage)"
+            }
+            $signer = $signature.SignerCertificate
+            if ($allowed -notcontains $signer.Thumbprint.ToUpperInvariant()) {
+              throw "$($file.Name): signed by $($signer.Subject) ($($signer.Thumbprint)), which WINDOWS_SIGNING_THUMBPRINTS does not list"
+            }
+            if ($null -eq $signature.TimeStamperCertificate) {
+              throw "$($file.Name): the signature has no timestamp"
+            }
+            Write-Output "$($file.Name): signed by $($signer.Subject), timestamped by $($signature.TimeStamperCertificate.Subject)"
+          }
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: windows-release
+          path: release
+          if-no-files-found: error
+
+  publish:
+    needs: signatures
+    runs-on: ubuntu-24.04
+    environment: release
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag }}
+          persist-credentials: false
+
+      - name: Install toolchain from rust-toolchain.toml
+        run: rustup toolchain install
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: publish
+
+      - name: Build scriptschnell-term-release
+        run: cargo build --release --locked -p cmdterm-update --bin scriptschnell-term-release
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: windows-release
+          path: release
+
+      # The files the updater installs, under their installed names.
+      - name: Check that the signed programs are the ones ci.yml built
+        run: |
+          set -euo pipefail
+          mkdir -p "dist/$PLATFORM"
+          for path in release/unsigned/*; do
+            name="$(basename "$path")"
+            target/release/scriptschnell-term-release check-signed "$path" "release/signed/$PLATFORM-$name"
+            cp "release/signed/$PLATFORM-$name" "dist/$PLATFORM/$name"
+          done
+
+      - name: Sign the Windows update manifest
+        env:
+          SCRIPTSCHNELL_RELEASE_SIGNING_KEY: ${{ secrets.SCRIPTSCHNELL_RELEASE_SIGNING_KEY }}
+          RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          target/release/scriptschnell-term-release sign --version "$version" --platform "$PLATFORM" \
+            --out dist/assets "dist/$PLATFORM"
+          target/release/scriptschnell-term-release verify \
+            --public-key "$RELEASE_KEY" --platform "$PLATFORM" dist/assets
+          cp "release/signed/scriptschnell-term-$version-$PLATFORM-setup.exe" dist/assets/
+
+      # The programs go up again too, so the release holds exactly the files
+      # this job checked and hashed.
+      - name: Publish the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        working-directory: dist/assets
+        run: |
+          set -euo pipefail
+          gh release upload "$TAG" --repo "$GITHUB_REPOSITORY" --clobber ./*
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest

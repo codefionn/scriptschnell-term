@@ -473,3 +473,72 @@ fn versions_must_be_usable_in_a_tag() {
         );
     }
 }
+
+/// A PE file with the headers `authenticode` reads and `body` after them.
+fn pe(magic: u16, body: &[u8]) -> Vec<u8> {
+    let optional = 0x40 + 24;
+    let mut file = vec![0u8; optional + 240];
+    file[..2].copy_from_slice(b"MZ");
+    file[0x3c..0x40].copy_from_slice(&0x40u32.to_le_bytes());
+    file[0x40..0x44].copy_from_slice(b"PE\0\0");
+    file[optional..optional + 2].copy_from_slice(&magic.to_le_bytes());
+    let count = if magic == 0x10b { 92 } else { 108 };
+    file[optional + count..optional + count + 4].copy_from_slice(&16u32.to_le_bytes());
+    file.extend_from_slice(body);
+    file
+}
+
+/// What a signing tool does to `file`: pads it to 8 bytes, appends a
+/// certificate table, points the data directory at it and sets the checksum.
+fn sign_pe(file: &[u8]) -> Vec<u8> {
+    let optional = 0x40 + 24;
+    let directories = if file[optional] == 0x0b && file[optional + 1] == 0x01 {
+        96
+    } else {
+        112
+    };
+    let entry = optional + directories + 4 * 8;
+    let mut signed = file.to_vec();
+    signed.resize(signed.len().next_multiple_of(8), 0);
+    let offset = signed.len() as u32;
+    signed.extend_from_slice(b"\x18\0\0\0\0\x02\x02\0a pkcs7 signature\0\0\0\0\0\0\0");
+    let size = signed.len() as u32 - offset;
+    signed[entry..entry + 4].copy_from_slice(&offset.to_le_bytes());
+    signed[entry + 4..entry + 8].copy_from_slice(&size.to_le_bytes());
+    signed[optional + 64..optional + 68].copy_from_slice(&0xdead_beef_u32.to_le_bytes());
+    signed
+}
+
+#[test]
+fn a_signed_copy_is_the_same_program() {
+    for magic in [0x10b, 0x20b] {
+        let unsigned = pe(magic, b"code\x01\x02\x03");
+        authenticode::same_program(&unsigned, &sign_pe(&unsigned)).unwrap();
+    }
+}
+
+#[test]
+fn a_changed_or_extended_program_is_not_the_same() {
+    let unsigned = pe(0x20b, b"code\x01\x02\x03");
+    let mut changed = unsigned.clone();
+    *changed.last_mut().unwrap() = 4;
+    let error = authenticode::same_program(&unsigned, &sign_pe(&changed)).unwrap_err();
+    assert!(error.contains("different program"), "{error}");
+
+    let mut appended = sign_pe(&unsigned);
+    appended.extend_from_slice(b"more");
+    let error = authenticode::same_program(&unsigned, &appended).unwrap_err();
+    assert!(error.contains("after its signature"), "{error}");
+}
+
+#[test]
+fn the_signed_file_must_be_signed_and_the_unsigned_one_not() {
+    let unsigned = pe(0x20b, b"code");
+    let signed = sign_pe(&unsigned);
+    let error = authenticode::same_program(&unsigned, &unsigned).unwrap_err();
+    assert!(error.contains("not signed"), "{error}");
+    let error = authenticode::same_program(&signed, &signed).unwrap_err();
+    assert!(error.contains("signed already"), "{error}");
+    let error = authenticode::same_program(b"#!/bin/sh", &signed).unwrap_err();
+    assert!(error.contains("not a Windows program"), "{error}");
+}

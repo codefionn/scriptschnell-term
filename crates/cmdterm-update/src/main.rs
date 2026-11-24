@@ -46,6 +46,10 @@ enum Command {
         platform: String,
         assets_dir: PathBuf,
     },
+    /// Checks that SIGNED is UNSIGNED with an Authenticode signature added
+    /// and nothing else changed, so a program signed outside the release
+    /// workflow is the one the workflow built.
+    CheckSigned { unsigned: PathBuf, signed: PathBuf },
 }
 
 fn main() -> ExitCode {
@@ -62,6 +66,7 @@ fn main() -> ExitCode {
             platform,
             assets_dir,
         } => verify(&public_key, &platform, &assets_dir),
+        Command::CheckSigned { unsigned, signed } => check_signed(&unsigned, &signed),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -166,6 +171,18 @@ fn verify(public_key: &str, platform: &str, assets_dir: &Path) -> Result<(), Str
         manifest.platform,
         manifest.version,
         manifest.files.len()
+    );
+    Ok(())
+}
+
+fn check_signed(unsigned: &Path, signed: &Path) -> Result<(), String> {
+    let read = |path: &Path| std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()));
+    cmdterm_update::authenticode::same_program(&read(unsigned)?, &read(signed)?)
+        .map_err(|e| format!("{}: {e}", signed.display()))?;
+    println!(
+        "{} is {} with a signature added",
+        signed.display(),
+        unsigned.display()
     );
     Ok(())
 }

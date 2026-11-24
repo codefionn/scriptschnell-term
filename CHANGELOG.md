@@ -12,6 +12,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   without it (`--no-default-features`) loads only the shipped extensions, as shipped:
   it skips your own `extensions/`, including changed copies of shipped extensions, and
   the control socket answers extension changes from agents with 403.
+- `scriptschnell-term-release check-signed UNSIGNED SIGNED` checks that a Windows program
+  signed outside the release workflow is the unsigned program with only an Authenticode
+  signature added.
 
 ### Changed
 
@@ -24,6 +27,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   programs, AppContainer profiles, data directories and the `--cmdterm-proxy-bridge`
   flag stay as they were, so older remote machines and existing sandboxes keep working.
   The Windows installer removes the old `cmdterm-sandbox.exe`.
+- The Windows programs and the installer of each release are signed with a Certum code
+  signing certificate, so Windows names Fionn Langhans as their publisher. The
+  uninstaller inside the installer is not signed yet.
 
 ## [0.1.4] - 2026-11-24
 

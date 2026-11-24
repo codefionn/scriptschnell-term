@@ -1,6 +1,10 @@
 # Checks every push and pull request. A `v*` tag also builds the release:
-# an AppImage for Linux and a per-user Windows installer, signs the update
-# manifests and publishes everything as a GitHub release.
+# the AppImage for Linux with its signed update manifest, and the Windows
+# programs, unsigned, as the `windows-x86_64-unsigned` artifact. It leaves the
+# GitHub release as a draft. packaging/windows/sign-release.sh signs the
+# Windows programs with Certum on a Linux machine, builds the installer from
+# them and starts release-windows.yml, which checks the signatures, signs the
+# Windows update manifest and publishes the release.
 #
 # --- Releases ---------------------------------------------------------------
 # https://github.com/<repo>/releases/latest/download/manifest-<platform>.json
@@ -14,6 +18,8 @@
 # --- Repository variables (Settings > Secrets and variables > Variables) ----
 #   SCRIPTSCHNELL_RELEASE_KEY   public release key line, built into the app
 #                               (`scriptschnell-term-release keygen` prints it)
+#   WINDOWS_SIGNING_THUMBPRINTS SHA-1 thumbprints of the code signing
+#                               certificates release-windows.yml accepts
 #
 # --- Secrets ----------------------------------------------------------------
 #   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file)
@@ -109,6 +115,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
           RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
+          THUMBPRINTS: ${{ vars.WINDOWS_SIGNING_THUMBPRINTS }}
         run: |
           set -euo pipefail
           version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
@@ -118,6 +125,10 @@ jobs:
           fi
           if [ -z "$RELEASE_KEY" ]; then
             echo "::error::set the SCRIPTSCHNELL_RELEASE_KEY repository variable"
+            exit 1
+          fi
+          if [ -z "$THUMBPRINTS" ]; then
+            echo "::error::set the WINDOWS_SIGNING_THUMBPRINTS repository variable"
             exit 1
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
@@ -220,9 +231,9 @@ jobs:
           mkdir -p "$out"
           cp target/release/scriptschnell-term.exe target/release/scriptschnell-term-sandbox.exe "$out/"
 
-      # A per-user installer into %LOCALAPPDATA%\Programs, where the updater
-      # can replace files without admin rights.
-      - name: Build the installer
+      # The released installer is built by sign-release.sh from the signed
+      # programs. This build only finds a broken installer script at tag time.
+      - name: Check that the installer builds
         run: |
           set -euo pipefail
           find_iscc() {
@@ -238,16 +249,18 @@ jobs:
           MSYS_NO_PATHCONV=1 "$iscc" \
             "/DVersion=$VERSION" \
             "/DSourceDir=$(cygpath -w "$GITHUB_WORKSPACE/dist/windows-x86_64")" \
-            "/DOutputDir=$(cygpath -w "$GITHUB_WORKSPACE/dist/downloads")" \
+            "/DOutputDir=$(cygpath -w "$RUNNER_TEMP/installer")" \
             packaging/windows/scriptschnell-term.iss
 
+      # sign-release.sh signs these, and release-windows.yml checks that the
+      # signed copies are these programs with only a signature added.
       - uses: actions/upload-artifact@v7
         with:
-          name: windows-x86_64
-          path: dist
+          name: windows-x86_64-unsigned
+          path: dist/windows-x86_64
           if-no-files-found: error
 
-  publish:
+  draft:
     needs: [version, appimage, windows]
     runs-on: ubuntu-24.04
     environment: release
@@ -274,32 +287,27 @@ jobs:
         with:
           name: linux-x86_64
           path: dist/linux-x86_64
-      - uses: actions/download-artifact@v8
-        with:
-          name: windows-x86_64
-          path: dist
 
-      # `sign` copies each platform's files into dist/assets under their asset
-      # names. `verify` checks the signature with the key the builds carry, so
-      # a signing key that does not match it fails here, not on users' machines.
-      - name: Sign the update manifests
+      # `sign` copies the files into dist/assets under their asset names.
+      # `verify` checks the signature with the key the builds carry, so a
+      # signing key that does not match it fails here, not on users' machines.
+      # release-windows.yml signs the Windows manifest.
+      - name: Sign the Linux update manifest
         env:
           SCRIPTSCHNELL_RELEASE_SIGNING_KEY: ${{ secrets.SCRIPTSCHNELL_RELEASE_SIGNING_KEY }}
           RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
         run: |
           set -euo pipefail
           assets="$GITHUB_WORKSPACE/dist/assets"
-          for platform in windows-x86_64 linux-x86_64; do
-            target/release/scriptschnell-term-release sign --version "$VERSION" --platform "$platform" \
-              --out "$assets" "$GITHUB_WORKSPACE/dist/$platform"
-            target/release/scriptschnell-term-release verify \
-              --public-key "$RELEASE_KEY" --platform "$platform" "$assets"
-          done
-          cp "$GITHUB_WORKSPACE"/dist/downloads/*-setup.exe "$assets/"
+          target/release/scriptschnell-term-release sign --version "$VERSION" --platform linux-x86_64 \
+            --out "$assets" "$GITHUB_WORKSPACE/dist/linux-x86_64"
+          target/release/scriptschnell-term-release verify \
+            --public-key "$RELEASE_KEY" --platform linux-x86_64 "$assets"
 
-      # A draft first: `releases/latest` and the mirror only see the release
-      # once every asset is there, so nobody gets a manifest without its files.
-      - name: Create the GitHub release
+      # A draft: `releases/latest` and the mirror only see the release once
+      # release-windows.yml added the Windows files and published it, so
+      # nobody gets a manifest without its files.
+      - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
@@ -308,4 +316,3 @@ jobs:
           set -euo pipefail
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
             --generate-notes --draft ./*
-          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft=false --latest
