@@ -6,6 +6,8 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-24
+
 ### Fixed
 
 - The update check finds a new release while the codefionn.eu mirror still serves an
@@ -261,7 +263,8 @@ Initial release.
 - Self-updates from GitHub releases and the codefionn.eu mirror, with signed release
   manifests.
 
-[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.3...HEAD
+[Unreleased]: https://github.com/codefionn/scriptschnell-term/compare/v0.1.4...HEAD
+[0.1.4]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.4
 [0.1.3]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.3
 [0.1.2]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.2
 [0.1.1]: https://github.com/codefionn/scriptschnell-term/releases/tag/v0.1.1
