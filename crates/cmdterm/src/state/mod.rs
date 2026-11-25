@@ -1042,11 +1042,13 @@ pub enum AgentControl {
     /// Every terminal that can: on this machine, in sandboxes, on SSH hosts,
     /// remote machines and VMs.
     On,
-    /// Only terminals on this machine and in its sandboxes.
+    /// Only terminals on this machine, in its sandboxes and in its
+    /// devcontainers. The default, so agents in sandboxes join the agent
+    /// bus and reach the app like those on the host.
+    #[default]
     Local,
     /// Only terminals that run directly on this machine, outside sandboxes
     /// and devcontainers.
-    #[default]
     Host,
     Off,
 }
@@ -1648,7 +1650,7 @@ impl Default for Settings {
             cpu_mode: CpuModes::default(),
             agents_use_bash: true,
             default_agent: None,
-            agent_control: AgentControl::Host,
+            agent_control: AgentControl::Local,
             debug_browser: DebugBrowserSettings::default(),
             worktree_titles: WorktreeTitles::Agent,
             window_frame: WindowFrame::App,

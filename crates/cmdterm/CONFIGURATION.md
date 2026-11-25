@@ -100,7 +100,7 @@ stays hidden there. Windows sandboxes cannot hide it, so there it is read-only.
   "cpu_mode": { "local": "balanced", "remote": "off", "efficiency_cores": true },
   "agents_use_bash": true,
   "default_agent": "claude",
-  "agent_control": "host",
+  "agent_control": "local",
   "debug_browser": { "browser": "auto", "headless": true, "agents": "local" }
 }
 ```
@@ -720,9 +720,9 @@ NetBird and Nebula peers by address. Nebula's firewall must let port 22 (SSH) or
 
 - `agent_control`: which terminals get the control socket, through which agents read
   the extensions and change them, suggest settings changes and start worktrees (see
-  Control socket below). `host`, the default: only terminals that run directly on this
-  machine, outside sandboxes and devcontainers. `local`: terminals on this machine, in
-  its sandboxes and devcontainers. `on`: every terminal that can reach it, on this
+  Control socket below). `local`, the default: terminals on this machine, in its
+  sandboxes and devcontainers. `host`: only terminals that run directly on this machine,
+  outside sandboxes and devcontainers. `on`: every terminal that can reach it, on this
   machine, in its sandboxes and devcontainers, on SSH hosts, remote machines and VMs.
   `off`: none. The Agents page of the settings has the same switch. A change applies to
   terminals opened afterwards.

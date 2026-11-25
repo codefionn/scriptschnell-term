@@ -5678,16 +5678,17 @@ mod tests {
         rebuild(&ws, &mut app);
         assert_eq!(visible_options(&app).len(), 4);
 
-        let local = app
-            .find_widget(Role::ListBoxOption, Some(EN.agent_control_local))
-            .unwrap();
-        app.dispatch_click(local);
         assert_eq!(ws.borrow().settings.agent_control, AgentControl::Local);
+        let host = app
+            .find_widget(Role::ListBoxOption, Some(EN.agent_control_host))
+            .unwrap();
+        app.dispatch_click(host);
+        assert_eq!(ws.borrow().settings.agent_control, AgentControl::Host);
         assert_eq!(ws.borrow().settings_ui.picker, None);
         let saved = SettingsStore::new(root.join("cfg/settings.json"))
             .load()
             .unwrap();
-        assert_eq!(saved.agent_control, AgentControl::Local);
+        assert_eq!(saved.agent_control, AgentControl::Host);
     }
 
     /// schnellui hides a `Scroll`'s bar unless asked, and settings lists lost

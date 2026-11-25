@@ -35,6 +35,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Changed
 
+- Terminals in sandboxes and devcontainers on this machine now get the control socket
+  by default: `agent_control` defaults to `local` instead of `host`. Coding agents
+  there join the agent bus, report their state to the sidebar and can use the `control`
+  CLI and the debug browser. A `settings.json` that already names `"host"` keeps it;
+  pick "Enabled for this machine and its sandboxes" on the Agents page to switch.
 - The helper programs are named after the app: `cmdterm-remote` is now
   `scriptschnell-term-remote`, `cmdterm-web` is `scriptschnell-term-web`,
   `cmdterm-proxy-bridge` is `scriptschnell-term-proxy-bridge`, `cmdterm-sandbox.exe`

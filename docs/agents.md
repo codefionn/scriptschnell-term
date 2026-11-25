@@ -61,8 +61,8 @@ to open its [discussion panel](panels.md#history-review-and-change-request).
 
 ## Control socket and the `control` CLI
 
-Every terminal sets `SCRIPTSCHNELL_TERM=1`. Where `agent_control` allows it (`host` by
-default; `local`, `on` or `off` on **Settings > Agents**), terminals also receive
+Every terminal sets `SCRIPTSCHNELL_TERM=1`. Where `agent_control` allows it (`local` by
+default, so also in sandboxes and devcontainers; `host`, `on` or `off` on **Settings > Agents**), terminals also receive
 `SCRIPTSCHNELL_TERM_SOCKET` and a per-terminal `SCRIPTSCHNELL_TERM_TOKEN`. Terminals on
 SSH hosts, remote machines, VMs and local devcontainers forward back to your local app's
 socket automatically.
