@@ -63,6 +63,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 - ble.sh loads in sandboxed bash shells instead of failing with "XDG_STATE_HOME
   doesn't have a proper permission". Each project's sandbox now writes a state
   directory of its own, through which the host's `~/.local/state` shows read-only.
+- Agents and other commands with a CPU limit start again on systemd 254 and later.
+  `systemd-run` replaced `${...}` in their command lines, so the script that looks up
+  an agent on the login shell's `PATH` lost its result and the terminal exited with
+  "exec: claude: not found". The app now passes `--expand-environment=no` where
+  `systemd-run` knows it.
 
 ### Security
 

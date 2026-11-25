@@ -61,7 +61,10 @@ q=; [ "$a" -lt "$n" ] && q=$((a * 100))%
 
 /// Starts `"$@"` limited. Arguments: the scope's unit name, the
 /// [`Share`]'s cores to keep free and percent, the starting weight, `--`,
-/// then the command. Without a command it starts `$SHELL`.
+/// then the command. Without a command it starts `$SHELL`. systemd 254
+/// and later expand `${NAME}` in the command of `systemd-run`, which would
+/// change a shell script passed to `sh -c`, so the script turns that off
+/// where `systemd-run` knows `--expand-environment`.
 pub const SCRIPT: &str = concat!(
     r#"u=$1 r=$2 p=$3 w=$4; shift 5
 [ "$#" -gt 0 ] || set -- "${SHELL:-/bin/sh}"
@@ -70,8 +73,9 @@ pub const SCRIPT: &str = concat!(
     r#"if [ "$(uname -s)" = Linux ] && command -v systemd-run >/dev/null 2>&1 &&
   systemctl --user set-property --runtime app-scriptschnell_term.slice "CPUQuota=$q" >/dev/null 2>&1; then
   SCRIPTSCHNELL_TERM_CPU_SLICE=app-scriptschnell_term.slice; export SCRIPTSCHNELL_TERM_CPU_SLICE
+  x=; systemd-run --help 2>/dev/null | grep -q -e --expand-environment && x=--expand-environment=no
   exec systemd-run --user --scope --quiet --collect --slice=app-scriptschnell_term.slice \
-    --unit="$u" -p "CPUWeight=$w" -p "IOWeight=$w" -- "$@"
+    --unit="$u" -p "CPUWeight=$w" -p "IOWeight=$w" $x -- "$@"
 fi
 if [ -n "$q" ] && [ "$(uname -s)" = Linux ] && command -v taskset >/dev/null 2>&1; then
   exec taskset -c "$((n - a))-$((n - 1))" "$@"
@@ -786,5 +790,45 @@ mod tests {
         };
         assert_eq!(run(&["sh", "-c", "echo ran"]), "ran");
         assert_eq!(run(&[]), "");
+    }
+
+    /// A command reaches `systemd-run` as it is, with `${...}` that
+    /// systemd would expand, and `--expand-environment=no` only where
+    /// `systemd-run` knows it. Fake `systemctl` and `systemd-run` print
+    /// what they get instead of touching the real slice.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn script_keeps_systemd_from_expanding_the_command() {
+        use std::os::unix::fs::PermissionsExt as _;
+        let dir = tempfile::tempdir().unwrap();
+        let script = |name: &str, body: &str| {
+            let path = dir.path().join(name);
+            std::fs::write(&path, format!("#!/bin/sh\n{body}\n")).unwrap();
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(0o755)).unwrap();
+        };
+        script("systemctl", "exit 0");
+        let run = |help: &str| {
+            script(
+                "systemd-run",
+                &format!(
+                    "[ \"$1\" = --help ] && {{ echo '{help}'; exit 0; }}\n\
+                     for a; do printf '%s\\n' \"$a\"; done"
+                ),
+            );
+            let output = std::process::Command::new("sh")
+                .args(CpuLimit::new("test", Share::ALL, 100).sh_args())
+                .args(["sh", "-c", "l=${l%%@@*}"])
+                .env_clear()
+                .env("PATH", format!("{}:/usr/bin:/bin", dir.path().display()))
+                .output()
+                .unwrap();
+            assert!(output.status.success(), "{output:?}");
+            String::from_utf8_lossy(&output.stdout).into_owned()
+        };
+        let new = run("  --expand-environment=BOOL    Control expansion");
+        assert!(new.contains("\n--expand-environment=no\n--\nsh\n-c\nl=${l%%@@*}\n"), "{new}");
+        let old = run("  --scope    Run as scope");
+        assert!(!old.contains("--expand-environment"), "{old}");
+        assert!(old.contains("\n--\nsh\n-c\nl=${l%%@@*}\n"), "{old}");
     }
 }
