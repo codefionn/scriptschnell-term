@@ -372,5 +372,8 @@ pub fn parse_file_url(url: &[u8]) -> Option<CurrentDir> {
     let slash = rest.iter().position(|&b| b == b'/')?;
     let host = String::from_utf8_lossy(&rest[..slash]).into_owned();
     let path = percent_decode(&rest[slash..]);
+    if host.chars().any(char::is_control) || path.chars().any(char::is_control) {
+        return None;
+    }
     Some(CurrentDir { host, path })
 }

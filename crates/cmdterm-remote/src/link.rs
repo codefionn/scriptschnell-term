@@ -178,6 +178,7 @@ pub fn redeem(
             .read_json::<serde_json::Value>()
             .ok()
             .and_then(|v| v.get("error")?.as_str().map(str::to_owned))
+            .map(|msg| crate::sanitize_terminal_text(&msg))
             .unwrap_or_else(|| status.to_string());
         return Err(io::Error::new(io::ErrorKind::PermissionDenied, message));
     }
@@ -185,6 +186,14 @@ pub fn redeem(
         .body_mut()
         .read_json()
         .map_err(|error| io::Error::new(io::ErrorKind::InvalidData, error.to_string()))?;
+    if redeemed.address.chars().any(char::is_control)
+        || redeemed.machine.chars().any(char::is_control)
+    {
+        return Err(io::Error::new(
+            io::ErrorKind::InvalidData,
+            "the web server returned control characters in the link response",
+        ));
+    }
     let link = Link {
         url,
         address: redeemed.address,

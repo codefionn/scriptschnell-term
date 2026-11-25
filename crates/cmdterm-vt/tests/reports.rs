@@ -62,6 +62,13 @@ fn xtversion_names_the_terminal() {
     let mut t = Terminal::new(Size { rows: 2, cols: 2 }, config);
     t.advance(b"\x1b[>q");
     assert_eq!(reply(&mut t), "\x1bP>|scriptschnell-term(1.2.3)\x1b\\");
+    let config = Config {
+        xtversion: "term\x1b\\id\r\n".into(),
+        ..Config::default()
+    };
+    let mut t = Terminal::new(Size { rows: 2, cols: 2 }, config);
+    t.advance(b"\x1b[>q");
+    assert_eq!(reply(&mut t), "\x1bP>|term\\id\x1b\\");
 }
 
 #[test]
@@ -179,8 +186,21 @@ fn xtgettcap_answers_a_small_set() {
     // not found.
     assert_eq!(
         ask("\x1bP+q436f;6e6f7065;zz\x1b\\"),
-        "\x1bP1+r436f=323536\x1b\\\x1bP0+r6e6f7065\x1b\\\x1bP0+rzz\x1b\\"
+        "\x1bP1+r436f=323536\x1b\\\x1bP0+r6e6f7065\x1b\\\x1bP0+r\x1b\\"
     );
+}
+
+#[test]
+fn xtgettcap_never_echoes_what_is_not_hex() {
+    // Output a program prints (a file, a git log, a web page) must not be able to type
+    // a command into the shell through the reply.
+    assert_eq!(ask("\x1bP+q\nrm -rf ~\n\x1b\\"), "\x1bP0+r\x1b\\");
+    assert_eq!(
+        ask("\x1bP+q436f;\x03id\r\x1b\\"),
+        "\x1bP1+r436f=323536\x1b\\\x1bP0+r\x1b\\"
+    );
+    let long = format!("\r{}", "a".repeat(1000));
+    assert_eq!(ask(&format!("\x1bP+q{long}\x1b\\")), "\x1bP0+r\x1b\\");
 }
 
 #[test]

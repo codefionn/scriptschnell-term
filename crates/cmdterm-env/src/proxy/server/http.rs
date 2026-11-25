@@ -348,8 +348,8 @@ impl RequestFilter {
                 out.truncate(start);
                 return Err(bad_request("bad header"));
             };
-            // Whitespace before the colon is how requests get smuggled.
-            if name.is_empty() || name.bytes().any(|b| b.is_ascii_whitespace()) {
+            // Non-token characters or whitespace before the colon are how requests get smuggled.
+            if name.is_empty() || !name.bytes().all(is_token_byte) {
                 out.truncate(start);
                 return Err(bad_request("bad header name"));
             }
@@ -379,8 +379,7 @@ impl RequestFilter {
                 }
                 length = parsed;
             } else if name.eq_ignore_ascii_case("transfer-encoding") {
-                let last = value.rsplit(',').next().unwrap_or_default().trim();
-                if !last.eq_ignore_ascii_case("chunked") {
+                if chunked || !valid_chunked_te(value) {
                     out.truncate(start);
                     return Err(bad_request("a request body must be chunked or sized"));
                 }
@@ -401,6 +400,14 @@ impl RequestFilter {
             out.extend_from_slice(b": ");
             out.extend_from_slice(revealed.as_deref().unwrap_or(value).as_bytes());
             out.extend_from_slice(b"\r\n");
+        }
+        // RFC 9112 §6.3: a message with both Transfer-Encoding and Content-Length
+        // must be rejected to prevent request smuggling.
+        if chunked && length.is_some() {
+            out.truncate(start);
+            return Err(bad_request(
+                "Content-Length and Transfer-Encoding cannot both be set",
+            ));
         }
         out.extend_from_slice(b"\r\n");
         if wants_body {
@@ -449,6 +456,29 @@ impl RequestFilter {
             State::Head
         }
     }
+}
+
+/// True when `b` is an RFC 9110 HTTP token byte (`tchar`).
+fn is_token_byte(b: u8) -> bool {
+    b.is_ascii_alphanumeric() || b"!#$%&'*+-.^_`|~".contains(&b)
+}
+
+/// True when a `Transfer-Encoding` value ends in `chunked` and names only
+/// standard transfer codings before it.
+fn valid_chunked_te(value: &str) -> bool {
+    let parts: Vec<&str> = value.split(',').map(str::trim).collect();
+    let Some((&last, before)) = parts.split_last() else {
+        return false;
+    };
+    if !last.eq_ignore_ascii_case("chunked") {
+        return false;
+    }
+    before.iter().all(|coding| {
+        coding.eq_ignore_ascii_case("gzip")
+            || coding.eq_ignore_ascii_case("x-gzip")
+            || coding.eq_ignore_ascii_case("deflate")
+            || coding.eq_ignore_ascii_case("compress")
+    })
 }
 
 /// True when `line` holds a CR, LF or NUL. Lines are split at CRLF, and a
@@ -750,7 +780,11 @@ mod tests {
             &b"PRI * HTTP/2.0\r\n\r\nSM\r\n\r\n"[..],
             b"GET / HTTP/1.1\r\nContent-Length: 1\r\nContent-Length: 2\r\n\r\n",
             b"GET / HTTP/1.1\r\nTransfer-Encoding: gzip\r\n\r\n",
+            b"POST / HTTP/1.1\r\nContent-Length: 0\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
+            b"POST / HTTP/1.1\r\nTransfer-Encoding: x, chunked\r\n\r\n0\r\n\r\n",
+            b"POST / HTTP/1.1\r\nTransfer-Encoding: chunked\r\nTransfer-Encoding: chunked\r\n\r\n0\r\n\r\n",
             b"GET / HTTP/1.1\r\nHost : x\r\n\r\n",
+            b"GET / HTTP/1.1\r\nX\x0bY: z\r\n\r\n",
             b"GET / HTTP/1.1\r\nContent-Length: +5\r\n\r\n",
             b"GET / HTTP/1.1\r\nContent-Length: \r\n\r\n",
             // A bare LF hides a header from the filter but not from a

@@ -180,9 +180,9 @@ fn osc7_reports_the_directory() {
     t.advance(b"\x1b]7;file:///home/me\x1b\\");
     assert_eq!(t.current_dir().unwrap().path, "/home/me");
     assert_eq!(t.current_dir().unwrap().host, "");
-    // Other schemes and malformed URLs are ignored, and are not passed through.
+    // Other schemes, malformed URLs and control characters are ignored, and are not passed through.
     events(&mut t);
-    t.advance(b"\x1b]7;http://x/y\x07\x1b]7;file://nohost\x07\x1b]7\x07");
+    t.advance(b"\x1b]7;http://x/y\x07\x1b]7;file://nohost\x07\x1b]7\x07\x1b]7;file:///tmp/a%00b\x07\x1b]7;file:///tmp/a%0ab\x07\x1b]7;file:///tmp/a%1bb\x07");
     assert_eq!(t.current_dir().unwrap().path, "/home/me");
     assert!(events(&mut t).is_empty());
 }
@@ -294,6 +294,12 @@ fn osc52_query_is_refused_unless_enabled() {
     assert_eq!(replies(&mut t), "\x1b]52;c;aGk=\x1b\\");
     t.answer_clipboard("c", b"hi", true);
     assert_eq!(replies(&mut t), "\x1b]52;c;aGk=\x07");
+    t.answer_clipboard("", b"hi", false);
+    assert_eq!(replies(&mut t), "\x1b]52;s0;aGk=\x1b\\");
+    // Invalid selection characters cannot break out of OSC 52 or type into the shell.
+    t.answer_clipboard("c\nrm -rf ~\n", b"hi", false);
+    t.answer_clipboard("c;\x1b\\id\r", b"hi", true);
+    assert_eq!(replies(&mut t), "");
 }
 
 #[test]

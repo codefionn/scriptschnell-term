@@ -562,8 +562,11 @@ fn json_field(body: &str, path: &str) -> Option<String> {
 }
 
 /// Opens `url` in the system's browser, where the user is signed in to the
-/// forge.
+/// forge. Only `http` and `https` URLs without control characters open.
 pub(crate) fn open_in_system_browser(url: &str) {
+    if !crate::open_url::is_http_url(url) {
+        return;
+    }
     let program = crate::open_url::SYSTEM_OPENER;
     let command = cmdterm_env::Environment::Local.command(program).arg(url);
     // On a thread, so the opener is waited for without holding up a frame.

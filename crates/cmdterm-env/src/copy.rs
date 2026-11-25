@@ -16,7 +16,7 @@ use crate::{CommandError, Environment};
 /// becomes `/c/x` first.
 const UNPACK: &str = "d=$1; case $d in '~') d=$HOME ;; '~/'*) d=$HOME/${d#'~/'} ;; esac; \
 if command -v cygpath >/dev/null 2>&1; then d=$(cygpath -u -- \"$d\") || exit 1; fi; \
-mkdir -p \"$d\" && exec tar -xf - -C \"$d\"";
+mkdir -p -- \"$d\" && exec tar -xf - -C \"$d\"";
 
 impl Environment {
     /// Copies the local file or directory `source` into the directory
@@ -46,6 +46,7 @@ impl Environment {
             .arg("-")
             .arg("-C")
             .arg(parent)
+            .arg("--")
             .arg(name)
             .to_std();
         pack.stdin(Stdio::null())

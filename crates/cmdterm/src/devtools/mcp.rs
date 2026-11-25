@@ -811,7 +811,8 @@ impl Page<'_> {
 /// The host of `url`, without user info, port or brackets.
 fn host_of(url: &str) -> Option<&str> {
     let (_, rest) = url.split_once("://")?;
-    let authority = rest.split(['/', '?', '#']).next()?;
+    // Browsers treat `\` as a path separator in http(s) URLs.
+    let authority = rest.split(['/', '\\', '?', '#']).next()?;
     let authority = authority.rsplit_once('@').map_or(authority, |(_, a)| a);
     if let Some(v6) = authority.strip_prefix('[') {
         return v6.split(']').next();

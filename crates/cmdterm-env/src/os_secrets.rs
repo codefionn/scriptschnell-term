@@ -48,9 +48,12 @@ pub fn lookup(service: &str, account: &str) -> io::Result<Option<String>> {
 }
 
 /// Stores `secret` for `service` and `account`, replacing an older one.
-/// `label` is what the keyring shows for it. `secret` must be one line.
+/// `label` is what the keyring shows for it. Values must be single lines.
 pub fn store(label: &str, service: &str, account: &str, secret: &str) -> io::Result<()> {
-    if secret.contains(['\n', '\r']) {
+    if [label, service, account, secret]
+        .iter()
+        .any(|value| value.contains(['\n', '\r', '\0']))
+    {
         return Err(io::Error::other("secrets are stored as one line"));
     }
     #[cfg(windows)]
@@ -298,6 +301,18 @@ mod tests {
     #[test]
     fn keychain_commands_quote_their_values() {
         assert_eq!(quote(r#"a "b" \c"#), r#""a \"b\" \\c""#);
+    }
+
+    #[test]
+    fn store_rejects_line_breaks_and_nul_in_every_field() {
+        for (label, service, account, secret) in [
+            ("a\nb", "svc", "acc", "sec"),
+            ("lbl", "svc\r", "acc", "sec"),
+            ("lbl", "svc", "acc\nadd-generic-password", "sec"),
+            ("lbl", "svc", "acc", "sec\0"),
+        ] {
+            assert!(store(label, service, account, secret).is_err());
+        }
     }
 
     #[cfg(windows)]

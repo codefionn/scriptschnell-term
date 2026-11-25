@@ -286,10 +286,13 @@ impl Typist {
         self.armed = None;
         self.attempts += 1;
         self.echo.clear();
+        // Keep the prompt on one line and free of escape/control characters so
+        // directory paths cannot break out of bracketed paste or submit input.
+        let clean: String = self.prompt.chars().filter(|c| !c.is_control()).collect();
         Some(if self.bracketed {
-            [b"\x1b[200~", self.prompt.as_bytes(), b"\x1b[201~"].concat()
+            [b"\x1b[200~", clean.as_bytes(), b"\x1b[201~"].concat()
         } else {
-            self.prompt.clone().into_bytes()
+            clean.into_bytes()
         })
     }
 }
@@ -535,6 +538,15 @@ mod tests {
         assert!(prompt.contains(&shown("settings.json")));
         assert!(prompt.contains(&shown("CONFIGURATION.md")));
         assert!(prompt.ends_with("What broke: "));
+    }
+
+    #[test]
+    fn the_prompt_strips_controls_before_typing() {
+        let start = Instant::now();
+        let mut typist = Typist::new("a\x1b[201~id\r\n\u{009b}201~b".into(), start);
+        typist.output(b"\x1b[?2004h> ", at(start, 100));
+        let typed = typist.due(at(start, 1000)).unwrap();
+        assert_eq!(typed, b"\x1b[200~a[201~id201~b\x1b[201~");
     }
 
     #[test]

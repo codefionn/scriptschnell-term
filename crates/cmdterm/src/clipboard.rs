@@ -229,6 +229,9 @@ impl Target {
                 if path.is_empty() {
                     return Err("the image was not saved".into());
                 }
+                if path.chars().any(char::is_control) {
+                    return Err("the staged image path holds control characters".into());
+                }
                 Ok(path)
             }
         }
@@ -331,12 +334,15 @@ fn program_path(path: &Path) -> String {
 }
 
 /// The text to paste for an image saved at `path`: the path, in double
-/// quotes when it has whitespace. Agents strip the quotes.
+/// quotes when it has whitespace. Agents strip the quotes. Control
+/// characters are removed so a path cannot type commands or break out of
+/// bracketed paste.
 pub fn paste_text(path: &str) -> String {
-    if path.chars().any(char::is_whitespace) {
-        format!("\"{path}\"")
+    let clean: String = path.chars().filter(|c| !c.is_control()).collect();
+    if clean.chars().any(char::is_whitespace) {
+        format!("\"{clean}\"")
     } else {
-        path.to_owned()
+        clean
     }
 }
 
@@ -684,6 +690,10 @@ mod tests {
     fn pasted_paths_with_spaces_are_quoted() {
         assert_eq!(paste_text("/tmp/a.png"), "/tmp/a.png");
         assert_eq!(paste_text("C:/Users/A B/a.png"), "\"C:/Users/A B/a.png\"");
+        assert_eq!(
+            paste_text("/tmp/a\nrm -rf ~\r\x1b[201~.png"),
+            "\"/tmp/arm -rf ~[201~.png\""
+        );
     }
 
     #[test]

@@ -60,6 +60,10 @@ local function rules()
     for line in lines(text) do
       -- https://user:token@host/path
       local head, value, tail = line:match("^(%a[%w+.-]*://[^:/@]*:)([^@]*)(@.*)$")
+      if not head then
+        -- https://token@host/path (token in the username position, no colon)
+        head, value, tail = line:match("^(%a[%w+.-]*://)([^:/@]+)(@.*)$")
+      end
       local host = head and url_host(line)
       if host and value ~= "" then
         line = head .. secret(value, host) .. tail

@@ -394,7 +394,7 @@ impl TerminalPanel {
         // on SSH projects, and the path is what matters. The model already
         // decoded the path.
         let path = &term.current_dir()?.path;
-        path.starts_with('/')
+        (path.starts_with('/') && !path.chars().any(char::is_control))
             .then(|| std::path::PathBuf::from(path))
     }
 
@@ -1053,7 +1053,7 @@ fn wheel_lines(delta: RawWheelDelta, metrics: TerminalCellMetrics) -> isize {
 }
 
 fn is_web_url(url: &str) -> bool {
-    url.starts_with("http://") || url.starts_with("https://")
+    crate::open_url::is_http_url(url)
 }
 
 /// The http or https URL in `line` that contains the char index `column`.

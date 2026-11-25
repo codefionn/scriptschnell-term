@@ -31,6 +31,36 @@ All notable changes to scriptschnell-term are in this file. The format is
   signing certificate, so Windows names Fionn Langhans as their publisher. The
   uninstaller inside the installer is not signed yet.
 
+### Security
+
+- Output a program prints can no longer type into the shell through an XTGETTCAP
+  query (`DCS + q`). The terminal echoed the requested name unchecked in its reply,
+  newlines and control bytes included, so `cat` on a crafted file, a git log or a
+  `curl` response could run a command. The reply now echoes a name only when it is
+  hex digits, as the request format requires, and otherwise leaves it out.
+- Hardened other terminal, paste and remote output paths against control-byte and
+  escape-sequence injection: `cmdterm-vt` now validates OSC 52 selection replies,
+  strips control characters from `XTVERSION` replies and rejects control characters
+  in OSC 7 and OSC 1337 directory reports; `scriptschnell-term fix` and pasted image
+  paths strip control characters before typing into a terminal; `scriptschnell-term-remote`
+  strips control characters from error and link messages it prints to the terminal;
+  and `scriptschnell-term-web` waits for saved scrollback to finish parsing before
+  opening a live terminal socket.
+- Links opened in the system browser now require `http` or `https` URLs without
+  control characters, and URL authority parsing rejects backslashes so
+  `https://evil.com\@trusted.com/` cannot bypass sandbox host allowlists or approval
+  prompts.
+- Hardened sandbox proxy, keyring, VCS, CPU-limit and extension-script handling
+  against injection and credential leakage: the sandbox HTTP proxy rejects requests
+  combining `Content-Length` and `Transfer-Encoding`, obfuscated `Transfer-Encoding`
+  values and non-token header names; macOS keychain storage rejects line breaks and
+  NUL in every field; git, Mercurial, `tar` and `control` commands guard positional
+  arguments and validate commit hashes, remote names, CPU quotas and server CPU
+  arguments; Windows batch command lines reject line breaks and escape `%` in the
+  script path; and the shipped `npm` and `git-credentials` extensions replace
+  unscoped npm tokens and username-only git credentials with proxy fakes instead of
+  copying them raw into sandboxes.
+
 ## [0.1.4] - 2026-11-24
 
 ### Fixed

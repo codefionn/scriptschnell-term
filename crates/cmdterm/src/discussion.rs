@@ -460,6 +460,9 @@ impl<'a> Git<'a> {
 
     /// `git range-diff`'s summary lines for a rewrite of `old` into `new`.
     fn range_diff(&self, old: &str, new: &str) -> Vec<String> {
+        if !valid_commit(old) || !valid_commit(new) {
+            return Vec::new();
+        }
         let range = format!("{old}...{new}");
         let Some(text) = self.run(&["range-diff", "--no-color", &range]) else {
             return Vec::new();
@@ -494,6 +497,9 @@ struct Head {
 fn timeline(git: &mut Git, tr: &Strings, discussion: &Discussion, branch: &str) -> Vec<Head> {
     let mut heads: Vec<Head> = Vec::new();
     for push in &discussion.pushes {
+        if !valid_commit(&push.commit) {
+            continue;
+        }
         if !heads.iter().any(|h| h.commit == push.commit) {
             heads.push(Head {
                 commit: push.commit.clone(),

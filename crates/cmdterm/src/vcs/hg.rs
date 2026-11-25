@@ -330,12 +330,19 @@ pub(crate) fn fetch(
     remote: Option<&str>,
     update: bool,
 ) -> Result<(), VcsError> {
+    if let Some(remote) = remote
+        && remote.starts_with('-')
+    {
+        return Err(VcsError::InvalidArgument(format!(
+            "remote name cannot start with '-': {remote}"
+        )));
+    }
     let mut command = hg(env, worktree).arg("pull");
     if update {
         command = command.arg("--update");
     }
     if let Some(remote) = remote {
-        command = command.arg(remote);
+        command = command.arg("--").arg(remote);
     }
     network_ok(&command)
 }
@@ -343,7 +350,7 @@ pub(crate) fn fetch(
 /// `sh -c PUSH sh [PATH]`: pushes `.` with its active bookmark. `hg push`
 /// exits 1 when there is nothing to push, which is no failure here.
 const PUSH: &str = r#"b=$(hg log -r . -T '{activebookmark}') || exit 2
-if [ -n "$b" ]; then hg push -r . -B "$b" "$@"; else hg push -r . "$@"; fi
+if [ -n "$b" ]; then hg push -r . -B "$b" -- "$@"; else hg push -r . -- "$@"; fi
 c=$?
 [ "$c" = 1 ] && exit 0
 exit "$c"
@@ -355,6 +362,13 @@ pub(crate) fn push(
     worktree: &Path,
     remote: Option<&str>,
 ) -> Result<String, VcsError> {
+    if let Some(remote) = remote
+        && remote.starts_with('-')
+    {
+        return Err(VcsError::InvalidArgument(format!(
+            "remote name cannot start with '-': {remote}"
+        )));
+    }
     let mut command = script(&repo.env, worktree, PUSH);
     let name = match remote {
         Some(remote) => {

@@ -147,7 +147,10 @@ pub fn client<S: Duplex>(
         }),
         Some((&REJECT, message)) => Err(io::Error::new(
             io::ErrorKind::PermissionDenied,
-            format!("server refused login: {}", String::from_utf8_lossy(message)),
+            format!(
+                "server refused login: {}",
+                crate::sanitize_terminal_text(&String::from_utf8_lossy(message))
+            ),
         )),
         _ => Err(protocol("server sent an invalid login answer")),
     }

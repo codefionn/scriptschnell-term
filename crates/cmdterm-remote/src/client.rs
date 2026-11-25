@@ -733,9 +733,10 @@ fn exec_session(paths: &Paths, options: &ExecOptions) -> io::Result<i32> {
                 if problem != shown_problem {
                     // Goes to the terminal, outside the session's output.
                     let mut stderr = io::stderr();
+                    let safe_problem = crate::sanitize_terminal_text(&problem);
                     let _ = write!(
                         stderr,
-                        "\r\n\x1b[2m[{}: {problem}; reconnecting]\x1b[0m\r\n",
+                        "\r\n\x1b[2m[{}: {safe_problem}; reconnecting]\x1b[0m\r\n",
                         options.target
                     );
                     let _ = stderr.flush();
@@ -794,7 +795,7 @@ fn session_connection(
             }
             Msg::OpenFailed(_, message) => {
                 link.lock().unwrap().send(&Msg::Close(0));
-                return Step::Fatal(io::Error::other(message));
+                return Step::Fatal(io::Error::other(crate::sanitize_terminal_text(&message)));
             }
             _ => Ok(()),
         };

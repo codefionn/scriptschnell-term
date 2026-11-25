@@ -85,7 +85,11 @@ exec "$@""#
 const SHARE_SCRIPT: &str = concat!(
     "r=$1 p=$2\n",
     share_sh!(),
-    r#"exec systemctl --user set-property --runtime app-scriptschnell_term.slice "CPUQuota=$q" ${3+"AllowedCPUs=$3"}"#
+    r#"if [ "$#" -ge 3 ]; then
+  exec systemctl --user set-property --runtime app-scriptschnell_term.slice "CPUQuota=$q" "AllowedCPUs=$3"
+else
+  exec systemctl --user set-property --runtime app-scriptschnell_term.slice "CPUQuota=$q"
+fi"#
 );
 
 /// Sets the weight of scope `$1` to `$2` and, with a third argument, its
@@ -93,7 +97,11 @@ const SHARE_SCRIPT: &str = concat!(
 /// has no cpuset controller, `taskset` moves the scope's processes
 /// instead.
 const SCOPE_SCRIPT: &str = r#"u=$1 w=$2
-systemctl --user set-property --runtime "$u" "CPUWeight=$w" "IOWeight=$w" ${3+"AllowedCPUs=$3"} || exit 1
+if [ "$#" -ge 3 ]; then
+  systemctl --user set-property --runtime "$u" "CPUWeight=$w" "IOWeight=$w" "AllowedCPUs=$3" || exit 1
+else
+  systemctl --user set-property --runtime "$u" "CPUWeight=$w" "IOWeight=$w" || exit 1
+fi
 [ "$#" -ge 3 ] || exit 0
 l=$3; [ -n "$l" ] || l=$(cat /sys/devices/system/cpu/online 2>/dev/null) || exit 0
 g=/sys/fs/cgroup$(systemctl --user show --value -p ControlGroup "$u" 2>/dev/null)
@@ -465,10 +473,47 @@ fn local(op: &str, args: &[String]) -> Option<String> {
 /// Runs a CPU operation on this machine, as [`answer`] describes.
 #[cfg(not(windows))]
 fn local(op: &str, args: &[String]) -> Option<String> {
+    let valid_cores = |list: &str| {
+        list.bytes()
+            .all(|b| b.is_ascii_digit() || matches!(b, b',' | b'-'))
+    };
+    let valid_unit = |unit: &str| {
+        unit.strip_prefix("scriptschnell-term-")
+            .and_then(|rest| rest.strip_suffix(".scope"))
+            .is_some_and(|id| {
+                !id.is_empty()
+                    && id
+                        .bytes()
+                        .all(|b| b.is_ascii_alphanumeric() || matches!(b, b'_' | b'-'))
+            })
+    };
     let script = match op {
-        "topology" => TOPOLOGY_SCRIPT,
-        "share" => SHARE_SCRIPT,
-        "scope" => SCOPE_SCRIPT,
+        "topology" => {
+            if !args.is_empty() {
+                return None;
+            }
+            TOPOLOGY_SCRIPT
+        }
+        "share" => {
+            if !(2..=3).contains(&args.len())
+                || args[0].parse::<u32>().is_err()
+                || args[1].parse::<u32>().is_err()
+                || args.get(2).is_some_and(|list| !valid_cores(list))
+            {
+                return None;
+            }
+            SHARE_SCRIPT
+        }
+        "scope" => {
+            if !(2..=3).contains(&args.len())
+                || !valid_unit(&args[0])
+                || args[1].parse::<u32>().is_err()
+                || args.get(2).is_some_and(|list| !valid_cores(list))
+            {
+                return None;
+            }
+            SCOPE_SCRIPT
+        }
         _ => return None,
     };
     run_sh(&Environment::Local, script, args)
@@ -592,6 +637,24 @@ mod tests {
         assert_eq!(Topology::parse(&topology.to_text()), topology);
         assert_eq!(answer(&[]).0, 2);
         assert_eq!(answer(&["fly".into()]).0, 1);
+        assert_eq!(
+            answer(&["share".into(), "a[$(id)]".into(), "50".into()]).0,
+            1
+        );
+        assert_eq!(
+            answer(&[
+                "share".into(),
+                "1".into(),
+                "50".into(),
+                "0 -p ExecStart=x".into()
+            ])
+            .0,
+            1
+        );
+        assert_eq!(
+            answer(&["scope".into(), "other.scope".into(), "10".into()]).0,
+            1
+        );
     }
 
     #[test]

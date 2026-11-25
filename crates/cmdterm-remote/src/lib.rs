@@ -49,6 +49,21 @@ use std::path::PathBuf;
 pub use cmdterm_env::AppDirs;
 use cmdterm_env::os_secrets;
 
+/// Removes control characters from untrusted text received over the network
+/// before printing it to a terminal, so a remote server cannot inject escape
+/// sequences or line breaks.
+pub(crate) fn sanitize_terminal_text(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    for c in text.chars() {
+        if matches!(c, '\r' | '\n' | '\t') {
+            out.push(' ');
+        } else if !c.is_control() {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// The service name of the identity in the operating system's secret
 /// storage. The account is the key file's path.
 const KEYRING_SERVICE: &str = "scriptschnell-term remote key";
@@ -239,6 +254,14 @@ pub fn create_private_dir(dir: &std::path::Path) -> std::io::Result<()> {
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
+
+    #[test]
+    fn terminal_text_strips_escape_sequences_and_controls() {
+        assert_eq!(
+            sanitize_terminal_text("bad\x1b]52;c;YQ==\x07\r\n\u{009b}2Jok"),
+            "bad]52;c;YQ==  2Jok"
+        );
+    }
 
     /// A symlink would put the sockets in the directory it points at, whose
     /// mode was never checked.

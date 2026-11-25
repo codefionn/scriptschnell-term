@@ -53,6 +53,18 @@ fn hex_val(b: u8) -> Option<u8> {
     (b as char).to_digit(16).map(|d| d as u8)
 }
 
+/// The requested XTGETTCAP name as the reply echoes it: the bytes when they are all
+/// hex digits, else nothing. The request comes from PTY output, so anything else
+/// (newlines, control bytes, shell text) would be typed into the shell by the reply.
+fn echo_name(hex: &[u8]) -> &str {
+    if hex.iter().all(u8::is_ascii_hexdigit) {
+        // All ASCII, so this cannot fail.
+        std::str::from_utf8(hex).unwrap_or_default()
+    } else {
+        ""
+    }
+}
+
 fn hex_decode(s: &[u8]) -> Option<Vec<u8>> {
     if !s.len().is_multiple_of(2) {
         return None;
@@ -162,10 +174,12 @@ impl Core {
                         });
                     }
                 } else if let Some(path) = rest.strip_prefix(b"CurrentDir=") {
-                    self.set_cwd(crate::osc::CurrentDir {
-                        host: String::new(),
-                        path: lossy(path),
-                    });
+                    if !path.iter().any(|&b| b < 0x20 || b == 0x7f) {
+                        self.set_cwd(crate::osc::CurrentDir {
+                            host: String::new(),
+                            path: lossy(path),
+                        });
+                    }
                 } else {
                     return false;
                 }
@@ -320,6 +334,14 @@ impl Core {
     }
 
     pub(super) fn clipboard_reply(&mut self, selection: &str, data: &[u8], bell: bool) {
+        if !selection.bytes().all(|b| b"cpqs01234567".contains(&b)) {
+            return;
+        }
+        let selection = if selection.is_empty() {
+            "s0"
+        } else {
+            selection
+        };
         let end = OscEnd {
             truncated: false,
             bell,
@@ -512,7 +534,12 @@ impl Core {
 
     pub(super) fn xtversion(&mut self) {
         let mut out = b"\x1bP>|".to_vec();
-        out.extend_from_slice(self.config.xtversion.as_bytes());
+        let mut buf = [0u8; 4];
+        for c in self.config.xtversion.chars() {
+            if !c.is_control() {
+                out.extend_from_slice(c.encode_utf8(&mut buf).as_bytes());
+            }
+        }
         out.extend_from_slice(b"\x1b\\");
         self.reply(&out);
     }
@@ -661,7 +688,7 @@ impl Core {
             // The data was cut at DCS_MAX. The first name is complete only if a ';'
             // follows it inside the kept bytes. Otherwise the reply echoes a cut name.
             let hex = pt.split(|&b| b == b';').next().unwrap_or_default();
-            let reply = format!("\x1bP0+r{}\x1b\\", lossy(hex));
+            let reply = format!("\x1bP0+r{}\x1b\\", echo_name(hex));
             self.reply(reply.as_bytes());
             return;
         }
@@ -669,12 +696,15 @@ impl Core {
             let value = hex_decode(hex).and_then(|name| capability(&name));
             match value {
                 Some(v) => {
-                    let reply =
-                        format!("\x1bP1+r{}={}\x1b\\", lossy(hex), hex_encode(v.as_bytes()));
+                    let reply = format!(
+                        "\x1bP1+r{}={}\x1b\\",
+                        echo_name(hex),
+                        hex_encode(v.as_bytes())
+                    );
                     self.reply(reply.as_bytes());
                 }
                 None => {
-                    let reply = format!("\x1bP0+r{}\x1b\\", lossy(hex));
+                    let reply = format!("\x1bP0+r{}\x1b\\", echo_name(hex));
                     self.reply(reply.as_bytes());
                 }
             }

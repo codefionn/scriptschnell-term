@@ -424,12 +424,17 @@ export function renderTerminal(root, route) {
   setStatus('Loading saved output', 'connecting');
   scrollback.load().then(() => {
     if (disposed) return;
+    offset = scrollback.end;
     if (scrollback.size) {
       haveSaved = true;
-      term.write(scrollback.bytes());
+      // Wait for saved output to finish parsing while stdin is still disabled,
+      // so any terminal queries in the scrollback cannot reply into a live shell.
+      term.write(scrollback.bytes(), () => {
+        if (!disposed) connect();
+      });
+      return;
     }
-    offset = scrollback.end;
-    if (!scrollback.size && (state.offline || !navigator.onLine)) {
+    if (state.offline || !navigator.onLine) {
       term.write('\x1b[2mNothing saved for this session on this device.\x1b[0m\r\n');
       placeholder = true;
     }

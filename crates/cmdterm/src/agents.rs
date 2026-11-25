@@ -128,7 +128,7 @@ while IFS= read -r line || [ -n "$line" ]; do
   case $line in
     *'"initialize"'*)
       version=$(printf '%s' "$line" |
-        sed -nE 's/.*"protocolVersion"[[:space:]]*:[[:space:]]*"([^"]*)".*/\1/p')
+        sed -nE 's/.*"protocolVersion"[[:space:]]*:[[:space:]]*"([0-9A-Za-z._-]+)".*/\1/p')
       printf '{"jsonrpc":"2.0","id":%s,"result":{"protocolVersion":"%s","capabilities":{"tools":{}},"serverInfo":{"name":"scriptschnell-term-browser","version":"1"},"instructions":"Offers the debug browser only inside a scriptschnell-term terminal."}}\n' \
         "$id" "${version:-2025-06-18}" ;;
     *'"tools/list"'*) printf '{"jsonrpc":"2.0","id":%s,"result":{"tools":[]}}\n' "$id" ;;
@@ -402,7 +402,7 @@ call() {
   method=$1 path=$2
   shift 2
   printf 'header = "Authorization: Bearer %s"\n' "$SCRIPTSCHNELL_TERM_TOKEN" |
-    curl -sS --fail-with-body -K - -H 'Expect:' --max-time "${max_time:-900}" \
+    curl -gsS --fail-with-body -K - -H 'Expect:' --max-time "${max_time:-900}" \
       --unix-socket "$SCRIPTSCHNELL_TERM_SOCKET" -X "$method" "$@" \
       "http://scriptschnell-term/v1$path" || exit 1
 }
@@ -420,7 +420,7 @@ fetch() {
   shift 2
   body=$(mktemp) || exit 2
   code=$(printf 'header = "Authorization: Bearer %s"\n' "$SCRIPTSCHNELL_TERM_TOKEN" |
-    curl -sS -K - -H 'Expect:' --max-time "${max_time:-900}" -o "$body" -w '%{http_code}' \
+    curl -gsS -K - -H 'Expect:' --max-time "${max_time:-900}" -o "$body" -w '%{http_code}' \
       --unix-socket "$SCRIPTSCHNELL_TERM_SOCKET" -X "$method" "$@" \
       "http://scriptschnell-term/v1$path") || { rm -f "$body"; exit 1; }
 }
@@ -574,7 +574,11 @@ case $command in
     # Used by the hooks where the terminal is out of reach: set user
     # variable NAME of this terminal to VALUE, as OSC 1337 SetUserVar would.
     need 2 $#
-    max_time=5 call PUT "/uservars/$1" --data-binary "$2" >/dev/null
+    case $1 in ''|*[!A-Za-z0-9_.-]*) fail "bad user variable name $1" ;; esac
+    body=$(mktemp) || exit 2
+    trap 'rm -f "$body"' EXIT
+    printf '%s' "$2" > "$body"
+    max_time=5 call PUT "/uservars/$1" --data-binary "@$body" >/dev/null
     ;;
   who)
     scope=all format='&format=text'
@@ -707,7 +711,15 @@ case $command in
     case $mutex in *[!A-Za-z0-9._-]*) fail "bad lock name $mutex" ;; esac
     case $procs$tasks$cpu_time in *[!0-9]*) fail "--max-processes, --max-tasks and --max-cpu-time take whole numbers" ;; esac
     case $cpus in *[!0-9,-]*) fail "bad CPU list $cpus" ;; esac
-    case $quota in ''|*[0-9]%) ;; *) fail "bad CPU quota $quota, use a percentage such as 150%" ;; esac
+    case $quota in
+      '') ;;
+      *%)
+        case ${quota%\%} in
+          ''|*[!0-9]*) fail "bad CPU quota $quota, use a percentage such as 150%" ;;
+        esac
+        ;;
+      *) fail "bad CPU quota $quota, use a percentage such as 150%" ;;
+    esac
     [ -n "$reserve" ] || reserve=$max_ram
     # The hard limits, in the environment this terminal runs in.
     vmem=
@@ -715,15 +727,21 @@ case $command in
       if [ "$(uname -s)" = Linux ] && command -v systemd-run >/dev/null 2>&1 &&
         systemd-run --user --scope --quiet --collect true >/dev/null 2>&1; then
         # Inside the terminal's CPU cap, when it has one.
-        set -- systemd-run --user --scope --quiet --collect \
-          ${SCRIPTSCHNELL_TERM_CPU_SLICE:+--slice=$SCRIPTSCHNELL_TERM_CPU_SLICE} \
-          ${max_ram:+-p MemoryMax=$max_ram -p MemorySwapMax=0} ${cpus:+-p AllowedCPUs=$cpus} \
-          ${quota:+-p CPUQuota=$quota} ${tasks:+-p TasksMax=$tasks} -- "$@"
+        set -- -- "$@"
+        [ -z "$tasks" ] || set -- -p "TasksMax=$tasks" "$@"
+        [ -z "$quota" ] || set -- -p "CPUQuota=$quota" "$@"
+        [ -z "$cpus" ] || set -- -p "AllowedCPUs=$cpus" "$@"
+        [ -z "$max_ram" ] || set -- -p "MemoryMax=$max_ram" -p "MemorySwapMax=0" "$@"
+        case ${SCRIPTSCHNELL_TERM_CPU_SLICE:-} in
+          ''|*[!A-Za-z0-9._@-]*) ;;
+          *) set -- "--slice=$SCRIPTSCHNELL_TERM_CPU_SLICE" "$@" ;;
+        esac
+        set -- systemd-run --user --scope --quiet --collect "$@"
       elif [ "$(uname -s)" = Linux ]; then
         [ -z "$quota$tasks" ] || fail "--cpu-quota and --max-tasks need systemd-run --user, which does not work here"
         if [ -n "$cpus" ]; then
           command -v taskset >/dev/null 2>&1 || fail "--cpus needs systemd-run --user or taskset"
-          set -- taskset -c "$cpus" "$@"
+          set -- taskset -c "$cpus" -- "$@"
         fi
         [ -z "$max_ram" ] || vmem=$((max_ram / 1024))
       else

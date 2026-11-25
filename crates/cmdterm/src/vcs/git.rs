@@ -437,7 +437,7 @@ pub(crate) fn remove_worktree(repo: &Repository, path: &Path, force: bool) -> Re
         }
     }
     git(repo, &repo.root)?
-        .args(["worktree", "remove", "--force"])
+        .args(["worktree", "remove", "--force", "--"])
         .arg(path)
         .stdout()?;
     Ok(())
@@ -545,6 +545,13 @@ pub(crate) fn fetch(
     worktree: &Path,
     remote: Option<&str>,
 ) -> Result<(), VcsError> {
+    if let Some(remote) = remote
+        && remote.starts_with('-')
+    {
+        return Err(VcsError::InvalidArgument(format!(
+            "remote name cannot start with '-': {remote}"
+        )));
+    }
     let command = git(repo, worktree)?.args(["fetch", "--prune"]);
     network_ok(&match remote {
         Some(remote) => command.arg(remote),
@@ -604,11 +611,21 @@ pub(crate) fn push(
             name => string_from_bytes(name),
         },
     };
+    if remote.starts_with('-') {
+        return Err(VcsError::InvalidArgument(format!(
+            "remote name cannot start with '-': {remote}"
+        )));
+    }
     let mut command = git(repo, worktree)?.arg("push");
     if upstream.is_empty() {
         command = command.arg("--set-upstream");
     }
-    network_ok(&command.arg(&remote).arg(format!("{refname}:{refname}")))?;
+    network_ok(
+        &command
+            .arg("--")
+            .arg(&remote)
+            .arg(format!("{refname}:{refname}")),
+    )?;
     Ok(remote)
 }
 
@@ -794,6 +811,11 @@ pub(crate) fn review(
     base: &str,
     uncommitted: bool,
 ) -> Result<Review, VcsError> {
+    if base.starts_with('-') {
+        return Err(VcsError::InvalidArgument(format!(
+            "base revision cannot start with '-': {base}"
+        )));
+    }
     let out = match git(repo, worktree)?
         .args(["merge-base", "HEAD", base])
         .stdout()

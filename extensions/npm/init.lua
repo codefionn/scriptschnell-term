@@ -96,10 +96,24 @@ local function rules()
   local path = os.getenv("NPM_CONFIG_USERCONFIG") or (home .. "/.npmrc")
   local text = read(path)
   if text then
+    local default_host = "registry.npmjs.org"
+    for line in lines(text) do
+      local reg = line:match("^%s*registry%s*=%s*https?://([^/:%s]+)")
+      if reg then
+        default_host = reg:lower()
+      end
+    end
     local out = {}
     for line in lines(text) do
       -- //registry.example.com/path/:_authToken=VALUE
       local head, host, key, value = line:match("^(%s*//([^/:]+)[^=]*:(_%a+)%s*=%s*)(.-)%s*$")
+      if not head then
+        -- Unscoped _authToken=VALUE, _auth=VALUE or _password=VALUE for the default registry.
+        local uhead, ukey, uvalue = line:match("^(%s*(_%a+)%s*=%s*)(.-)%s*$")
+        if uhead and (ukey == "_authToken" or ukey == "_auth" or ukey == "_password") then
+          head, host, key, value = uhead, default_host, ukey, uvalue
+        end
+      end
       if head then
         host = host:lower()
         if host ~= "registry.npmjs.org" then

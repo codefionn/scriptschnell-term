@@ -1156,6 +1156,7 @@ fn the_registry_extensions_give_sandboxes_fakes_and_guard_private_registries() {
         ".npmrc",
         "registry=https://registry.npmjs.org/\n\
          //registry.npmjs.org/:_authToken=npm_REALREALREALREALREALREAL0123\n\
+         _authToken=npm_UNSCOPEDREALTOKEN0123456789\n\
          //npm.corp.example/:_password=c2VjcmV0LXBhc3N3b3Jk\n\
          //env.example/:_authToken=${NPM_TOKEN}\n",
     );
@@ -1189,7 +1190,8 @@ fn the_registry_extensions_give_sandboxes_fakes_and_guard_private_registries() {
     );
     write(
         ".git-credentials",
-        "https://me:ghp_REALREALREALREALREAL0123@github.com\n",
+        "https://me:ghp_REALREALREALREALREAL0123@github.com\n\
+         https://ghp_USERONLYTOKEN0123456789@gitlab.com\n",
     );
     let stub = format!(
         "local os_getenv = function(name) if name == 'HOME' then return {:?} end return nil end\n",
@@ -1220,12 +1222,14 @@ fn the_registry_extensions_give_sandboxes_fakes_and_guard_private_registries() {
 
     let reals = [
         "npm_REALREALREALREALREALREAL0123",
+        "npm_UNSCOPEDREALTOKEN0123456789",
         "secret-password",
         "cioREALREALREALREALREALREALREAL",
         "corp-real-token-0123456789",
         "nuget-real-password",
         "pypi-REALREALREAL",
         "ghp_REALREALREALREALREAL0123",
+        "ghp_USERONLYTOKEN0123456789",
     ];
     for (path, content) in &rules.files {
         for real in reals
@@ -1244,12 +1248,14 @@ fn the_registry_extensions_give_sandboxes_fakes_and_guard_private_registries() {
             .unwrap_or_else(|| panic!("no secret for {real}"))
     };
     assert_eq!(secret_hosts(reals[0]), ["registry.npmjs.org"]);
-    assert_eq!(secret_hosts(reals[1]), ["npm.corp.example"]);
-    assert_eq!(secret_hosts(reals[2]), ["crates.io"]);
-    assert_eq!(secret_hosts(reals[3]), ["cargo.corp.example"]);
-    assert_eq!(secret_hosts(reals[4]), ["nuget.corp.example"]);
-    assert_eq!(secret_hosts(reals[5]), ["upload.pypi.org"]);
-    assert_eq!(secret_hosts(reals[6]), ["github.com"]);
+    assert_eq!(secret_hosts(reals[1]), ["registry.npmjs.org"]);
+    assert_eq!(secret_hosts(reals[2]), ["npm.corp.example"]);
+    assert_eq!(secret_hosts(reals[3]), ["crates.io"]);
+    assert_eq!(secret_hosts(reals[4]), ["cargo.corp.example"]);
+    assert_eq!(secret_hosts(reals[5]), ["nuget.corp.example"]);
+    assert_eq!(secret_hosts(reals[6]), ["upload.pypi.org"]);
+    assert_eq!(secret_hosts(reals[7]), ["github.com"]);
+    assert_eq!(secret_hosts(reals[8]), ["gitlab.com"]);
     assert_eq!(rules.secrets.len(), reals.len());
 
     let file = |name: &str| {

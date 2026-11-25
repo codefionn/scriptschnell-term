@@ -900,14 +900,24 @@ pub(crate) fn is_batch_file(program: &OsStr) -> bool {
 /// command, so an argument with one is refused.
 pub(crate) fn batch_command_line(script: &OsStr, args: &[OsString]) -> io::Result<Vec<u16>> {
     let script: Vec<u16> = script.encode_wide().collect();
-    if script.contains(&u16::from(b'"')) || script.last() == Some(&u16::from(b'\\')) {
+    if script.contains(&u16::from(b'"'))
+        || script.last() == Some(&u16::from(b'\\'))
+        || script
+            .iter()
+            .any(|&u| u == u16::from(b'\r') || u == u16::from(b'\n') || u == 0)
+    {
         return Err(io::Error::new(
             io::ErrorKind::InvalidInput,
-            "a batch file's path may not hold `\"` or end with `\\`",
+            "a batch file's path may not hold `\"`, line breaks or NUL, or end with `\\`",
         ));
     }
     let mut line: Vec<u16> = "cmd.exe /e:ON /v:OFF /d /c \"\"".encode_utf16().collect();
-    line.extend(script);
+    for unit in script {
+        if unit == u16::from(b'%') {
+            line.extend("%%cd:~,".encode_utf16());
+        }
+        line.push(unit);
+    }
     line.push(u16::from(b'"'));
     for arg in args {
         let bytes = arg.as_encoded_bytes();
@@ -1020,6 +1030,12 @@ mod tests {
         let plain = process_command_line(OsStr::new("git.exe"), &["a b".into()]).unwrap();
         assert_eq!(String::from_utf16_lossy(&plain), "git.exe \"a b\"\0");
         assert!(process_command_line(OsStr::new("x.cmd"), &["a\nb".into()]).is_err());
+        assert!(process_command_line(OsStr::new("a\nb.cmd"), &[]).is_err());
+        let pct = process_command_line(OsStr::new(r"C:\100%\tool.cmd"), &[]).unwrap();
+        assert_eq!(
+            String::from_utf16_lossy(&pct[..pct.len() - 1]),
+            r#"cmd.exe /e:ON /v:OFF /d /c ""C:\100%%cd:~,%\tool.cmd""#
+        );
     }
 
     #[test]

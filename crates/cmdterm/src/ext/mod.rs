@@ -650,7 +650,7 @@ pub fn url_host(url: &str) -> Option<String> {
     let rest = url
         .strip_prefix("https://")
         .or_else(|| url.strip_prefix("http://"))?;
-    let authority = rest.split(['/', '?', '#']).next()?;
+    let authority = rest.split(['/', '\\', '?', '#']).next()?;
     let authority = authority
         .rsplit_once('@')
         .map_or(authority, |(_, host)| host);

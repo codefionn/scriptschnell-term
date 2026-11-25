@@ -163,6 +163,12 @@ impl Link {
     }
 }
 
+/// Whether `link` is a well-formed `http` or `https` URL that is safe to
+/// hand to the system opener.
+pub(crate) fn is_http_url(link: &str) -> bool {
+    Link::parse(link).is_ok()
+}
+
 /// The host and port of an http or https link.
 fn authority(link: &str) -> Option<(String, u16)> {
     let (scheme, rest) = link.split_once("://")?;
@@ -173,6 +179,11 @@ fn authority(link: &str) -> Option<(String, u16)> {
     };
     let end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let authority = &rest[..end];
+    // Browsers treat `\` as a path separator in http(s) URLs, so `evil.com\@good.com`
+    // would otherwise be read as `good.com` here and opened as `evil.com`.
+    if authority.contains('\\') {
+        return None;
+    }
     let authority = authority.rsplit_once('@').map_or(authority, |(_, a)| a);
     let (host, port) = match authority.strip_prefix('[') {
         Some(v6) => {
@@ -401,6 +412,7 @@ mod tests {
             "javascript:alert(1)",
             "https://a b",
             "https://",
+            "https://evil.com\\@trusted.com/",
             "x",
         ] {
             assert!(Link::parse(bad).is_err(), "{bad}");
