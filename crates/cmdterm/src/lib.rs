@@ -26,6 +26,7 @@ mod forges;
 mod fusion;
 mod i18n;
 mod keymap;
+mod logs;
 mod machines;
 mod memory;
 mod monitor;
@@ -114,7 +115,7 @@ struct Cli {
     palette: Option<String>,
     /// With --screenshot: open the settings at this section (project, font,
     /// color-scheme, keyboard, extensions, accounts, registries, agents, remote, vpn, sandboxing,
-    /// sandbox-files, sandbox-hosts, changelog or licenses), or at `extensions/<name>` for one
+    /// sandbox-files, sandbox-hosts, changelog, licenses or logs), or at `extensions/<name>` for one
     /// extension's page.
     #[arg(long)]
     settings: Option<String>,
@@ -180,13 +181,15 @@ pub fn main() -> ExitCode {
     let result = run(cli);
     // Extension data written in the last moments reaches the disk.
     crate::ext::flush_stores();
-    match result {
+    let code = match result {
         Ok(()) => ExitCode::SUCCESS,
         Err(error) => {
-            eprintln!("scriptschnell-term: {error}");
+            logs::error_and_print("app", error.to_string());
             ExitCode::FAILURE
         }
-    }
+    };
+    logs::flush();
+    code
 }
 
 /// Where the helper programs are when the app runs from an AppImage: copied
@@ -198,8 +201,9 @@ fn appimage_helpers(dirs: &cmdterm_env::AppDirs) -> Option<std::path::PathBuf> {
     match cmdterm_env::appimage::install_helpers(&dirs.data.join("bin")) {
         Ok(bin) => Some(bin),
         Err(error) => {
-            eprintln!(
-                "scriptschnell-term: cannot copy the helper programs out of the AppImage: {error}"
+            logs::error_and_print(
+                "app",
+                format!("cannot copy the helper programs out of the AppImage: {error}"),
             );
             None
         }
@@ -209,6 +213,14 @@ fn appimage_helpers(dirs: &cmdterm_env::AppDirs) -> Option<std::path::PathBuf> {
 fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
     let dirs = cmdterm_env::AppDirs::resolve(cli.config_dir.as_deref());
     dirs.migrate();
+    // First, so the log holds what goes wrong from here on, panics too.
+    if let Err(error) = logs::init(&dirs.logs) {
+        eprintln!(
+            "scriptschnell-term: no log file in {}: {error}",
+            dirs.logs.display()
+        );
+    }
+    logs::install_panic_hook();
     notifications::remove_update_leftovers();
     let helpers = appimage_helpers(&dirs);
     let mut client = cmdterm_env::RemoteClient::discover();
@@ -222,7 +234,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
         ..client
     });
     for error in bundle::install(&dirs) {
-        eprintln!("scriptschnell-term: {error}");
+        logs::error_and_print("app", &error);
     }
     let store = StateStore::new(dirs.state.join("state.json"));
     let settings = SettingsStore::new(dirs.config.join("settings.json"));
@@ -310,6 +322,7 @@ fn run(cli: Cli) -> Result<(), Box<dyn std::error::Error>> {
                 "sandbox-hosts" => ui::SettingsSection::SandboxHosts,
                 "changelog" => ui::SettingsSection::Changelog,
                 "licenses" => ui::SettingsSection::Licenses,
+                "logs" => ui::SettingsSection::Logs,
                 _ => ui::SettingsSection::Font,
             });
             if extension.is_some() {

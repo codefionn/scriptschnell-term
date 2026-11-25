@@ -977,14 +977,18 @@ impl Workspace {
         let state = match state {
             Ok(state) => state,
             Err(error) => {
-                notices.push_back(Notice::new((tr.state_not_loaded)(&error.to_string())));
+                let text = (tr.state_not_loaded)(&error.to_string());
+                crate::logs::error("state", &text);
+                notices.push_back(Notice::new(text));
                 AppState::default()
             }
         };
         let settings = match settings {
             Ok(settings) => settings,
             Err(error) => {
-                notices.push_back(Notice::new((tr.settings_not_loaded)(&error.to_string())));
+                let text = (tr.settings_not_loaded)(&error.to_string());
+                crate::logs::error("settings", &text);
+                notices.push_back(Notice::new(text));
                 Settings::default()
             }
         };
@@ -1005,6 +1009,7 @@ impl Workspace {
         // Before any panel opens, so saved sessions of extension agents
         // resume.
         for error in crate::agents::set_custom(ext.owner(), ext.agents()) {
+            crate::logs::error("agents", error.to_string());
             notices.push_back(Notice::new(error.to_string()));
         }
         let (keymap, errors) =
@@ -1351,7 +1356,7 @@ impl Workspace {
                     inner.tr.sandbox_claude_without_bash.to_owned()
                 }
             };
-            inner.push_notice(text);
+            inner.push_warning("sandbox", text);
         }
     }
 
@@ -3096,7 +3101,7 @@ impl Workspace {
         let mut inner = self.0.borrow_mut();
         if let Err(error) = inner.settings_store.save(&inner.settings) {
             let text = (inner.tr.settings_not_saved)(&error.to_string());
-            inner.push_notice(text);
+            inner.push_error("settings", text);
         }
         #[cfg(not(test))]
         crate::debug_browser::configure(&inner.settings, &inner.dirs);
@@ -3167,6 +3172,13 @@ impl Workspace {
                 | inner.settings_ui.machines.vpn.changed();
             let agents = inner.settings_ui.agents.changed();
             if (agents || probed) && inner.settings_ui.open {
+                inner.dirty.settings = true;
+            }
+            // The Logs page shows entries as they come. An atomic load.
+            if inner.settings_ui.open
+                && inner.settings_ui.section == crate::ui::SettingsSection::Logs
+                && inner.settings_ui.log_seen != crate::logs::revision()
+            {
                 inner.dirty.settings = true;
             }
             if agents {
@@ -3430,7 +3442,7 @@ impl Workspace {
                     .map(|path| (inner.tr.git_dir_replaced)(&path.display().to_string()))
                     .collect();
                 for text in newly {
-                    inner.push_notice(text);
+                    inner.push_warning("vcs", text);
                 }
                 // A review shows the files on disk, so it follows their status.
                 if let Some(old) = inner.snapshots.get(&project)
@@ -3496,6 +3508,7 @@ impl Workspace {
                     Some(i) => inner.remote_runs.remove(i).label,
                     None => crate::search::folder_name(&path),
                 };
+                let failed = result.is_err();
                 let text = match (&op, result) {
                     (RemoteOp::Fetch, Ok(_)) => (tr.vcs_fetched)(&label),
                     (RemoteOp::Pull, Ok(_)) => (tr.vcs_pulled)(&label),
@@ -3506,7 +3519,11 @@ impl Workspace {
                     (RemoteOp::Pull, Err(reason)) => (tr.vcs_pull_failed)(&label, &reason),
                     (RemoteOp::Push(_), Err(reason)) => (tr.vcs_push_failed)(&label, &reason),
                 };
-                inner.push_notice(text);
+                if failed {
+                    inner.push_error("vcs", text);
+                } else {
+                    inner.push_notice(text);
+                }
                 drop(inner);
                 self.reread_project(project);
             }
@@ -4450,7 +4467,7 @@ impl Workspace {
             });
             if let Some(error) = paste_error {
                 let text = (inner.tr.paste_image_failed)(&error);
-                inner.push_notice(text);
+                inner.push_error("clipboard", text);
             }
             let inner = &*inner;
             for live in inner.live.values().flat_map(HashMap::values) {
@@ -4492,7 +4509,7 @@ impl Workspace {
             inner.dirty.sidebar = true;
             inner.dirty.main |= shown;
             for text in failed {
-                inner.push_notice(text);
+                inner.push_warning("terminal", text);
             }
         }
         self.resize_active();
@@ -4517,7 +4534,7 @@ impl Workspace {
         .unwrap_or_default();
         if let Ok(mut inner) = self.0.try_borrow_mut() {
             let text = (inner.tr.extension_request_failed)(&message);
-            inner.push_notice(text);
+            inner.push_error("extension", text);
         }
     }
 
@@ -4532,11 +4549,17 @@ impl Workspace {
                     title,
                 } => self.open_terminal_in(cwd, command, title),
                 Request::OpenBrowser { url } => self.open_browser(&url),
-                Request::Notify { level, message } => self.notify(match level {
-                    NotifyLevel::Info => message,
-                    NotifyLevel::Warning => (self.tr().warning)(&message),
-                    NotifyLevel::Error => (self.tr().error)(&message),
-                }),
+                Request::Notify { level, message } => {
+                    let tr = self.tr();
+                    let mut inner = self.0.borrow_mut();
+                    match level {
+                        NotifyLevel::Info => inner.push_notice(message),
+                        NotifyLevel::Warning => {
+                            inner.push_warning("extension", (tr.warning)(&message))
+                        }
+                        NotifyLevel::Error => inner.push_error("extension", (tr.error)(&message)),
+                    }
+                }
                 Request::SendText { terminal, text } => {
                     let target = match terminal {
                         Some(id) => self.terminal_by_id(id),
@@ -4793,7 +4816,7 @@ impl Workspace {
         }
         if let Err(error) = inner.store.save(&inner.state) {
             let text = (inner.tr.state_not_saved)(&error.to_string());
-            inner.push_notice(text);
+            inner.push_error("state", text);
         }
     }
 }
@@ -4975,7 +4998,28 @@ impl Inner {
         }
     }
 
+    /// Shows `text` in the status bar and the notification list, and logs
+    /// it as information.
     pub(crate) fn push_notice(&mut self, text: String) {
+        crate::logs::info("notice", &text);
+        self.show_notice(text);
+    }
+
+    /// [`Self::push_notice`] for something that went wrong: logged as an
+    /// error from `source`, so the Logs page finds it.
+    pub(crate) fn push_error(&mut self, source: &str, text: String) {
+        crate::logs::error(source, &text);
+        self.show_notice(text);
+    }
+
+    /// [`Self::push_notice`] for something that works, but not as asked.
+    pub(crate) fn push_warning(&mut self, source: &str, text: String) {
+        crate::logs::warn(source, &text);
+        self.show_notice(text);
+    }
+
+    /// Shows a notice without logging it.
+    pub(crate) fn show_notice(&mut self, text: String) {
         if self.notices.len() == MAX_NOTICES {
             self.notices.pop_front();
         }
@@ -5159,7 +5203,7 @@ impl Inner {
             Ok(None) => panel.show_message(key, (tr.view_gone)(view)),
             Err(error) => {
                 panel.show_message(key, error.to_string());
-                self.push_notice(error.to_string());
+                self.push_error("extension", error.to_string());
             }
         }
         self.dirty.tabs = true;
@@ -5280,7 +5324,7 @@ impl Inner {
                     self.publish_environment();
                 }
                 Err(error) => {
-                    self.push_notice((self.tr.control_failed)(&error.to_string()));
+                    self.push_error("control socket", (self.tr.control_failed)(&error.to_string()));
                     self.control = Some(None);
                 }
             }
@@ -5728,7 +5772,7 @@ impl Inner {
                         ))
                     }
                     Err(error) => {
-                        self.push_notice((self.tr.terminal_failed)(&error.to_string()));
+                        self.push_error("terminal", (self.tr.terminal_failed)(&error.to_string()));
                         None
                     }
                 }

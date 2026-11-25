@@ -382,6 +382,7 @@ impl Notifications {
             Ok(found) => found,
             Err(error) => {
                 eprintln!("scriptschnell-term: update check: {error}");
+                crate::logs::warn("updates", format!("update check: {error}"));
                 return;
             }
         };
@@ -500,6 +501,17 @@ impl Notifications {
 /// Runs the update `topic` offers and returns the notification that
 /// reports how it went.
 fn perform(topic: Topic) -> Option<Topic> {
+    let done = perform_update(topic)?;
+    if let Topic::Failed { agent, env, error } = &done {
+        crate::logs::error(
+            "updates",
+            format!("{} on {}: {error}", agent.name(), env.label()),
+        );
+    }
+    Some(done)
+}
+
+fn perform_update(topic: Topic) -> Option<Topic> {
     Some(match topic {
         Topic::IntegrationOutdated { agent, env } => match agents::reinstall(&env, agent) {
             Ok(()) => Topic::Updated { agent, env },

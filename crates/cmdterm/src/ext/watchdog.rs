@@ -71,6 +71,10 @@ impl Watchdog {
                 Err(error) => {
                     self.unavailable = true;
                     eprintln!("[cmdterm-ext] no time budget for extensions: {error}");
+                    crate::logs::error(
+                        "extensions",
+                        format!("no time budget for extensions: {error}"),
+                    );
                 }
             }
         }

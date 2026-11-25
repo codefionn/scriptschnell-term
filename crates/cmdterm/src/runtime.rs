@@ -583,7 +583,7 @@ impl Inner {
             self.runtimes
                 .update_proxy(&self.settings.sandbox, self.ext.sandbox_rules());
             for (id, error) in self.runtimes.blocklists.take_failures() {
-                self.push_notice((self.tr.blocklist_failed)(&id, &error));
+                self.push_error("blocklists", (self.tr.blocklist_failed)(&id, &error));
             }
         }
         let listed = self.runtimes.ports.revision();
@@ -1387,7 +1387,7 @@ impl VcsMetadata {
             && std::fs::read_to_string(&commondir).is_ok_and(|text| text.trim_end() != ".")
             && let Err(error) = std::fs::write(&commondir, ".\n")
         {
-            eprintln!("scriptschnell-term: {}: {error}", commondir.display());
+            crate::logs::error_and_print("sandbox", format!("{}: {error}", commondir.display()));
         }
         self.writable.push(dir.clone());
         self.common(&dir);
@@ -1714,9 +1714,9 @@ impl Inner {
                     return Ok(None);
                 };
                 if let Err(error) = cmdterm_env::install_host_bridge(&host, &local) {
-                    eprintln!(
-                        "scriptschnell-term: {}: no sandbox bridge: {error}",
-                        host.label()
+                    crate::logs::error_and_print(
+                        "sandbox",
+                        format!("{}: no sandbox bridge: {error}", host.label()),
                     );
                 }
                 Ok(None)

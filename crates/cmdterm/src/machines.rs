@@ -285,7 +285,7 @@ pub struct MachinesUi {
     /// [`ARM_SETTLE`] after it is the end of a double click, not a choice.
     armed_at: Option<std::time::Instant>,
     /// Kept open so the copied key stays on the clipboard.
-    clipboard: schnellui::platform::SystemClipboard,
+    pub(crate) clipboard: schnellui::platform::SystemClipboard,
 }
 
 /// This machine serving others from inside the app.

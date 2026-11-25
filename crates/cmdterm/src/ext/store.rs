@@ -94,7 +94,10 @@ impl Store {
                 Ok(value) => {
                     self.entries.insert(key, value);
                 }
-                Err(error) => eprintln!("[ext store] skipping {}: {error}", entry.path().display()),
+                Err(error) => crate::logs::error(
+                    "extension store",
+                    format!("skipping {}: {error}", entry.path().display()),
+                ),
             }
         }
     }
@@ -201,12 +204,18 @@ fn writer() -> &'static Mutex<Sender<Job>> {
                     match job {
                         Job::Write(path, Some(bytes)) => {
                             if let Err(error) = write_now(&path, &bytes) {
-                                eprintln!("[ext store] cannot write {}: {error}", path.display());
+                                crate::logs::error(
+                                    "extension store",
+                                    format!("cannot write {}: {error}", path.display()),
+                                );
                             }
                         }
                         Job::Write(path, None) => match std::fs::remove_file(&path) {
                             Err(error) if error.kind() != std::io::ErrorKind::NotFound => {
-                                eprintln!("[ext store] cannot remove {}: {error}", path.display());
+                                crate::logs::error(
+                                    "extension store",
+                                    format!("cannot remove {}: {error}", path.display()),
+                                );
                             }
                             _ => {}
                         },

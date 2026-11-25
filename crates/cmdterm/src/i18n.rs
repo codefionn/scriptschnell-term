@@ -1219,6 +1219,33 @@ pub struct Strings {
     pub settings_group_about: &'static str,
     pub section_changelog: &'static str,
     pub section_licenses: &'static str,
+    pub section_logs: &'static str,
+    pub find_in_log: &'static str,
+    /// Names the level filter on the Logs page.
+    pub log_filter: &'static str,
+    pub log_warnings: &'static str,
+    pub log_errors: &'static str,
+    /// How many entries the Logs page lists, of how many in the log.
+    pub log_count: fn(usize, usize) -> String,
+    /// Where the log file is.
+    pub log_saved_to: fn(&str) -> String,
+    pub log_memory_only: &'static str,
+    pub log_copy_shown: &'static str,
+    pub log_copy_entry: &'static str,
+    pub log_copied: &'static str,
+    pub log_clear: &'static str,
+    pub log_clear_confirm: &'static str,
+    pub log_empty: &'static str,
+    pub log_no_match: &'static str,
+    /// The Logs page lists only the newest this many of the matches.
+    pub log_more: fn(usize) -> String,
+    /// An entry from the log file of an earlier start.
+    pub log_earlier_run: &'static str,
+    /// How many times in a row an entry happened.
+    pub log_repeated: fn(u32) -> String,
+    pub log_level_error: &'static str,
+    pub log_level_warning: &'static str,
+    pub log_level_info: &'static str,
     /// The line over the changelog, with the running version.
     pub changelog_running: fn(&str) -> String,
     /// The changelog's heading for changes not released yet.
@@ -1493,6 +1520,9 @@ fn keywords_en(section: SettingsSection) -> &'static str {
         SettingsSection::Licenses => {
             "MIT license, Apache License 2.0, Third-party crates | licence open source copyright notices dependencies"
         }
+        SettingsSection::Logs => {
+            "Logs, Find in the log, Copy shown, Clear log | errors warnings notices log file diagnostics debug problems troubleshooting panic"
+        }
     }
 }
 
@@ -1543,6 +1573,9 @@ fn keywords_de(section: SettingsSection) -> &'static str {
         }
         SettingsSection::Licenses => {
             "MIT-Lizenz, Apache License 2.0, Crates anderer Autoren | lizenz open source urheberrecht abhängigkeiten"
+        }
+        SettingsSection::Logs => {
+            "Protokoll, Im Protokoll suchen, Angezeigte kopieren, Protokoll leeren | fehler warnungen hinweise logs logdatei diagnose debug probleme absturz panic"
         }
     }
 }
@@ -2706,6 +2739,30 @@ pub static EN: Strings = Strings {
     settings_group_about: "ABOUT",
     section_changelog: "Changelog",
     section_licenses: "Licenses",
+    section_logs: "Logs",
+    find_in_log: "Find in the log",
+    log_filter: "Show",
+    log_warnings: "Warnings",
+    log_errors: "Errors",
+    log_count: |shown, total| match total {
+        1 => format!("{shown} of 1 entry"),
+        _ => format!("{shown} of {total} entries"),
+    },
+    log_saved_to: |path| format!("Saved to {path}, newest at the end."),
+    log_memory_only: "The log file could not be opened, so this log ends with the app.",
+    log_copy_shown: "Copy shown",
+    log_copy_entry: "Copy entry",
+    log_copied: "Copied to the clipboard",
+    log_clear: "Clear log",
+    log_clear_confirm: "Click again to clear",
+    log_empty: "Nothing logged yet.",
+    log_no_match: "No entry matches.",
+    log_more: |rows| format!("Only the newest {rows} show. Narrow the search to find older ones."),
+    log_earlier_run: "earlier start",
+    log_repeated: |count| format!("{count} times"),
+    log_level_error: "Error",
+    log_level_warning: "Warning",
+    log_level_info: "Info",
     changelog_running: |version| format!("You are running version {version}."),
     changelog_unreleased: "Unreleased",
     licenses_app_hint: "scriptschnell-term is licensed under the MIT license or the Apache License 2.0, at your option.",
@@ -4024,6 +4081,30 @@ pub static DE: Strings = Strings {
     settings_group_about: "ÜBER",
     section_changelog: "Änderungen",
     section_licenses: "Lizenzen",
+    section_logs: "Protokoll",
+    find_in_log: "Im Protokoll suchen",
+    log_filter: "Zeigen",
+    log_warnings: "Warnungen",
+    log_errors: "Fehler",
+    log_count: |shown, total| match total {
+        1 => format!("{shown} von 1 Eintrag"),
+        _ => format!("{shown} von {total} Einträgen"),
+    },
+    log_saved_to: |path| format!("Gespeichert in {path}, das Neueste am Ende."),
+    log_memory_only: "Die Protokolldatei ließ sich nicht öffnen, daher endet dieses Protokoll mit der App.",
+    log_copy_shown: "Angezeigte kopieren",
+    log_copy_entry: "Eintrag kopieren",
+    log_copied: "In die Zwischenablage kopiert",
+    log_clear: "Protokoll leeren",
+    log_clear_confirm: "Zum Leeren erneut klicken",
+    log_empty: "Noch nichts protokolliert.",
+    log_no_match: "Kein Eintrag passt.",
+    log_more: |rows| format!("Nur die neuesten {rows} werden gezeigt. Grenze die Suche ein, um ältere zu finden."),
+    log_earlier_run: "früherer Start",
+    log_repeated: |count| format!("{count}-mal"),
+    log_level_error: "Fehler",
+    log_level_warning: "Warnung",
+    log_level_info: "Info",
     changelog_running: |version| format!("Du verwendest Version {version}."),
     changelog_unreleased: "Noch nicht veröffentlicht",
     licenses_app_hint: "scriptschnell-term steht nach deiner Wahl unter der MIT-Lizenz oder der Apache License 2.0.",

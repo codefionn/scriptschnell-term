@@ -29,6 +29,7 @@ with the same file names. Use it for a scratch configuration.
 | State: `state.json` | Projects, worktrees, panel layout per worktree | The app |
 | State: `sandbox/` | Shell history, neovim state, the state directory and stand-in files of sandboxes | The app |
 | Cache: `blocklists/` | Downloaded blocklists | The app |
+| Logs: `scriptschnell-term.log` | The app's errors, warnings and notices, which Settings, Logs lists; `scriptschnell-term.log.1` holds the older ones once the file passes 1 MiB | The app |
 | Logs | Devcontainer, job and VM image logs | The app |
 
 The app loads the shipped extensions and your own; one of yours replaces a shipped one of

@@ -7,8 +7,8 @@
 //! and the bindings in effect), extensions, agents (hooks that let coding
 //! agents report when they wait for the user), remote machines with its VPN
 //! networks subsection, virtual machines, sandboxing with its Files and
-//! Hosts subsections, language, and the About pages: the changelog and the
-//! licenses of the app and its crates. `ui/machines.rs` builds the project,
+//! Hosts subsections, language, and the About pages: the changelog, the
+//! licenses of the app and its crates, and the app's log (`crate::logs`). `ui/machines.rs` builds the project,
 //! machine and sandboxing pages. It is its own region; picking a section or
 //! toggling an extension rebuilds only the overlay, while a font, scheme or
 //! language change remounts the app because every region draws with it.
@@ -243,10 +243,12 @@ pub enum SettingsSection {
     Changelog,
     /// The app's license and those of the crates built into it.
     Licenses,
+    /// The app's log of errors, warnings and notices.
+    Logs,
 }
 
 impl SettingsSection {
-    pub const ALL: [SettingsSection; 20] = [
+    pub const ALL: [SettingsSection; 21] = [
         SettingsSection::Project,
         SettingsSection::ProjectAllowed,
         SettingsSection::ProjectBlocked,
@@ -267,6 +269,7 @@ impl SettingsSection {
         SettingsSection::SandboxHosts,
         SettingsSection::Changelog,
         SettingsSection::Licenses,
+        SettingsSection::Logs,
     ];
 
     pub fn title(self, tr: &Strings) -> &'static str {
@@ -291,6 +294,7 @@ impl SettingsSection {
             SettingsSection::Language => tr.section_language,
             SettingsSection::Changelog => tr.section_changelog,
             SettingsSection::Licenses => tr.section_licenses,
+            SettingsSection::Logs => tr.section_logs,
         }
     }
 
@@ -406,6 +410,18 @@ pub struct SettingsState {
     /// The license whose text the Licenses page shows: [`LICENSE_MIT_KEY`],
     /// [`LICENSE_APACHE_KEY`] or a crate's name and version.
     pub license: Option<String>,
+    /// What the find field on the Logs page holds.
+    pub log_query: String,
+    /// Whether that field is being typed in, so a rebuild keeps focus in it.
+    pub finding_log: bool,
+    /// Which levels the Logs page lists.
+    pub log_filter: LogFilter,
+    /// The log entry the Logs page shows in full.
+    pub log_open: Option<u64>,
+    /// The log's revision the Logs page last showed.
+    pub log_seen: u64,
+    /// Clear was clicked once on the Logs page; the next click clears.
+    pub confirm_clear_log: bool,
 }
 
 impl SettingsFocusKey {
@@ -431,6 +447,7 @@ pub struct SettingsFocusKey {
     recording: bool,
     finding_page: bool,
     finding_extension: bool,
+    finding_log: bool,
     extension: Option<Option<String>>,
     account_form: Option<String>,
     typing: bool,
@@ -520,8 +537,13 @@ impl crate::workspace::Inner {
     /// overlay's header while it is open, else a notice, since the action
     /// may finish on a thread after the user closed the overlay.
     pub(crate) fn toast(&mut self, failed: bool, text: String) {
+        // Only failures go into the log: a copy from the Logs page would
+        // otherwise log itself.
+        if failed {
+            crate::logs::error("settings", &text);
+        }
         if !self.settings_ui.open {
-            self.push_notice(text);
+            self.show_notice(text);
             return;
         }
         let toast = Toast {
@@ -707,6 +729,7 @@ impl Workspace {
             inner.settings_ui.page_query.clear();
             inner.settings_ui.finding_page = true;
             inner.settings_ui.finding_extension = false;
+            inner.settings_ui.finding_log = false;
             inner.settings_ui.machines.form.filtering_hosts = false;
             inner.settings_ui.machines.form.typing_key = false;
             inner.settings_ui.machines.form.typing_address = false;
@@ -717,6 +740,7 @@ impl Workspace {
         inner.settings_ui.picker = None;
         inner.settings_ui.last_binding = None;
         inner.settings_ui.confirm_reset = false;
+        inner.settings_ui.confirm_clear_log = false;
         inner.dirty.settings = true;
         let section = inner.settings_ui.section;
         drop(inner);
@@ -899,6 +923,7 @@ impl Workspace {
         let inner = &mut *inner;
         inner.settings_ui.finding_page = true;
         inner.settings_ui.finding_extension = false;
+        inner.settings_ui.finding_log = false;
         inner.settings_ui.machines.form.filtering_hosts = false;
         inner.settings_ui.machines.form.typing_key = false;
         inner.settings_ui.machines.form.typing_address = false;
@@ -1064,6 +1089,7 @@ impl Workspace {
             recording: ui.recording.is_some(),
             finding_page: ui.finding_page,
             finding_extension: ui.finding_extension,
+            finding_log: ui.finding_log,
             extension: ui.extension_open.then(|| ui.extension.clone()),
             account_form: ui.account_form.clone(),
             typing: inner.forges.typing,
@@ -1096,6 +1122,8 @@ impl Workspace {
             inner.settings_ui.machines.form.typing_address = false;
             inner.settings_ui.finding_extension = false;
             inner.settings_ui.finding_page = false;
+            inner.settings_ui.finding_log = false;
+            inner.settings_ui.confirm_clear_log = false;
             inner.settings_ui.extension_open = false;
             inner.settings_ui.last_binding = None;
             inner.forges.typing = false;
@@ -1155,6 +1183,7 @@ impl Workspace {
         if ui.picker.is_some() {
             ui.finding_page = false;
             ui.finding_extension = false;
+            ui.finding_log = false;
         }
         ui.picker_query.clear();
         inner.dirty.settings = true;
@@ -1316,7 +1345,8 @@ pub fn settings(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         || (section == SettingsSection::Remote
             && (inner.settings_ui.machines.form.typing_key
                 || inner.settings_ui.machines.form.typing_address))
-        || (section == SettingsSection::Extensions && inner.settings_ui.finding_extension);
+        || (section == SettingsSection::Extensions && inner.settings_ui.finding_extension)
+        || (section == SettingsSection::Logs && inner.settings_ui.finding_log);
     let finding_page = inner.settings_ui.finding_page;
     // An open extension page takes focus on its back button, so the nav
     // shows its usual selection and no focus ring.
@@ -1607,6 +1637,7 @@ pub fn settings(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         SettingsSection::Language => Box::new(language_section(ws, scheme)),
         SettingsSection::Changelog => Box::new(changelog_section(ws, scheme)),
         SettingsSection::Licenses => Box::new(licenses_section(ws, scheme)),
+        SettingsSection::Logs => Box::new(logs_section(ws, scheme)),
     };
 
     let close = ws.clone();
@@ -2501,6 +2532,8 @@ fn ext_nav_row_width() -> f32 {
 /// Width of the find field and of the state filter above the list.
 const EXT_FIND_WIDTH: f32 = 300.0;
 const EXT_FILTER_WIDTH: f32 = 210.0;
+/// Width of the level filter on the Logs page.
+const LOG_FILTER_WIDTH: f32 = 240.0;
 /// Characters of an extension's description its list row shows.
 const EXT_DESCRIPTION_CHARS: usize = 96;
 /// Width of a row in an extension's page, beside its scroll bar.
@@ -4794,6 +4827,321 @@ fn licenses_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
         .child(bottom_room(page))
 }
 
+/// Which entries the Logs page lists.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub enum LogFilter {
+    #[default]
+    All,
+    /// Warnings and errors.
+    Warnings,
+    Errors,
+}
+
+impl LogFilter {
+    fn shows(self, level: crate::logs::Level) -> bool {
+        use crate::logs::Level;
+        match self {
+            LogFilter::All => true,
+            LogFilter::Warnings => level >= Level::Warning,
+            LogFilter::Errors => level == Level::Error,
+        }
+    }
+}
+
+/// Most entries the Logs page lists at once, the newest that match.
+const LOG_ROWS: usize = 200;
+/// Characters of an entry's first line its row shows.
+const LOG_TITLE_CHARS: usize = 100;
+
+impl Workspace {
+    /// Narrows the Logs page to the entries that hold `query`.
+    pub fn set_log_query(&self, query: &str) {
+        let mut inner = self.borrow_mut();
+        if inner.settings_ui.log_query != query {
+            inner.settings_ui.log_query.clear();
+            inner.settings_ui.log_query.push_str(query);
+            inner.settings_ui.finding_log = true;
+            // Only one field holds the settings' focus ref.
+            inner.settings_ui.finding_page = false;
+            inner.dirty.settings = true;
+        }
+    }
+
+    /// Sets which levels the Logs page lists.
+    pub fn set_log_filter(&self, filter: LogFilter) {
+        let mut inner = self.borrow_mut();
+        if inner.settings_ui.log_filter != filter {
+            inner.settings_ui.log_filter = filter;
+            inner.dirty.settings = true;
+        }
+    }
+
+    /// Shows log entry `id` in full under its row, or hides it when it
+    /// shows.
+    pub fn toggle_log_entry(&self, id: u64) {
+        let mut inner = self.borrow_mut();
+        let ui = &mut inner.settings_ui;
+        ui.log_open = (ui.log_open != Some(id)).then_some(id);
+        inner.dirty.settings = true;
+    }
+
+    /// Puts `text`, log entries as lines, on the clipboard.
+    pub fn copy_log(&self, text: String) {
+        let copied = self
+            .borrow_mut()
+            .settings_ui
+            .machines
+            .clipboard
+            .write_text(text);
+        match copied {
+            Ok(()) => self.toast_done(self.tr().log_copied),
+            Err(error) => self.toast_failed((self.tr().error)(&error.to_string())),
+        }
+    }
+
+    /// The Clear button. The first click asks for a second one, which
+    /// empties the log and its file.
+    pub fn click_clear_log(&self) {
+        let mut inner = self.borrow_mut();
+        if inner.settings_ui.confirm_clear_log {
+            inner.settings_ui.confirm_clear_log = false;
+            inner.settings_ui.log_open = None;
+            drop(inner);
+            crate::logs::clear();
+            self.borrow_mut().dirty.settings = true;
+            return;
+        }
+        inner.settings_ui.confirm_clear_log = true;
+        inner.dirty.settings = true;
+    }
+}
+
+/// The Logs page: a find field and a level filter over the app's log,
+/// newest first. A click on an entry shows all of it with a button that
+/// copies it; another copies every entry the page lists.
+fn logs_section(ws: &Workspace, scheme: &Scheme) -> impl View + use<> {
+    use crate::logs::Level;
+    // What the page shows now, so the poll redraws it only for news.
+    let revision = crate::logs::revision();
+    let (tr, query, finding, filter, open, confirm_clear, focus) = {
+        let mut inner = ws.borrow_mut();
+        inner.settings_ui.log_seen = revision;
+        let ui = &inner.settings_ui;
+        (
+            inner.tr,
+            ui.log_query.clone(),
+            ui.finding_log,
+            ui.log_filter,
+            ui.log_open,
+            ui.confirm_clear_log,
+            inner.regions.settings_focus,
+        )
+    };
+    let entries = crate::logs::entries();
+    let needle = query.trim().to_lowercase();
+    let matching: Vec<&crate::logs::Entry> = entries
+        .iter()
+        .rev()
+        .filter(|entry| filter.shows(entry.level) && entry.matches(&needle))
+        .collect();
+    let width = content_width() - SCROLLBAR_ROOM;
+    let mut page = Column::new().width(width).gap(GAP / 2.0);
+
+    let find = ws.clone();
+    let field = TextInput::new(query)
+        .hint(tr.find_in_log)
+        .text_size(13.0)
+        .width(EXT_FIND_WIDTH)
+        .height(28.0)
+        .on_input(move |text| find.set_log_query(text));
+    // Typing rebuilds the page; the field keeps focus through it.
+    let field: Box<dyn View> = if finding {
+        Box::new(ThemeProvider::new(
+            scheme.field_theme(),
+            field.with_ref(focus),
+        ))
+    } else {
+        Box::new(ThemeProvider::new(scheme.field_theme(), field))
+    };
+    let pick = ws.clone();
+    let filter_row = segmented(
+        Row::new().width(LOG_FILTER_WIDTH),
+        tr.log_filter,
+        filter,
+        vec![
+            (LogFilter::All, tr.filter_all.to_owned()),
+            (LogFilter::Warnings, tr.log_warnings.to_owned()),
+            (LogFilter::Errors, tr.log_errors.to_owned()),
+        ],
+        LOG_FILTER_WIDTH / 3.0,
+        tr,
+        |_| None,
+        move |filter| pick.set_log_filter(filter),
+    );
+    page = page.child(
+        Row::new()
+            .width(width)
+            .justify(Justify::SpaceBetween)
+            .align(Align::Center)
+            .child(field)
+            .child(
+                Row::new()
+                    .gap(8.0)
+                    .align(Align::Center)
+                    .child(label(scheme, tr.log_filter))
+                    .child(filter_row),
+            ),
+    );
+
+    // How many entries show, then the buttons that act on them.
+    let shown_text: String = matching
+        .iter()
+        .take(LOG_ROWS)
+        .map(|entry| entry.text())
+        .collect::<Vec<_>>()
+        .join("\n");
+    let copy = ws.clone();
+    let clear = ws.clone();
+    let rose = scheme.lanes[3];
+    let mut actions = Row::new().gap(8.0).align(Align::Center);
+    if !matching.is_empty() {
+        actions = actions.child(
+            Button::new(tr.log_copy_shown)
+                .appearance(ButtonAppearance::Outline)
+                .text_size(13.0)
+                .height(28.0)
+                .on_click(move || copy.copy_log(shown_text.clone())),
+        );
+    }
+    if !entries.is_empty() {
+        actions = actions.child(ThemeProvider::new(
+            Theme {
+                text: rose,
+                outline: super::theme::mix(scheme.line, rose, 160),
+                accent: rose,
+                on_accent: scheme.page,
+                ..scheme.theme()
+            },
+            Button::new(tr.log_clear)
+                .display(if confirm_clear {
+                    tr.log_clear_confirm
+                } else {
+                    tr.log_clear
+                })
+                .appearance(if confirm_clear {
+                    ButtonAppearance::Solid
+                } else {
+                    ButtonAppearance::Outline
+                })
+                .text_size(13.0)
+                .height(28.0)
+                .on_click(move || clear.click_clear_log()),
+        ));
+    }
+    page = page.child(
+        Row::new()
+            .width(width)
+            .justify(Justify::SpaceBetween)
+            .align(Align::Center)
+            .child(label(
+                scheme,
+                (tr.log_count)(matching.len().min(LOG_ROWS), entries.len()),
+            ))
+            .child(actions),
+    );
+    page = page.child(wrapped_label_at(
+        scheme,
+        match crate::logs::path() {
+            Some(path) => (tr.log_saved_to)(&path.display().to_string()),
+            None => tr.log_memory_only.to_owned(),
+        },
+        width,
+    ));
+    page = page.child(Fill::new(width, 1.0, scheme.line));
+
+    if entries.is_empty() {
+        page = page.child(label(scheme, tr.log_empty));
+    } else if matching.is_empty() {
+        page = page.child(label(scheme, tr.log_no_match));
+    }
+    for entry in matching.iter().take(LOG_ROWS) {
+        let shown = open == Some(entry.id);
+        let (dot, level) = match entry.level {
+            Level::Error => (rose, tr.log_level_error),
+            Level::Warning => (scheme.lanes[1], tr.log_level_warning),
+            Level::Info => (scheme.muted, tr.log_level_info),
+        };
+        let first = entry.message.lines().next().unwrap_or_default();
+        let mut meta = format!(
+            "{} · {level} · {}",
+            crate::logs::utc(entry.at),
+            entry.source
+        );
+        if entry.count > 1 {
+            meta.push_str(" · ");
+            meta.push_str(&(tr.log_repeated)(entry.count));
+        }
+        if entry.earlier {
+            meta.push_str(" · ");
+            meta.push_str(tr.log_earlier_run);
+        }
+        let toggle = ws.clone();
+        let id = entry.id;
+        let mut row = list_row(truncate(first, LOG_TITLE_CHARS))
+            .subtitle(meta)
+            .dot(dot)
+            .width(width)
+            .selected(shown)
+            .selected_background(scheme.selected())
+            .on_click(move || toggle.toggle_log_entry(id));
+        if entry.level == Level::Error {
+            row = row.subtitle_color(rose);
+        }
+        page = page.child(row);
+        if !shown {
+            continue;
+        }
+        // The whole message in ink, line by line, then the button that
+        // copies the entry as the log file's reader would see it.
+        let text_width = width - FORM_INDENT;
+        let mut body = Column::new().width(text_width).gap(GAP / 2.0);
+        for line in entry.message.lines() {
+            body = body.child(
+                Column::new()
+                    .width(text_width)
+                    .child(Text::new(line.to_owned()).size(13.0).wrap(WrapMode::Word)),
+            );
+        }
+        let copy = ws.clone();
+        let text = entry.text();
+        body = body.child(
+            Button::new(tr.log_copy_entry)
+                .appearance(ButtonAppearance::Outline)
+                .text_size(13.0)
+                .height(28.0)
+                .on_click(move || copy.copy_log(text.clone())),
+        );
+        page = page.child(
+            Pad::insets(EdgeInsets {
+                left: FORM_INDENT,
+                top: GAP / 2.0,
+                bottom: GAP,
+                ..EdgeInsets::default()
+            })
+            .child(body),
+        );
+    }
+    if matching.len() > LOG_ROWS {
+        page = page.child(label(scheme, (tr.log_more)(LOG_ROWS)));
+    }
+    Scroll::new()
+        .label(tr.section_logs)
+        .restoration_key(tr.section_logs)
+        .scrollbar(true)
+        .size(content_width(), body_height())
+        .child(bottom_room(page))
+}
+
 /// A scrolled page with room under its last item, so it does not touch the
 /// dialog's edge.
 fn bottom_room(page: impl View + 'static) -> Pad {
@@ -4811,6 +5159,57 @@ mod tests {
     use schnellui::a11y::Role;
 
     use super::*;
+
+    #[test]
+    fn the_logs_page_finds_filters_and_opens_entries() {
+        let dir = tempfile::tempdir().unwrap();
+        let root = dir.path();
+        let ws = Workspace::new(
+            StateStore::new(root.join("cfg/state.json")),
+            SettingsStore::new(root.join("cfg/settings.json")),
+            &root.join("cfg/extensions"),
+        );
+        // Other tests log too, so these entries carry words of their own.
+        crate::logs::error("logs test", "zebra failed\nwith a second line");
+        crate::logs::info("logs test", "zebra notice");
+        ws.open_settings();
+        ws.show_settings_section(SettingsSection::Logs);
+        let mut app = crate::build_app(&ws, VIEWPORT);
+        ws.take_dirty();
+        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_some());
+        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_some());
+        assert!(app.find_widget(Role::Button, Some(EN.log_copy_shown)).is_some());
+
+        // A new entry redraws the open page.
+        crate::logs::warn("logs test", "zebra warning");
+        ws.poll();
+        rebuild(&ws, &mut app);
+        assert!(app.find_widget(Role::Button, Some("zebra warning")).is_some());
+
+        // The filter keeps errors only, the search narrows by words.
+        ws.set_log_filter(LogFilter::Errors);
+        rebuild(&ws, &mut app);
+        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_some());
+        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_none());
+        assert!(app.find_widget(Role::Button, Some("zebra warning")).is_none());
+        ws.set_log_filter(LogFilter::All);
+        ws.set_log_query("ZEBRA NOT");
+        rebuild(&ws, &mut app);
+        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_some());
+        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_none());
+
+        // A click shows the whole entry and a button that copies it.
+        ws.set_log_query("zebra failed");
+        rebuild(&ws, &mut app);
+        assert!(app.find_widget(Role::Button, Some(EN.log_copy_entry)).is_none());
+        let row = app.find_widget(Role::Button, Some("zebra failed")).unwrap();
+        app.dispatch_click(row);
+        rebuild(&ws, &mut app);
+        assert!(app.find_widget(Role::Button, Some(EN.log_copy_entry)).is_some());
+        assert!(app.find_widget(Role::Label, Some("with a second line")).is_some());
+
+        assert!(page_matches(SettingsSection::Logs, "errors", &EN));
+    }
 
     #[test]
     fn the_settings_keep_their_height_and_fill_a_small_window() {

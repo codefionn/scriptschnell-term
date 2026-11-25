@@ -25,6 +25,13 @@ All notable changes to scriptschnell-term are in this file. The format is
   passes the launcher's startup token to the compositor, which focuses the new window
   and ends the launch feedback. The Linux `.desktop` file sets `StartupNotify=true`
   so launchers send that token.
+- A Logs page under Settings, About. It lists the app's errors, warnings and notices
+  from this start and earlier ones, newest first. It searches them, filters them by
+  level, shows a whole entry when you click it, copies one entry or every listed one, and
+  clears the log. The app keeps them in `scriptschnell-term.log` in the logs directory,
+  with older entries in `scriptschnell-term.log.1` once the file passes 1 MiB. Panics,
+  extension failures, failed VCS operations, failed agent updates and failed settings
+  actions all land there. `--settings logs` opens the page for a screenshot.
 
 ### Changed
 

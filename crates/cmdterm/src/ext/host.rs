@@ -343,6 +343,7 @@ impl ExtensionHost {
         if self.extensions.iter().any(|ext| ext.info.name == name) {
             return;
         }
+        crate::logs::error(&format!("extension {name}"), &message);
         self.extensions.push(Extension {
             info: ExtensionInfo {
                 name: name.to_owned(),
@@ -1052,6 +1053,7 @@ impl ExtensionHost {
         let (lua, refs) = match built {
             Ok(built) => built,
             Err(message) => {
+                crate::logs::error(&format!("extension {name}"), &message);
                 ext.info.enabled = false;
                 ext.info.last_error = Some(message.clone());
                 return Err(ExtError::new(name, message));
@@ -1107,6 +1109,7 @@ impl ExtensionHost {
 
     fn disable(&mut self, slot: usize, message: String) {
         let ext = &mut self.extensions[slot];
+        crate::logs::error(&format!("extension {}", ext.info.name), &message);
         ext.info.enabled = false;
         ext.info.last_error = Some(message);
         ext.lua = None;
