@@ -31,8 +31,18 @@ All notable changes to scriptschnell-term are in this file. The format is
   signing certificate, so Windows names Fionn Langhans as their publisher. The
   uninstaller inside the installer is not signed yet.
 
+### Fixed
+
+- `scriptschnell-term-remote` keeps the resume offset of a session it forwards when the
+  open request names no session, instead of dropping it on re-encoding.
+
 ### Security
 
+- A diff shown in the explore or discussion panel can no longer crash the app: the
+  diff parser panicked on an empty line inside an open hunk, reachable from untrusted
+  repository and forge content.
+- Browser builds pull patched dependency versions: `url` 2.5.9 (stack overflow in
+  `Url::origin()` on nested `blob:` URLs), `cookie` 0.18.3 and `libz-sys` 1.1.33.
 - Output a program prints can no longer type into the shell through an XTGETTCAP
   query (`DCS + q`). The terminal echoed the requested name unchecked in its reply,
   newlines and control bytes included, so `cat` on a crafted file, a git log or a

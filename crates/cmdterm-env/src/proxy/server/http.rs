@@ -976,4 +976,143 @@ mod tests {
             assert!(run(&mut filter, input.as_bytes(), 64).is_ok(), "{input}");
         }
     }
+
+    /// Replays and mutates proxy requests. With `CMDTERM_FUZZ_CORPUS` set to a
+    /// directory of seed requests this runs 50k mutations per seed set; without
+    /// it, a fixed seed set a few hundred times, so `cargo test` stays quick.
+    /// A sandboxed child sends these bytes; the filter must never panic, never
+    /// expand its output far beyond the input, and never let a guarded request
+    /// through on its head alone.
+    #[test]
+    fn fuzz_request_filter() {
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                let mut x = self.0;
+                x ^= x >> 12;
+                x ^= x << 25;
+                x ^= x >> 27;
+                self.0 = x;
+                x.wrapping_mul(0x2545_f491_4f6c_dd1d)
+            }
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n as u64) as usize
+            }
+        }
+        const INTERESTING: [u8; 16] = [
+            0x00, 0x09, 0x0a, 0x0d, 0x20, 0x22, 0x3a, 0x5c, 0x7f, 0x80, 0xff, b'P', b'U',
+            b'T', b'/', b'?',
+        ];
+        fn mutate(rng: &mut Rng, corpus: &[Vec<u8>], base: &[u8]) -> Vec<u8> {
+            let mut v = base.to_vec();
+            for _ in 0..1 + rng.below(4) {
+                if v.is_empty() {
+                    v.push(INTERESTING[rng.below(INTERESTING.len())]);
+                    continue;
+                }
+                match rng.below(7) {
+                    0 => {
+                        let i = rng.below(v.len());
+                        v[i] ^= 1 << rng.below(8);
+                    }
+                    1 => {
+                        let i = rng.below(v.len());
+                        v[i] = INTERESTING[rng.below(INTERESTING.len())];
+                    }
+                    2 => {
+                        let i = rng.below(v.len());
+                        v.insert(i, INTERESTING[rng.below(INTERESTING.len())]);
+                    }
+                    3 => {
+                        v.remove(rng.below(v.len()));
+                    }
+                    4 => {
+                        let a = rng.below(v.len());
+                        let b = rng.below(v.len());
+                        let (lo, hi) = (a.min(b), a.max(b));
+                        v.drain(lo..=hi);
+                    }
+                    5 => v.truncate(rng.below(v.len() + 1)),
+                    _ => {
+                        if let Some(other) = corpus.get(rng.below(corpus.len()))
+                            && !other.is_empty()
+                        {
+                            let b = rng.below(other.len());
+                            let n = 1 + rng.below(32.min(other.len() - b));
+                            let a = rng.below(v.len());
+                            v.splice(a..a, other[b..b + n].iter().copied());
+                        }
+                    }
+                }
+                if v.len() > 2048 {
+                    v.truncate(2048);
+                }
+            }
+            v
+        }
+        let builtin: Vec<Vec<u8>> = [
+            "GET /a?t=FAKEFAKEFAKE HTTP/1.1\r\nHost: registry.example\r\nAuthorization: Bearer FAKEFAKEFAKE\r\nContent-Length: 4\r\n\r\nFAKEPOST /b HTTP/1.1\r\nTransfer-Encoding: chunked\r\nX-Key:FAKEFAKEFAKE\r\n\r\n3;x=y\r\nabc\r\n0\r\nTrailer: 1\r\n\r\nGET http://registry.example/c HTTP/1.1\r\nProxy-Connection: keep-alive\r\n\r\n",
+            "PUT /api/v1/crates/new HTTP/1.1\r\nHost: registry.example\r\nContent-Length: 9\r\nTransfer-Encoding: chunked\r\n\r\n",
+            "PUT /x HTTP/1.1\r\nHost: registry.example\r\nContent-Length: 5\r\nContent-Length: 6\r\n\r\n",
+            "POST /y HTTP/1.1\r\nHost: registry.example\r\nContent-Length: +5\r\n\r\nhello",
+            "POST /z HTTP/1.1\r\nHost: registry.example\r\nTransfer-Encoding: chunked, identity\r\n\r\n",
+            "GET / HTTP/1.1\r\nHost: other.example\r\n\r\n",
+            "GET / HTTP/1.1\r\nHost: registry.example\r\nTransfer-Encoding: chunked\r\n\r\n1\r\nX\r\n0\r\n\r\nPUT /smuggled HTTP/1.1\r\nHost: registry.example\r\n\r\n",
+            "GET / HTTP/1.1\nHost: registry.example\n\n",
+            "PUT /w HTTP/1.1\r\nHost: registry.example\r\nContent-Length: 99999999999999999999\r\n\r\n",
+            "UPGRADE /u HTTP/1.1\r\nHost: registry.example\r\nUpgrade: websocket\r\nContent-Length: 3\r\n\r\nabcGET /after HTTP/1.1\r\nHost: registry.example\r\n\r\n",
+        ]
+        .iter()
+        .map(|s| s.as_bytes().to_vec())
+        .collect();
+        let from_env = std::env::var("CMDTERM_FUZZ_CORPUS").ok();
+        let iters: u64 = std::env::var("CMDTERM_FUZZ_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(if from_env.is_some() { 50_000 } else { 300 });
+        let corpus = match from_env {
+            Some(dir) => {
+                let mut c: Vec<Vec<u8>> = std::fs::read_dir(dir)
+                    .unwrap()
+                    .flatten()
+                    .filter_map(|e| std::fs::read(e.path()).ok())
+                    .collect();
+                c.extend(builtin);
+                c
+            }
+            None => builtin,
+        };
+        let mut rng = Rng(0x5eedfu64 ^ 1);
+        for i in 0..iters {
+            let seed = rng.below(corpus.len());
+            let data = mutate(&mut rng, &corpus, &corpus[seed]);
+            for step in [1, 2, 3, 7, 64, data.len().max(1)] {
+                let shared = shared(rules());
+                let mut filter = RequestFilter::new(shared, None, "registry.example");
+                let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    run(&mut filter, &data, step)
+                }));
+                let Ok(result) = result else {
+                    panic!("panic on iteration {i}, step {step}, input {data:?}");
+                };
+                if let Ok(out) = &result {
+                    assert!(
+                        out.len() <= data.len() * 2 + 64 * 1024,
+                        "output {} bytes for {} input bytes, iteration {i}",
+                        out.len(),
+                        data.len()
+                    );
+                    // With no approvals configured, a guarded request (PUT to
+                    // this host) is always refused, never forwarded.
+                    if data.starts_with(b"PUT ") {
+                        assert!(
+                            !out.starts_with(b"PUT "),
+                            "guarded PUT forwarded, iteration {i}: {}",
+                            String::from_utf8_lossy(out)
+                        );
+                    }
+                }
+            }
+        }
+    }
 }

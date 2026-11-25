@@ -171,9 +171,15 @@ impl Msg {
                     put_str(out, value);
                 }
                 // Trailing, so a spec without a session encodes as before
-                // and older peers skip what they do not know.
+                // and older peers skip what they do not know. A resume
+                // offset counts as well: dropping it would make
+                // decode(encode(m)) lose the offset.
                 let more = spec.exit_if_ended || spec.run.is_some();
-                if !spec.session.is_empty() || !spec.cpu.is_empty() || more {
+                if !spec.session.is_empty()
+                    || !spec.cpu.is_empty()
+                    || more
+                    || spec.resume.is_some()
+                {
                     put_str(out, &spec.session);
                     match spec.resume {
                         Some(offset) => {
@@ -532,6 +538,64 @@ mod tests {
         let mut new = Vec::new();
         Msg::Attached(1, 7, true).encode(&mut new);
         assert!(new.starts_with(&old));
+    }
+
+    /// A resume offset with no session name must survive a re-encode: the
+    /// relay re-encodes every message it forwards, and the encoder used to
+    /// drop the offset when the session name was empty (found by fuzzing).
+    #[test]
+    fn resume_offset_without_a_session_round_trips() {
+        // The smallest input the fuzzer reduced to this: an Open whose only
+        // trailing field is a resume offset.
+        let wire: &[u8] = &[
+            0x01, 0, 0, 0, 7, // OPEN, channel 7
+            0, 0, 0, 0, // vm
+            0, 0, // pty: none, shell: false
+            0, 0, 0, 0, // cwd
+            0, 0, 0, 0, // program
+            0, 0, 0, 0, // args
+            0, 0, 0, 0, // vars
+            0, 0, 0, 0, // session: ""
+            1, // resume flag
+            0, 0, 0, 0, 0, 0, 0, 42, // offset
+        ];
+        let msg = Msg::decode(wire).unwrap();
+        let Msg::Open(_, spec) = &msg else {
+            panic!("not an Open: {msg:?}");
+        };
+        assert_eq!(spec.resume, Some(42));
+        let mut buf = Vec::new();
+        msg.encode(&mut buf);
+        assert_eq!(Msg::decode(&buf).unwrap(), msg);
+    }
+
+    /// Every combination of the trailing fields survives encode+decode.
+    #[test]
+    fn every_trailing_field_combination_round_trips() {
+        for session in ["", "s"] {
+            for resume in [None, Some(42)] {
+                for cpu in ["", "c"] {
+                    for exit_if_ended in [false, true] {
+                        for run in [None, Some(7)] {
+                            let msg = Msg::Open(
+                                3,
+                                OpenSpec {
+                                    session: session.into(),
+                                    resume,
+                                    cpu: cpu.into(),
+                                    exit_if_ended,
+                                    run,
+                                    ..OpenSpec::default()
+                                },
+                            );
+                            let mut buf = Vec::new();
+                            msg.encode(&mut buf);
+                            assert_eq!(Msg::decode(&buf).unwrap(), msg, "spec {msg:?}");
+                        }
+                    }
+                }
+            }
+        }
     }
 
     #[test]

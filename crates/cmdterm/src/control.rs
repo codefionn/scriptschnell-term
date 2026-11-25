@@ -3098,4 +3098,156 @@ mod tests {
         assert!(server.control.pending().is_none());
         assert!(!extensions.join("x").exists());
     }
+
+    /// Replays and mutates control-socket requests in memory (no socket):
+    /// `Request::read` plus `handle` with a valid token and with none. With
+    /// `CMDTERM_FUZZ_CORPUS` set to a directory of seed requests this runs the
+    /// count in `CMDTERM_FUZZ_ITERS` (default 50k); without it, a fixed seed
+    /// set a few hundred times. Agents in the app's terminals send these
+    /// bytes; reading and answering them must never panic, and a request
+    /// without the terminal's token must always get 401.
+    #[test]
+    fn fuzz_control_requests() {
+        use std::io::{Cursor, Read, Write};
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                let mut x = self.0;
+                x ^= x >> 12;
+                x ^= x << 25;
+                x ^= x >> 27;
+                self.0 = x;
+                x.wrapping_mul(0x2545_f491_4f6c_dd1d)
+            }
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n as u64) as usize
+            }
+        }
+        const INTERESTING: [u8; 16] = [
+            0x00, 0x09, 0x0a, 0x0d, 0x20, 0x22, 0x2f, 0x3a, 0x5c, 0x7f, 0x80, 0xff, b'{', b'}',
+            b'%', b'.',
+        ];
+        fn mutate(rng: &mut Rng, corpus: &[Vec<u8>], base: &[u8]) -> Vec<u8> {
+            let mut v = base.to_vec();
+            for _ in 0..1 + rng.below(4) {
+                if v.is_empty() {
+                    v.push(INTERESTING[rng.below(INTERESTING.len())]);
+                    continue;
+                }
+                match rng.below(7) {
+                    0 => {
+                        let i = rng.below(v.len());
+                        v[i] ^= 1 << rng.below(8);
+                    }
+                    1 => {
+                        let i = rng.below(v.len());
+                        v[i] = INTERESTING[rng.below(INTERESTING.len())];
+                    }
+                    2 => {
+                        let i = rng.below(v.len());
+                        v.insert(i, INTERESTING[rng.below(INTERESTING.len())]);
+                    }
+                    3 => {
+                        v.remove(rng.below(v.len()));
+                    }
+                    4 => {
+                        let a = rng.below(v.len());
+                        let b = rng.below(v.len());
+                        let (lo, hi) = (a.min(b), a.max(b));
+                        v.drain(lo..=hi);
+                    }
+                    5 => v.truncate(rng.below(v.len() + 1)),
+                    _ => {
+                        if let Some(other) = corpus.get(rng.below(corpus.len()))
+                            && !other.is_empty()
+                        {
+                            let b = rng.below(other.len());
+                            let n = 1 + rng.below(32.min(other.len() - b));
+                            let a = rng.below(v.len());
+                            v.splice(a..a, other[b..b + n].iter().copied());
+                        }
+                    }
+                }
+                if v.len() > 16 * 1024 {
+                    v.truncate(16 * 1024);
+                }
+            }
+            v
+        }
+        /// An in-memory stream for `Request::read`.
+        struct Mem {
+            read: Cursor<Vec<u8>>,
+        }
+        impl Read for Mem {
+            fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+                self.read.read(buf)
+            }
+        }
+        impl Write for Mem {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        let dir = tempfile::tempdir().unwrap();
+        let extensions = dir.path().join("extensions");
+        std::fs::create_dir_all(extensions.join("hello")).unwrap();
+        std::fs::write(extensions.join("hello/init.lua"), "-- hi\n").unwrap();
+        let server = start(&extensions, dir.path(), || {}).unwrap();
+        let token = server.control.register(terminal());
+        let builtin: Vec<Vec<u8>> = [
+            format!("GET /v1/info HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 0\r\n\r\n"),
+            format!("GET /v1/extensions HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 0\r\n\r\n"),
+            format!("PUT /v1/extensions/hello/files/init.lua HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 4\r\n\r\nabcd"),
+            format!("PUT /v1/extensions/hello/files/..%2F..%2Fsettings.json HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 1\r\n\r\nx"),
+            format!("POST /v1/settings/ops HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 21\r\n\r\n{{\"ops\":[{{\"set\":1}}]}}"),
+            format!("POST /v1/agents HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 15\r\n\r\n[{{\"name\":\"a\"}}]"),
+            "GET /v1/info HTTP/1.1\r\nHost: x\r\nContent-Length: 0\r\n\r\n".to_string(),
+            "GET /v1/extensions/hello/files/init.lua?b=x HTTP/1.1\r\nAuthorization: Bearer wrong\r\nContent-Length: 0\r\n\r\n".to_string(),
+            format!("POST /v1/mcp HTTP/1.1\r\nHost: x\r\nAuthorization: Bearer {token}\r\nContent-Length: 28\r\n\r\n{{\"jsonrpc\":\"2.0\",\"id\":1}}"),
+        ]
+        .iter()
+        .map(|s| s.clone().into_bytes())
+        .collect();
+        let from_env = std::env::var("CMDTERM_FUZZ_CORPUS").ok();
+        let iters: u64 = std::env::var("CMDTERM_FUZZ_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(if from_env.is_some() { 50_000 } else { 300 });
+        let corpus = match from_env {
+            Some(dir) => {
+                let mut c: Vec<Vec<u8>> = std::fs::read_dir(dir)
+                    .unwrap()
+                    .flatten()
+                    .filter_map(|e| std::fs::read(e.path()).ok())
+                    .collect();
+                c.extend(builtin);
+                c
+            }
+            None => builtin,
+        };
+        let mut rng = Rng(0x5eed_c701u64);
+        for i in 0..iters {
+            let seed = rng.below(corpus.len());
+            let data = mutate(&mut rng, &corpus, &corpus[seed]);
+            let mut stream = Mem {
+                read: Cursor::new(data.clone()),
+            };
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                if let Ok(request) = Request::read(&mut stream) {
+                    let response = server.control.handle(&request);
+                    // Without the terminal's token the answer is always 401.
+                    if request.token() != Some(token.as_str()) {
+                        assert_eq!(response.status, 401, "iteration {i}");
+                    }
+                    assert!(response.body.len() <= 1024 * 1024, "huge response");
+                }
+            }));
+            if result.is_err() {
+                panic!("panic on iteration {i}, input {data:?}");
+            }
+        }
+    }
 }

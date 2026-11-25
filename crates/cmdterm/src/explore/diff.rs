@@ -192,7 +192,9 @@ impl Diff {
                 Some(kind) => {
                     line.kind = kind;
                     if kind != Kind::Meta {
-                        body = &raw[1..];
+                        // An empty line inside an open hunk reads as context
+                        // (kind() maps None to Context); its body is empty.
+                        body = raw.get(1..).unwrap_or("");
                     }
                     let file = diff.files.last_mut();
                     match kind {
@@ -489,5 +491,141 @@ deleted file mode 100644
         assert_eq!(header_path("a/a b/c b/a b/c"), "a b/c");
         assert_eq!(header_path("a/old b/new"), "new");
         assert_eq!(Diff::new(Vec::new()).lines(), 1);
+    }
+
+    /// An empty (or CR-only) line inside an open hunk is context with an
+    /// empty body; it must not panic (found by fuzzing, reachable from a
+    /// crafted or forge-supplied patch).
+    #[test]
+    fn empty_line_inside_a_hunk_is_context() {
+        for text in [
+            "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n\n",
+            "diff --git a/x b/x\n--- a/x\n+++ b/x\n@@ -1,2 +1,2 @@\n\r\n",
+            "@@ -1 +1 @@\n\n",
+        ] {
+            let diff = Diff::new(text.as_bytes().to_vec());
+            for n in 0..diff.lines() {
+                let _ = diff.line(n);
+                let _ = diff.info(n);
+            }
+        }
+    }
+
+    /// Replays and mutates git diffs. With `CMDTERM_FUZZ_CORPUS` set to a
+    /// directory of seed diffs this runs the count in `CMDTERM_FUZZ_ITERS`
+    /// (default 50k); without it, a fixed seed a few hundred times. Repo
+    /// content reaches this parser through `git diff`; it must never panic,
+    /// and line/file accessors must stay in bounds for any input.
+    #[test]
+    fn fuzz_diff_parser() {
+        struct Rng(u64);
+        impl Rng {
+            fn next(&mut self) -> u64 {
+                let mut x = self.0;
+                x ^= x >> 12;
+                x ^= x << 25;
+                x ^= x >> 27;
+                self.0 = x;
+                x.wrapping_mul(0x2545_f491_4f6c_dd1d)
+            }
+            fn below(&mut self, n: usize) -> usize {
+                (self.next() % n as u64) as usize
+            }
+        }
+        const INTERESTING: [u8; 14] = [
+            0x00, 0x0a, 0x1b, 0x20, 0x2b, 0x2d, 0x40, 0x5c, 0x7f, 0x80, 0xff, b'@', b'\\',
+            b'\t',
+        ];
+        fn mutate(rng: &mut Rng, corpus: &[Vec<u8>], base: &[u8]) -> Vec<u8> {
+            let mut v = base.to_vec();
+            for _ in 0..1 + rng.below(4) {
+                if v.is_empty() {
+                    v.push(INTERESTING[rng.below(INTERESTING.len())]);
+                    continue;
+                }
+                match rng.below(7) {
+                    0 => {
+                        let i = rng.below(v.len());
+                        v[i] ^= 1 << rng.below(8);
+                    }
+                    1 => {
+                        let i = rng.below(v.len());
+                        v[i] = INTERESTING[rng.below(INTERESTING.len())];
+                    }
+                    2 => {
+                        let i = rng.below(v.len());
+                        v.insert(i, INTERESTING[rng.below(INTERESTING.len())]);
+                    }
+                    3 => {
+                        v.remove(rng.below(v.len()));
+                    }
+                    4 => {
+                        let a = rng.below(v.len());
+                        let b = rng.below(v.len());
+                        let (lo, hi) = (a.min(b), a.max(b));
+                        v.drain(lo..=hi);
+                    }
+                    5 => v.truncate(rng.below(v.len() + 1)),
+                    _ => {
+                        if let Some(other) = corpus.get(rng.below(corpus.len()))
+                            && !other.is_empty()
+                        {
+                            let b = rng.below(other.len());
+                            let n = 1 + rng.below(48.min(other.len() - b));
+                            let a = rng.below(v.len());
+                            v.splice(a..a, other[b..b + n].iter().copied());
+                        }
+                    }
+                }
+                if v.len() > 4096 {
+                    v.truncate(4096);
+                }
+            }
+            v
+        }
+        let builtin: Vec<Vec<u8>> = vec![
+            SHOW.as_bytes().to_vec(),
+            Vec::new(),
+            b"diff --git \xff\xfe".to_vec(),
+        ];
+        let from_env = std::env::var("CMDTERM_FUZZ_CORPUS").ok();
+        let iters: u64 = std::env::var("CMDTERM_FUZZ_ITERS")
+            .ok()
+            .and_then(|v| v.parse().ok())
+            .unwrap_or(if from_env.is_some() { 50_000 } else { 300 });
+        let corpus = match from_env {
+            Some(dir) => {
+                let mut c: Vec<Vec<u8>> = std::fs::read_dir(dir)
+                    .unwrap()
+                    .flatten()
+                    .filter_map(|e| std::fs::read(e.path()).ok())
+                    .collect();
+                c.extend(builtin);
+                c
+            }
+            None => builtin,
+        };
+        let mut rng = Rng(0x5eed_d1ffu64);
+        for i in 0..iters {
+            let seed = rng.below(corpus.len());
+            let data = mutate(&mut rng, &corpus, &corpus[seed]);
+            let result = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                let diff = Diff::new(data.clone());
+                let lines = diff.lines();
+                assert!(lines >= 1);
+                for n in 0..lines {
+                    let _ = diff.line(n);
+                    let _ = diff.info(n);
+                    let _ = diff.file(n);
+                }
+                for file in &diff.files {
+                    let _ = &file.path;
+                    let _ = file.language;
+                }
+            }));
+            if result.is_err() {
+                panic!("panic on iteration {i}, input {data:?}");
+            }
+        }
     }
 }
