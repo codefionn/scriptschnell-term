@@ -2183,11 +2183,13 @@ fn pasting_an_image_pastes_the_path_of_a_png_file() {
         FocusedClipboardEvent::PasteImage(image),
     ));
     assert!(result.is_handled());
-    // A worker thread stages the file, then the path echoes.
+    // A worker thread stages the file, then the path echoes. A long temporary
+    // directory wraps the path; a full row has no padding, so dropping the
+    // row breaks joins it again.
     wait_until(|| {
         ws.poll();
         app.frame();
-        app.a11y_json().contains(".png")
+        app.a11y_json().replace("\\n", "").contains(".png")
     });
     let terminal = ws.pane_terminal(0).unwrap();
     terminal.session.write_bytes(b"\r").unwrap();

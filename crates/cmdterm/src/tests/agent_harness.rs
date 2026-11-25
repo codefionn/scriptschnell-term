@@ -167,8 +167,8 @@ impl Harness {
     fn shim(&self, program: &str) -> PathBuf {
         let path = self.shims.join(program);
         let script = format!(
-            "#!/bin/sh\nexec podman exec -it -e SCRIPTSCHNELL_TERM=1 -e TERM=\"${{TERM:-xterm-256color}}\" \
-             -w \"$PWD\" {} {program} \"$@\"\n",
+            "#!/bin/sh\nHOME=\"${{CMDTERM_HARNESS_HOME:-$HOME}}\" exec podman exec -it -e SCRIPTSCHNELL_TERM=1 \
+             -e TERM=\"${{TERM:-xterm-256color}}\" -w \"$PWD\" {} {program} \"$@\"\n",
             self.container
         );
         std::fs::write(&path, script).unwrap();
@@ -417,8 +417,31 @@ fn launch(harness: &Harness, case: &Case, prompt: &str) -> (Workspace, Rc<Termin
     (ws, terminal)
 }
 
+/// Gives the worktree's terminals a `HOME` of their own on this machine.
+/// Before it resumes an agent, the app checks the agent's session store in
+/// the terminal's environment, here this machine, where the agent does not
+/// run. A developer's own `~/.claude/projects` would make every container
+/// session look gone, while a missing store counts as unknown. The shim
+/// gives podman the real `HOME` back.
+fn isolate_host_home(harness: &Harness) {
+    let store = StateStore::new(harness.root.path().join("cfg/state.json"));
+    let mut state = store.load().unwrap();
+    let home = harness.root.path().join("host-home");
+    let real = std::env::var("HOME").unwrap_or_default();
+    let config = state.projects[0].worktree_mut(&harness.repo);
+    config
+        .env_vars
+        .retain(|(key, _)| key != "HOME" && key != "CMDTERM_HARNESS_HOME");
+    config.env_vars.extend([
+        ("HOME".to_owned(), home.to_string_lossy().into_owned()),
+        ("CMDTERM_HARNESS_HOME".to_owned(), real),
+    ]);
+    store.save(&state).unwrap();
+}
+
 /// Opens the project again after a restart. Returns the agent's terminal.
 fn reopen(harness: &Harness) -> (Workspace, Rc<TerminalPanel>) {
+    isolate_host_home(harness);
     let ws = harness.workspace();
     crate::fit_grid(&ws, super::VIEWPORT);
     let terminal = ws
