@@ -738,6 +738,9 @@ impl EnvCommand {
                 if let Some(cwd) = &self.cwd {
                     command.current_dir(cwd);
                 }
+                for var in LAUNCH_VARS {
+                    command.env_remove(var);
+                }
                 if appimage::strips_runtime_vars() {
                     for var in appimage::RUNTIME_VARS {
                         command.env_remove(var);
@@ -779,6 +782,16 @@ impl EnvCommand {
         }
     }
 }
+
+/// What the launcher and the service manager hand the app for itself: the
+/// startup notification token its window uses (Wayland, then X11) and the
+/// socket that tells systemd it started. Programs the app starts would use
+/// them as their own, so their environment leaves them out.
+const LAUNCH_VARS: [&str; 3] = [
+    "XDG_ACTIVATION_TOKEN",
+    "DESKTOP_STARTUP_ID",
+    "NOTIFY_SOCKET",
+];
 
 /// A process of this machine that opens no console window of its own,
 /// see [`console::no_window`].
@@ -924,6 +937,9 @@ impl EnvCommand {
                 builder.limit_cpu(self.cpu.clone().filter(|_| cpu::by_job(&self.env)));
                 if let Some(cwd) = &self.cwd {
                     builder.cwd(cwd);
+                }
+                for var in LAUNCH_VARS {
+                    builder.env_remove(var);
                 }
                 if appimage::strips_runtime_vars() {
                     for var in appimage::RUNTIME_VARS {

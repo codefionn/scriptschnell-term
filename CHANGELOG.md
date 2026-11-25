@@ -20,6 +20,11 @@ All notable changes to scriptschnell-term are in this file. The format is
   `scriptschnell-term-proxy-bridge`, `overlays.default` adds `pkgs.scriptschnell-term`,
   and `nix develop` opens a shell with the pinned toolchain and what the tests need.
   The package has no Servo browser panels.
+- The app reports that it started once its first frame is on screen: it sends
+  `READY=1` to systemd, so it can run as a user service of `Type=notify`, and it
+  passes the launcher's startup token to the compositor, which focuses the new window
+  and ends the launch feedback. The Linux `.desktop` file sets `StartupNotify=true`
+  so launchers send that token.
 
 ### Changed
 
@@ -35,6 +40,9 @@ All notable changes to scriptschnell-term are in this file. The format is
 - The Windows programs and the installer of each release are signed with a Certum code
   signing certificate, so Windows names Fionn Langhans as their publisher. The
   uninstaller inside the installer is not signed yet.
+- Programs the app starts no longer inherit `XDG_ACTIVATION_TOKEN`,
+  `DESKTOP_STARTUP_ID` and `NOTIFY_SOCKET`, which the launcher and systemd meant for
+  the app's own window and readiness.
 
 ### Fixed
 

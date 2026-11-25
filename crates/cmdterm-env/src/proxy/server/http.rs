@@ -1000,8 +1000,8 @@ mod tests {
             }
         }
         const INTERESTING: [u8; 16] = [
-            0x00, 0x09, 0x0a, 0x0d, 0x20, 0x22, 0x3a, 0x5c, 0x7f, 0x80, 0xff, b'P', b'U',
-            b'T', b'/', b'?',
+            0x00, 0x09, 0x0a, 0x0d, 0x20, 0x22, 0x3a, 0x5c, 0x7f, 0x80, 0xff, b'P', b'U', b'T',
+            b'/', b'?',
         ];
         fn mutate(rng: &mut Rng, corpus: &[Vec<u8>], base: &[u8]) -> Vec<u8> {
             let mut v = base.to_vec();
