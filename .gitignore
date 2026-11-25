@@ -1,4 +1,6 @@
 /target
+/result
+/result-*
 /dist
 /.zvec-grep
 /security-audit

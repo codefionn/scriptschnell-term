@@ -18,6 +18,17 @@ cargo run --release -p cmdterm --features browser       # with Servo browser pan
 cargo build --release -p cmdterm --no-default-features  # shipped extensions only
 ```
 
+With Nix (Linux):
+
+```sh
+nix run github:codefionn/scriptschnell-term -- ~/src/myrepo
+nix profile install github:codefionn/scriptschnell-term  # app, -remote and -web
+nix develop  # toolchain from rust-toolchain.toml, libraries, git, hg and bwrap for the tests
+```
+
+The flake also has `overlays.default`, which adds `pkgs.scriptschnell-term`. It builds
+without the Servo browser panels.
+
 Pass one or more locations to open on startup: a local path, `host:/path` or
 `ssh://[user@]host[:port]/path`, `cmdterm://host[:port]/path`, `vm://name/path`, or a
 repository URL to clone.

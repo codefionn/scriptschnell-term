@@ -15,6 +15,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 - `scriptschnell-term-release check-signed UNSIGNED SIGNED` checks that a Windows program
   signed outside the release workflow is the unsigned program with only an Authenticode
   signature added.
+- A Nix flake for Linux: `nix run` and `nix profile install` build the app with
+  `scriptschnell-term-remote`, `scriptschnell-term-web` and
+  `scriptschnell-term-proxy-bridge`, `overlays.default` adds `pkgs.scriptschnell-term`,
+  and `nix develop` opens a shell with the pinned toolchain and what the tests need.
+  The package has no Servo browser panels.
 
 ### Changed
 
