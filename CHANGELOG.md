@@ -58,6 +58,9 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- The Licenses page under Settings, About no longer comes out empty when a build runs
+  with a registry cache that lacks some dev dependency, as after a plain `cargo build`.
+  The build script now asks `cargo metadata` online when the offline graph is incomplete.
 - `scriptschnell-term-remote` keeps the resume offset of a session it forwards when the
   open request names no session, instead of dropping it on re-encoding.
 - Claude Code, Mistral Vibe and other agents start again when the app runs from the

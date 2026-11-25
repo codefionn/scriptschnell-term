@@ -1,9 +1,12 @@
 //! Lists the third-party crates linked into the app, with their licenses and
 //! license files, for the Licenses page of the settings. It asks
 //! `cargo metadata` for the dependency graph of this crate on the target
-//! platform with the enabled features, offline and from `Cargo.lock`, so the
-//! list matches what the build links. Without the graph the list is empty
-//! and the page says so.
+//! platform with the enabled features, from `Cargo.lock`, so the list
+//! matches what the build links. It asks offline first, and online when
+//! that fails: `cargo metadata` needs the manifest of every package in the
+//! graph, dev dependencies such as `proptest`'s included, which a plain
+//! `cargo build` never downloads. Without the graph the list is empty and
+//! the page says so.
 
 use std::collections::{BTreeMap, HashMap, HashSet};
 use std::fmt::Write;
@@ -78,22 +81,31 @@ fn third_party(manifest_dir: &Path, texts: &mut Vec<String>) -> Result<Vec<Crate
         })
         .filter(|name| name != "default")
         .collect();
-    let mut command = std::process::Command::new(cargo);
-    command
-        .arg("metadata")
-        .args(["--format-version", "1", "--locked", "--offline"])
-        .args(["--filter-platform", &target])
-        .arg("--manifest-path")
-        .arg(manifest_dir.join("Cargo.toml"));
-    if !features.is_empty() {
-        command.args(["--features", &features.join(",")]);
-    }
-    let output = command.output().map_err(|err| err.to_string())?;
-    if !output.status.success() {
-        return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
-    }
+    let metadata = |offline: bool| -> Result<Vec<u8>, String> {
+        let mut command = std::process::Command::new(&cargo);
+        command
+            .arg("metadata")
+            .args(["--format-version", "1", "--locked"])
+            .args(["--filter-platform", &target])
+            .arg("--manifest-path")
+            .arg(manifest_dir.join("Cargo.toml"));
+        if offline {
+            command.arg("--offline");
+        }
+        if !features.is_empty() {
+            command.args(["--features", &features.join(",")]);
+        }
+        let output = command.output().map_err(|err| err.to_string())?;
+        if !output.status.success() {
+            return Err(String::from_utf8_lossy(&output.stderr).trim().to_owned());
+        }
+        Ok(output.stdout)
+    };
+    let stdout = metadata(true).or_else(|offline| {
+        metadata(false).map_err(|online| format!("{offline}; online: {online}"))
+    })?;
     let metadata: serde_json::Value =
-        serde_json::from_slice(&output.stdout).map_err(|err| err.to_string())?;
+        serde_json::from_slice(&stdout).map_err(|err| err.to_string())?;
 
     let packages: HashMap<&str, &serde_json::Value> = metadata["packages"]
         .as_array()
