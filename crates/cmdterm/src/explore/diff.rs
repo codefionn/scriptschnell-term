@@ -533,8 +533,7 @@ deleted file mode 100644
             }
         }
         const INTERESTING: [u8; 14] = [
-            0x00, 0x0a, 0x1b, 0x20, 0x2b, 0x2d, 0x40, 0x5c, 0x7f, 0x80, 0xff, b'@', b'\\',
-            b'\t',
+            0x00, 0x0a, 0x1b, 0x20, 0x2b, 0x2d, 0x40, 0x5c, 0x7f, 0x80, 0xff, b'@', b'\\', b'\t',
         ];
         fn mutate(rng: &mut Rng, corpus: &[Vec<u8>], base: &[u8]) -> Vec<u8> {
             let mut v = base.to_vec();

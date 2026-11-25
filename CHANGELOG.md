@@ -53,6 +53,9 @@ All notable changes to scriptschnell-term are in this file. The format is
   interactive shell, such as `mise activate` in a `~/.bashrc` that returns early when
   not interactive. The agent terminal exited at once with "not found". The app now also
   asks an interactive login shell for its `PATH` and ignores what its rc files print.
+- ble.sh loads in sandboxed bash shells instead of failing with "XDG_STATE_HOME
+  doesn't have a proper permission". Each project's sandbox now writes a state
+  directory of its own, through which the host's `~/.local/state` shows read-only.
 
 ### Security
 

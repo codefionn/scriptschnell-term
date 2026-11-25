@@ -27,7 +27,7 @@ with the same file names. Use it for a scratch configuration.
 | Data: `extension-data/` | What extensions keep with `term.store`, one directory per extension and one JSON file per key | Extensions |
 | Data: `project-data/` | What extensions keep per project with `term.project_store`, as `<project id>/<extension>/` | Extensions |
 | State: `state.json` | Projects, worktrees, panel layout per worktree | The app |
-| State: `sandbox/` | Shell history, neovim state and stand-in files of sandboxes | The app |
+| State: `sandbox/` | Shell history, neovim state, the state directory and stand-in files of sandboxes | The app |
 | Cache: `blocklists/` | Downloaded blocklists | The app |
 | Logs | Devcontainer, job and VM image logs | The app |
 
@@ -247,7 +247,10 @@ every project, a project can choose for itself on its Project page (`runtime` in
   an agent's directory, the app creates it first: an empty directory, an empty Markdown or
   TOML file, or a JSON file with no settings (`{}`, or `{"mcpServers": {}}` for MCP
   configurations and `{"providers": {}}` for pi's `models.json`). Neovim's state
-  directory is replaced by one per project.
+  directory is replaced by one per project. So is the state directory itself
+  (`$XDG_STATE_HOME`, `~/.local/state`), which programs such as ble.sh must be able to
+  write; the host's entries in it show through read-only, except ble.sh's `blesh`,
+  which each project keeps its own of.
 - The repository's metadata stays writable, so git and hg work in a sandbox, but not
   the parts that make git and hg run commands or lead them to other metadata, since the
   app runs them on this machine for the sidebar and the explore panel: `.git/config`, `.git/config.worktree`,

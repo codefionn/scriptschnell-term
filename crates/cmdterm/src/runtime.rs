@@ -493,7 +493,7 @@ impl Runtimes {
             .set_always(&scope, pairs(&project.always_allowed));
     }
 
-    /// Where sandboxed shells of project `id` keep their history.
+    /// Where sandboxed shells of project `id` keep their history and state.
     fn shell_dir(&self, id: u64) -> PathBuf {
         self.sandbox_dir.join(id.to_string())
     }
@@ -641,6 +641,36 @@ pub struct SandboxDirs<'a> {
     pub agents: Option<&'a crate::agent_sync::AgentSync>,
 }
 
+/// Entries of the state directory that a sandbox does not show from the
+/// host, because their program must write them: ble.sh refuses to load when
+/// `blesh` is read-only.
+const OWN_STATE: [&str; 1] = ["blesh"];
+
+/// Puts `own` in place of the state directory `state` and shows the
+/// host's entries of `state` through it read-only, except those in
+/// [`OWN_STATE`] and those the policy already mounts, writes or hides,
+/// or that hold such a path.
+fn own_state_dir(policy: &mut SandboxPolicy, hidden: &[PathBuf], state: PathBuf, own: PathBuf) {
+    if std::fs::create_dir_all(&own).is_err() {
+        return;
+    }
+    let mounted: Vec<PathBuf> = (policy.writable.iter())
+        .chain(hidden)
+        .chain(policy.redirects.iter().map(|(_, inside)| inside))
+        .cloned()
+        .collect();
+    let entries = std::fs::read_dir(&state).into_iter().flatten().flatten();
+    for path in entries.map(|entry| entry.path()) {
+        let own_state =
+            (path.file_name()).is_some_and(|name| OWN_STATE.iter().any(|own| name == *own));
+        let covered = (mounted.iter()).any(|p| p.starts_with(&path) || path.starts_with(p));
+        if !own_state && !covered {
+            policy.readable.push(path);
+        }
+    }
+    policy.redirects.push((own, state));
+}
+
 /// A sandbox for `worktree`: it may write the worktree, the repository's
 /// metadata (git worktrees and hg shares write there) and the configured
 /// paths, and it cannot read the configured secrets or the session's
@@ -661,8 +691,10 @@ pub struct SandboxDirs<'a> {
 /// The host's shell history and editor state stay read-only. A local
 /// project keeps its own in `shell_dir` instead: where the sandbox can
 /// remount paths (Linux), fish's data directory is replaced by
-/// `shell_dir/fish` and neovim's state directory by `shell_dir/nvim`, and
-/// `HISTFILE` (bash, zsh) points to `shell_dir/history`.
+/// `shell_dir/fish`, neovim's state directory by `shell_dir/nvim` and the
+/// state directory (`$XDG_STATE_HOME`) by `shell_dir/state`, through which
+/// the host's entries show read-only, and `HISTFILE` (bash, zsh) points to
+/// `shell_dir/history`.
 ///
 /// The app's directories are hidden, except the references and shipped
 /// extensions in [`crate::bundle::READABLE`] of the data directory, the
@@ -960,6 +992,20 @@ pub fn sandbox_env(
             if std::fs::create_dir_all(&own).is_ok() {
                 policy.redirects.push((own, inside));
             }
+        }
+        // Each project gets a state directory of its own too, because some
+        // programs refuse to start when they cannot write it: ble.sh checks
+        // `$XDG_STATE_HOME` itself before it makes `blesh` there. The
+        // host's entries show through read-only, such as mise's list of
+        // trusted configurations, except those the sandbox mounts or hides
+        // anyway and those in [`OWN_STATE`], which start empty.
+        if let Some(state) = xdg_home("XDG_STATE_HOME", ".local/state")
+            .filter(|_| policy.kind.redirects())
+            .and_then(|dir| cmdterm_env::canonicalize(dir).ok())
+            .filter(|dir| dir.is_dir())
+            .filter(|dir| !(policy.writable.iter().chain(&hidden)).any(|p| dir.starts_with(p)))
+        {
+            own_state_dir(&mut policy, &hidden, state, shell_dir.join("state"));
         }
         if std::fs::create_dir_all(shell_dir).is_ok() {
             policy.writable.push(shell_dir.to_path_buf());
@@ -2648,6 +2694,97 @@ mod tests {
         }
         let without = policy(None);
         assert!(!without.vars.iter().any(|(name, _)| name == "BROWSER"));
+    }
+
+    /// The sandbox writes a state directory of its own, as ble.sh needs, and
+    /// reads the host's entries in it, except ble.sh's and hidden ones.
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn a_sandbox_writes_its_own_state_directory_and_reads_the_hosts() {
+        let dir = tempfile::tempdir().unwrap();
+        let base = cmdterm_env::canonicalize(dir.path()).unwrap();
+        let path = |name: &str| base.join(name);
+        let state = path("state");
+        for sub in ["mise", "blesh", "app", "nvim"] {
+            std::fs::create_dir_all(state.join(sub)).unwrap();
+        }
+        std::fs::write(state.join("mise/trusted"), "yes").unwrap();
+        std::fs::write(state.join("app/key"), "secret").unwrap();
+        std::fs::create_dir_all(path("repo")).unwrap();
+        let project: Project = serde_json::from_value(serde_json::json!({
+            "id": 1, "name": "p", "root": path("repo"), "vcs": "git",
+        }))
+        .unwrap();
+        let env = sandbox_env(
+            &SandboxSettings::default(),
+            &SandboxRules::default(),
+            &project,
+            &path("repo"),
+            &SandboxDirs {
+                shell: &path("shell"),
+                files: &path("files"),
+                app: &cmdterm_env::AppDirs::under(&path("config")),
+                agents: None,
+            },
+            None,
+            None,
+            None,
+            None,
+            None,
+        );
+        let Environment::Sandbox(mut target) = env else {
+            panic!("not a sandbox");
+        };
+        let hidden = vec![state.join("app")];
+        target.policy.hidden_dirs.extend(hidden.clone());
+        target
+            .policy
+            .redirects
+            .push((path("own-nvim"), state.join("nvim")));
+        let own = path("shell/state");
+        own_state_dir(&mut target.policy, &hidden, state.clone(), own.clone());
+        let policy = &target.policy;
+        assert!(policy.redirects.contains(&(own.clone(), state.clone())));
+        assert!(policy.readable.contains(&state.join("mise")));
+        for skipped in ["blesh", "app", "nvim"] {
+            assert!(!policy.readable.contains(&state.join(skipped)), "{skipped}");
+        }
+
+        let works = |program: &str, args: &[&str]| {
+            std::process::Command::new(program)
+                .args(args)
+                .output()
+                .is_ok_and(|out| out.status.success())
+        };
+        if !policy.kind.redirects()
+            || !works("bwrap", &["--ro-bind", "/", "/", "--unshare-all", "true"])
+        {
+            eprintln!("no bwrap here; skipping the run");
+            return;
+        }
+        std::fs::create_dir_all(path("own-nvim")).unwrap();
+        let script = r#"s=$1
+            [ -w "$s" ] && mkdir "$s/blesh" && echo ble > "$s/blesh/x" && echo writable
+            cat "$s/mise/trusted"; echo
+            echo no > "$s/mise/trusted" 2>/dev/null || echo read-only
+            ls "$s/app""#;
+        let out = Environment::Sandbox(target)
+            .command("sh")
+            .args(["-c", script, "sh"])
+            .arg(state.to_string_lossy().as_ref())
+            .output()
+            .unwrap();
+        let stdout = String::from_utf8_lossy(&out.stdout);
+        assert_eq!(stdout, "writable\nyes\nread-only\n", "{out:?}");
+        assert_eq!(
+            std::fs::read_to_string(own.join("blesh/x")).unwrap(),
+            "ble\n"
+        );
+        assert_eq!(
+            std::fs::read_to_string(state.join("mise/trusted")).unwrap(),
+            "yes"
+        );
+        assert!(!state.join("blesh/x").exists());
     }
 
     /// ssh reads this machine's configuration in a sandbox, though root's
