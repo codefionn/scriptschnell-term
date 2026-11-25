@@ -2973,13 +2973,23 @@ pub fn agent_launch(argv: &[String], use_bash: bool) -> Option<[String; 5]> {
 
 /// The script of [`agent_launch`]: `$1` is the program to find, `$2` is
 /// `bash` to set `SHELL` to bash, the rest is the command. The login shell
-/// is `$SHELL`, else the passwd entry's. Fish prints a quoted `$PATH` joined
-/// with colons too; a shell that prints something else fails the check.
+/// is `$SHELL`, else the passwd entry's. It is asked as a login shell first,
+/// then as an interactive login shell: many `~/.bashrc` files return early
+/// when not interactive, before `mise activate`, nvm or a `PATH` line, and
+/// bash reads `~/.bashrc` only through the profile. The interactive one runs
+/// in a session of its own where `setsid` exists, so it cannot take the
+/// terminal from the agent. Markers around `$PATH` keep out what rc files
+/// print. Fish prints a quoted `$PATH` joined with colons too; a shell that
+/// prints something else fails the check.
 const AGENT_LAUNCH: &str = "p=$1 b=$2; shift 2; \
 if ! command -v \"$p\" >/dev/null 2>&1; then \
 s=$SHELL; [ -x \"$s\" ] || s=$(getent passwd \"$(id -un)\" 2>/dev/null | cut -d: -f7); \
-if [ -x \"$s\" ] && l=$(\"$s\" -l -c 'printf %s \"$PATH\"' </dev/null 2>/dev/null) \
-&& (PATH=$l; command -v \"$p\") >/dev/null 2>&1; then PATH=$l; export PATH; fi; fi; \
+if [ -x \"$s\" ]; then for i in '' -i; do d=; \
+if [ -n \"$i\" ] && command -v setsid >/dev/null 2>&1; then d=setsid; fi; \
+l=$($d \"$s\" -l $i -c 'printf \"@@cmdterm-path:%s@@\" \"$PATH\"' </dev/null 2>/dev/null); \
+case $l in *@@cmdterm-path:*@@*) l=${l#*@@cmdterm-path:}; l=${l%%@@*};; *) continue;; esac; \
+if (PATH=$l; command -v \"$p\") >/dev/null 2>&1; then PATH=$l; export PATH; break; fi; \
+done; fi; fi; \
 if [ -n \"$b\" ] && b=$(command -v bash); then SHELL=$b; export SHELL; fi; \
 exec \"$@\"";
 
@@ -3707,11 +3717,15 @@ mod tests {
             std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o755)).unwrap();
         };
         script(&bin.join("vibe"), "echo \"vibe ran with $*\"");
-        // A login shell whose profile adds the agent's directory.
+        // A login shell whose profile adds the agent's directory, and
+        // that prints a greeting first.
         let login = dir.path().join("login-shell");
         script(
             &login,
-            &format!("printf %s '{}:/usr/bin:/bin'", bin.display()),
+            &format!(
+                "echo hello; printf @@cmdterm-path:%s@@ '{}:/usr/bin:/bin'",
+                bin.display()
+            ),
         );
         let run = |path: &str| {
             let argv = vec!["vibe".to_owned(), "a prompt".to_owned()];
@@ -3726,6 +3740,17 @@ mod tests {
                 .unwrap();
             String::from_utf8_lossy(&out.stdout).into_owned()
         };
+        assert_eq!(run("/usr/bin:/bin"), "vibe ran with a prompt\n");
+        // A login shell that adds it only when interactive, like a
+        // `~/.bashrc` that returns early otherwise and runs `mise activate`.
+        script(
+            &login,
+            &format!(
+                "case \" $* \" in *\" -i \"*) d='{}:' ;; *) d= ;; esac; \
+                 printf @@cmdterm-path:%s@@ \"$d/usr/bin:/bin\"",
+                bin.display()
+            ),
+        );
         assert_eq!(run("/usr/bin:/bin"), "vibe ran with a prompt\n");
         // Found on the app's PATH, the login shell is not asked.
         script(&login, "exit 1");

@@ -40,6 +40,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 - `scriptschnell-term-remote` keeps the resume offset of a session it forwards when the
   open request names no session, instead of dropping it on re-encoding.
+- Claude Code, Mistral Vibe and other agents start again when the app runs from the
+  desktop, as an AppImage does, and the agent's directory is only added to `PATH` by an
+  interactive shell, such as `mise activate` in a `~/.bashrc` that returns early when
+  not interactive. The agent terminal exited at once with "not found". The app now also
+  asks an interactive login shell for its `PATH` and ignores what its rc files print.
 
 ### Security
 
