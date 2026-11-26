@@ -4471,7 +4471,10 @@ fn agents_change_extensions_through_the_control_socket_with_approval() {
     add_project_and_wait(&ws, &repo);
     // New worktrees run in a sandbox, whose /tmp is its own; the worktree
     // is shared. Sandboxed terminals get the socket by default.
-    assert_eq!(ws.borrow().settings.agent_control, crate::state::AgentControl::Local);
+    assert_eq!(
+        ws.borrow().settings.agent_control,
+        crate::state::AgentControl::Local
+    );
     let vars = repo.join("vars");
     let script = format!(
         "printf '%s\\n%s\\n%s\\n%s\\n%s\\n' \"$SCRIPTSCHNELL_TERM\" \"$SCRIPTSCHNELL_TERM_SOCKET\" \

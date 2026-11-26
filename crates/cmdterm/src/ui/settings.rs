@@ -5176,37 +5176,73 @@ mod tests {
         ws.show_settings_section(SettingsSection::Logs);
         let mut app = crate::build_app(&ws, VIEWPORT);
         ws.take_dirty();
-        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_some());
-        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_some());
-        assert!(app.find_widget(Role::Button, Some(EN.log_copy_shown)).is_some());
+        assert!(
+            app.find_widget(Role::Button, Some("zebra failed"))
+                .is_some()
+        );
+        assert!(
+            app.find_widget(Role::Button, Some("zebra notice"))
+                .is_some()
+        );
+        assert!(
+            app.find_widget(Role::Button, Some(EN.log_copy_shown))
+                .is_some()
+        );
 
         // A new entry redraws the open page.
         crate::logs::warn("logs test", "zebra warning");
         ws.poll();
         rebuild(&ws, &mut app);
-        assert!(app.find_widget(Role::Button, Some("zebra warning")).is_some());
+        assert!(
+            app.find_widget(Role::Button, Some("zebra warning"))
+                .is_some()
+        );
 
         // The filter keeps errors only, the search narrows by words.
         ws.set_log_filter(LogFilter::Errors);
         rebuild(&ws, &mut app);
-        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_some());
-        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_none());
-        assert!(app.find_widget(Role::Button, Some("zebra warning")).is_none());
+        assert!(
+            app.find_widget(Role::Button, Some("zebra failed"))
+                .is_some()
+        );
+        assert!(
+            app.find_widget(Role::Button, Some("zebra notice"))
+                .is_none()
+        );
+        assert!(
+            app.find_widget(Role::Button, Some("zebra warning"))
+                .is_none()
+        );
         ws.set_log_filter(LogFilter::All);
         ws.set_log_query("ZEBRA NOT");
         rebuild(&ws, &mut app);
-        assert!(app.find_widget(Role::Button, Some("zebra notice")).is_some());
-        assert!(app.find_widget(Role::Button, Some("zebra failed")).is_none());
+        assert!(
+            app.find_widget(Role::Button, Some("zebra notice"))
+                .is_some()
+        );
+        assert!(
+            app.find_widget(Role::Button, Some("zebra failed"))
+                .is_none()
+        );
 
         // A click shows the whole entry and a button that copies it.
         ws.set_log_query("zebra failed");
         rebuild(&ws, &mut app);
-        assert!(app.find_widget(Role::Button, Some(EN.log_copy_entry)).is_none());
+        assert!(
+            app.find_widget(Role::Button, Some(EN.log_copy_entry))
+                .is_none()
+        );
         let row = app.find_widget(Role::Button, Some("zebra failed")).unwrap();
         app.dispatch_click(row);
         rebuild(&ws, &mut app);
-        assert!(app.find_widget(Role::Button, Some(EN.log_copy_entry)).is_some());
-        assert!(app.find_widget(Role::Label, Some("with a second line")).is_some());
+        assert!(
+            app.find_widget(Role::Button, Some(EN.log_copy_entry))
+                .is_some()
+        );
+        assert!(
+            app.find_widget(Role::Label, Some("with a second line"))
+                .is_some()
+        );
 
         assert!(page_matches(SettingsSection::Logs, "errors", &EN));
     }

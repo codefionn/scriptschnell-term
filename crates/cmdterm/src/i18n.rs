@@ -4099,7 +4099,11 @@ pub static DE: Strings = Strings {
     log_clear_confirm: "Zum Leeren erneut klicken",
     log_empty: "Noch nichts protokolliert.",
     log_no_match: "Kein Eintrag passt.",
-    log_more: |rows| format!("Nur die neuesten {rows} werden gezeigt. Grenze die Suche ein, um ältere zu finden."),
+    log_more: |rows| {
+        format!(
+            "Nur die neuesten {rows} werden gezeigt. Grenze die Suche ein, um ältere zu finden."
+        )
+    },
     log_earlier_run: "früherer Start",
     log_repeated: |count| format!("{count}-mal"),
     log_level_error: "Fehler",

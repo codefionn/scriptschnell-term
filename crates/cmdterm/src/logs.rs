@@ -226,9 +226,8 @@ impl Log {
         {
             self.file = None;
             let old = path.with_extension("log.1");
-            let reopened = std::fs::rename(path, &old).and_then(|()| {
-                OpenOptions::new().create(true).append(true).open(path)
-            });
+            let reopened = std::fs::rename(path, &old)
+                .and_then(|()| OpenOptions::new().create(true).append(true).open(path));
             self.size = 0;
             self.file = reopened.ok();
         }
@@ -404,7 +403,10 @@ pub fn utc(at: SystemTime) -> String {
 /// milliseconds since the epoch, then readable UTC), level, source and
 /// message, with tabs, newlines and backslashes in them escaped.
 fn file_line(entry: &Entry) -> String {
-    let since = entry.at.duration_since(UNIX_EPOCH).unwrap_or(Duration::ZERO);
+    let since = entry
+        .at
+        .duration_since(UNIX_EPOCH)
+        .unwrap_or(Duration::ZERO);
     format!(
         "{}.{:03}\t{}\t{}\t{}\t{}",
         since.as_secs(),
