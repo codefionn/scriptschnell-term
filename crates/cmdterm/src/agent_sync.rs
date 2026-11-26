@@ -22,11 +22,16 @@
 //! Changes are key paths with their new value, in JSON or TOML, so both
 //! sides may change other keys meanwhile. TOML keeps its formatting and
 //! comments.
+//!
+//! Keys in [`Agent::sandbox_local`] stay on their side. A file with such
+//! keys gets a copy of its own in every terminal ([`AgentSync::own_copies`]),
+//! as each terminal's sandbox has process ids of its own.
 
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, Weak};
 use std::time::{Duration, SystemTime};
 
@@ -47,6 +52,28 @@ pub struct Prepared {
     /// Variables that point agents to those directories.
     pub vars: Vec<(String, String)>,
 }
+
+/// A terminal's own copies, see [`AgentSync::own_copies`]. Dropping it
+/// ends their sync and deletes them.
+pub struct OwnCopies {
+    inner: Weak<Inner>,
+    dir: PathBuf,
+}
+
+impl Drop for OwnCopies {
+    fn drop(&mut self) {
+        if let Some(inner) = self.inner.upgrade() {
+            inner
+                .lock()
+                .files
+                .retain(|f| !f.copy.starts_with(&self.dir));
+        }
+        let _ = std::fs::remove_dir_all(&self.dir);
+    }
+}
+
+/// Numbers the directories of [`OwnCopies`].
+static NEXT_OWN: AtomicU64 = AtomicU64::new(0);
 
 /// The copies of every project's sandboxes, and the worker that syncs them.
 pub struct AgentSync {
@@ -96,8 +123,10 @@ fn stamp(path: &Path) -> Stamp {
 }
 
 impl AgentSync {
-    /// Copies live in `dir`; questions go to `approvals`.
+    /// Copies live in `dir`; questions go to `approvals`. Terminals'
+    /// copies left by an app that is gone are deleted.
     pub fn new(dir: PathBuf, approvals: Arc<Approvals>) -> Self {
+        remove_orphans(&dir.join("terminals"));
         Self {
             inner: Arc::new(Inner {
                 dir,
@@ -173,6 +202,48 @@ impl AgentSync {
         prepared
     }
 
+    /// Gives a terminal copies of its own of the files in `binds` (as
+    /// [`Prepared::binds`] lists them) that have keys in
+    /// [`Agent::sandbox_local`], and points `binds` to them. They start
+    /// as the host's file without those keys and sync with the host like
+    /// the project's copy, until the returned value is dropped.
+    pub fn own_copies(&self, binds: &mut [(PathBuf, PathBuf)]) -> Option<OwnCopies> {
+        let shared: Vec<(usize, Synced)> = {
+            let state = self.inner.lock();
+            (binds.iter().enumerate())
+                .filter_map(|(at, (copy, _))| {
+                    let synced = state.files.iter().find(|f| &f.copy == copy)?;
+                    let local = synced.agent.sandbox_local(synced.file);
+                    (!local.is_empty()).then(|| (at, synced.clone()))
+                })
+                .collect()
+        };
+        if shared.is_empty() {
+            return None;
+        }
+        let n = NEXT_OWN.fetch_add(1, Ordering::Relaxed);
+        let name = format!("{}-{n}", std::process::id());
+        let dir = self.inner.dir.join("terminals").join(name);
+        let own = OwnCopies {
+            inner: Arc::downgrade(&self.inner),
+            dir: dir.clone(),
+        };
+        for (at, shared) in shared {
+            let mut synced = Synced {
+                copy: dir.join("copy").join(shared.file),
+                base: dir.join("base").join(shared.file),
+                blocked: Vec::new(),
+                asking: false,
+                seen: None,
+                ..shared
+            };
+            if self.inner.register(&mut synced).is_ok() {
+                binds[at].0 = synced.copy;
+            }
+        }
+        Some(own)
+    }
+
     /// Drops the copies of a removed project.
     pub fn forget(&self, project: u64) {
         self.inner.lock().files.retain(|f| f.project != project);
@@ -219,11 +290,20 @@ impl Inner {
     /// the host. A file the worker knows already keeps its blocked changes.
     fn register(&self, synced: &mut Synced) -> io::Result<()> {
         if !synced.copy.is_file() || !synced.base.is_file() {
-            let text = std::fs::read(&synced.host)?;
-            for path in [&synced.copy, &synced.base] {
+            let text = std::fs::read_to_string(&synced.host)?;
+            let copy = without_local(synced, &text);
+            for (path, text) in [
+                (&synced.copy, copy.as_deref().unwrap_or(&text)),
+                (&synced.base, &text),
+            ] {
                 std::fs::create_dir_all(path.parent().unwrap_or(Path::new("/")))?;
-                std::fs::write(path, &text)?;
+                std::fs::write(path, text)?;
             }
+        } else if let Ok(text) = std::fs::read_to_string(&synced.copy)
+            && let Some(text) = without_local(synced, &text)
+        {
+            // In place: a sandbox may bind this very file.
+            std::fs::write(&synced.copy, text)?;
         }
         let mut state = self.lock();
         match (state.files.iter_mut())
@@ -355,8 +435,10 @@ fn catch_up(synced: &Synced) -> io::Result<Vec<Change>> {
     ) else {
         return Ok(Vec::new());
     };
+    let local = synced.agent.sandbox_local(synced.file);
     if host_text != base_text {
-        let changes = diff(&base, &host);
+        let mut changes = diff(&base, &host);
+        changes.retain(|change| !is_local(local, &change.path));
         if !changes.is_empty() {
             for change in &changes {
                 copy.apply(change);
@@ -367,8 +449,9 @@ fn catch_up(synced: &Synced) -> io::Result<Vec<Change>> {
         write_atomic(&synced.base, host_text.as_bytes())?;
         base = host;
     }
-    let (guarded, quiet): (Vec<Change>, Vec<Change>) =
-        (diff(&base, &copy).into_iter()).partition(|change| {
+    let (guarded, quiet): (Vec<Change>, Vec<Change>) = (diff(&base, &copy).into_iter())
+        .filter(|change| !is_local(local, &change.path))
+        .partition(|change| {
             !change.is_empty()
                 && is_guarded(synced.agent.sandbox_guarded(synced.file), &change.path)
         });
@@ -488,6 +571,53 @@ fn symlink(target: &Path, link: &Path) -> io::Result<()> {
     {
         let _ = (target, link);
         Err(io::ErrorKind::Unsupported.into())
+    }
+}
+
+/// Whether a change at `path` lies at or inside one of `patterns`.
+fn is_local(patterns: &[&[&str]], path: &[String]) -> bool {
+    (patterns.iter()).any(|pattern| {
+        path.len() >= pattern.len() && (pattern.iter()).zip(path).all(|(want, key)| want == key)
+    })
+}
+
+/// `text` of `synced`'s file without the keys in [`Agent::sandbox_local`],
+/// or `None` when it has none of them or does not parse.
+fn without_local(synced: &Synced, text: &str) -> Option<String> {
+    let local = synced.agent.sandbox_local(synced.file);
+    let mut doc = Format::of(synced.file).parse(text)?;
+    let mut found = false;
+    for path in local {
+        let path: Vec<String> = path.iter().map(|key| (*key).to_owned()).collect();
+        if doc.has(&path) {
+            doc.apply(&Change { path, value: None });
+            found = true;
+        }
+    }
+    found.then(|| doc.render(text))
+}
+
+/// Deletes the directories of [`OwnCopies`] in `dir` whose app, named by
+/// the process id at the start of their name, is gone. Only Linux can tell,
+/// and only it has bubblewrap sandboxes.
+fn remove_orphans(dir: &Path) {
+    if !cfg!(target_os = "linux") {
+        return;
+    }
+    let Ok(entries) = std::fs::read_dir(dir) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let pid = name
+            .to_string_lossy()
+            .split('-')
+            .next()
+            .unwrap_or_default()
+            .to_owned();
+        if pid.parse::<u32>().is_ok() && !Path::new("/proc").join(&pid).exists() {
+            let _ = std::fs::remove_dir_all(entry.path());
+        }
     }
 }
 
@@ -692,6 +822,32 @@ fn toml_text(item: &toml_edit::Item) -> String {
 }
 
 impl Doc {
+    /// Whether the key at `path` exists.
+    fn has(&self, path: &[String]) -> bool {
+        match self {
+            Doc::Json(root) => {
+                let mut value = root;
+                for key in path {
+                    match value.get(key) {
+                        Some(inner) => value = inner,
+                        None => return false,
+                    }
+                }
+                true
+            }
+            Doc::Toml(doc) => {
+                let mut item = doc.as_item();
+                for key in path {
+                    match item.as_table_like().and_then(|table| table.get(key)) {
+                        Some(inner) => item = inner,
+                        None => return false,
+                    }
+                }
+                true
+            }
+        }
+    }
+
     fn apply(&mut self, change: &Change) {
         match (self, &change.value) {
             (Doc::Json(root), Some(Value::Json(_)) | None) => apply_json(root, change),
@@ -899,6 +1055,80 @@ mod tests {
         );
         sync.tick();
         assert!(approvals.pending().is_empty());
+    }
+
+    #[test]
+    fn claude_codes_boot_notes_stay_on_their_side() {
+        let (_dir, home, sync_dir) = home();
+        let host = home.join(".claude.json");
+        std::fs::write(
+            &host,
+            r#"{"numStartups": 1, "fullscreenBootPending": {"4242": {"startedAt": 1}}}"#,
+        )
+        .unwrap();
+        let sync = AgentSync::new(sync_dir.clone(), approvals());
+        sync.prepare(2, &home, |_| false);
+        let copy = sync_dir.join("2/copy/.claude.json");
+        assert_eq!(read(&copy), serde_json::json!({"numStartups": 1}));
+        // A start in the sandbox notes its own process id.
+        std::fs::write(
+            &copy,
+            r#"{"numStartups": 2, "fullscreenBootPending": {"7": {"startedAt": 2}}}"#,
+        )
+        .unwrap();
+        sync.tick();
+        assert_eq!(
+            read(&host),
+            serde_json::json!({"numStartups": 2, "fullscreenBootPending": {"4242": {"startedAt": 1}}})
+        );
+        // The host's start finishes and another begins.
+        std::fs::write(
+            &host,
+            r#"{"numStartups": 3, "fullscreenBootPending": {"99": {"startedAt": 3}}}"#,
+        )
+        .unwrap();
+        sync.tick();
+        assert_eq!(
+            read(&copy),
+            serde_json::json!({"numStartups": 3, "fullscreenBootPending": {"7": {"startedAt": 2}}})
+        );
+        assert_eq!(
+            read(&host)["fullscreenBootPending"],
+            serde_json::json!({"99": {"startedAt": 3}})
+        );
+    }
+
+    #[test]
+    fn each_terminal_gets_its_own_claude_json() {
+        let (_dir, home, sync_dir) = home();
+        let host = home.join(".claude.json");
+        std::fs::write(&host, r#"{"numStartups": 1}"#).unwrap();
+        std::fs::write(home.join(".claude/settings.json"), "{}").unwrap();
+        let sync = AgentSync::new(sync_dir.clone(), approvals());
+        let prepared = sync.prepare(3, &home, |_| false);
+        let mut first = prepared.binds.clone();
+        let mut second = prepared.binds.clone();
+        let first_own = sync.own_copies(&mut first).unwrap();
+        let _second_own = sync.own_copies(&mut second).unwrap();
+        let (a, b) = (first[0].0.clone(), second[0].0.clone());
+        assert_eq!(first[0].1, host);
+        assert_ne!(a, prepared.binds[0].0);
+        assert_ne!(a, b);
+        assert!(a.starts_with(sync_dir.join("terminals")));
+        // Settings without process ids stay shared.
+        assert_eq!(first[1], prepared.binds[1]);
+        // One terminal's change reaches the host, then the other terminal.
+        std::fs::write(&a, r#"{"numStartups": 2}"#).unwrap();
+        sync.tick();
+        assert_eq!(read(&host)["numStartups"], 2);
+        sync.tick();
+        assert_eq!(read(&b)["numStartups"], 2);
+        // A closed terminal's copy goes.
+        let dir = first_own.dir.clone();
+        drop(first_own);
+        assert!(!dir.exists());
+        assert!(!sync.inner.lock().files.iter().any(|f| f.copy == a));
+        assert!(sync.inner.lock().files.iter().any(|f| f.copy == b));
     }
 
     #[test]

@@ -223,6 +223,8 @@ pub struct TerminalPanel {
     pub clipboard: Option<crate::clipboard::Target>,
     /// The scope the terminal runs in, to change its CPU weight.
     pub cpu: Option<crate::cpu::CpuControl>,
+    /// The copies of agents' settings only this terminal's sandbox has.
+    pub(crate) agent_copies: Option<crate::agent_sync::OwnCopies>,
     /// Why the last image paste failed, set by its worker thread and taken
     /// by the app.
     paste_error: Arc<Mutex<Option<String>>>,
@@ -269,6 +271,7 @@ impl TerminalPanel {
             told_hidden: Cell::new(false),
             clipboard: None,
             cpu: None,
+            agent_copies: None,
             paste_error: Arc::new(Mutex::new(None)),
         }
     }

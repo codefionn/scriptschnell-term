@@ -5324,7 +5324,10 @@ impl Inner {
                     self.publish_environment();
                 }
                 Err(error) => {
-                    self.push_error("control socket", (self.tr.control_failed)(&error.to_string()));
+                    self.push_error(
+                        "control socket",
+                        (self.tr.control_failed)(&error.to_string()),
+                    );
                     self.control = Some(None);
                 }
             }
@@ -5558,6 +5561,21 @@ impl Inner {
                 agent,
                 once,
             } => {
+                // A sandbox's terminal gets copies of its own of the agents'
+                // settings that note process ids, see `AgentSync::own_copies`.
+                let own_env;
+                let (env, agent_copies) = match env {
+                    crate::runtime::TermEnv::Ready(Environment::Sandbox(target))
+                        if !target.policy.synced.is_empty() =>
+                    {
+                        let mut target = target.clone();
+                        let copies =
+                            (self.runtimes.agent_sync).own_copies(&mut target.policy.synced);
+                        own_env = crate::runtime::TermEnv::Ready(Environment::Sandbox(target));
+                        (&own_env, copies)
+                    }
+                    _ => (env, None),
+                };
                 let worktree = cwd;
                 let cwd = dir.as_deref().unwrap_or(cwd);
                 let mut registration = None;
@@ -5761,6 +5779,7 @@ impl Inner {
                                 panel.wake = Some(panel_wake);
                                 panel.remote_env = remote_env;
                                 panel.cpu = cpu.map(|(_, control)| control);
+                                panel.agent_copies = agent_copies;
                                 if let crate::runtime::TermEnv::Ready(env) = env {
                                     panel.clipboard = Some(crate::clipboard::Target::of(
                                         env,

@@ -1644,6 +1644,22 @@ impl Agent {
         }
     }
 
+    /// Where in synced file `file` (see [`Self::sandbox_synced`]) keys stay
+    /// on their side, as key paths: the host's never reach a copy and a
+    /// copy's never reach the host. A file with such keys gets a copy of its
+    /// own in every terminal, see `AgentSync::own_copies`.
+    pub fn sandbox_local(self, file: &str) -> &'static [&'static [&'static str]] {
+        match (self, file) {
+            // Claude Code notes each start of its fullscreen renderer under
+            // its process id and takes a note whose process is gone, or is
+            // itself, for a start that failed, which turns fullscreen off.
+            // Every sandbox has process ids of its own, so a note from
+            // another one looks like a failed start.
+            (Agent::ClaudeCode, ".claude.json") => &[&["fullscreenBootPending"]],
+            _ => &[],
+        }
+    }
+
     /// The file that registers MCP servers, relative to `$HOME`. pi has no
     /// MCP support.
     fn mcp_config(self) -> Option<&'static str> {

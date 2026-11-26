@@ -620,7 +620,11 @@ every project, a project can choose for itself on its Project page (`runtime` in
   Changes in a copy go to this machine's file key by key, so both sides may change other
   keys meanwhile. In `~/.claude.json` only the trust, allowed tools, MCP servers, API key
   answers and the bypass-permissions answer follow the guard; counters, caches and the
-  rest come over at once. Every change to the other files follows the guard. `ask` shows
+  rest come over at once. Each terminal gets a copy of `~/.claude.json` of its own, deleted
+  when the terminal closes, and Claude Code's notes of fullscreen starts
+  (`fullscreenBootPending`) never leave it or come in: they name process ids, which differ
+  in every sandbox, so another sandbox's note made Claude Code fall back to its classic
+  renderer. Every change to the other files follows the guard. `ask` shows
   a dialog with the agent, the file and each changed key. A blocked change stays in the
   sandbox's copy and is not asked about again until the app restarts. Codex gets
   `CODEX_HOME` pointing to a directory of its own with the copy and links to the rest of

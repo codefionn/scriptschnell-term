@@ -58,6 +58,13 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- Claude Code in bubblewrap sandboxes no longer starts with its classic renderer and the
+  notice that its fullscreen renderer "didn't finish starting last time", which happened
+  when two Claude Code sessions started close together, such as the agents the app
+  resumes at start. It took another sandbox's note of a starting session, saved under a
+  process id of that sandbox, for a failed start. Each terminal in a sandbox now gets
+  its own copy of `~/.claude.json`, and these notes (`fullscreenBootPending`) no
+  longer pass between the copies and this machine's file.
 - The Licenses page under Settings, About no longer comes out empty when a build runs
   with a registry cache that lacks some dev dependency, as after a plain `cargo build`.
   The build script now asks `cargo metadata` online when the offline graph is incomplete.
