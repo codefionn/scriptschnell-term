@@ -175,10 +175,7 @@ impl Msg {
                 // offset counts as well: dropping it would make
                 // decode(encode(m)) lose the offset.
                 let more = spec.exit_if_ended || spec.run.is_some();
-                if !spec.session.is_empty()
-                    || !spec.cpu.is_empty()
-                    || more
-                    || spec.resume.is_some()
+                if !spec.session.is_empty() || !spec.cpu.is_empty() || more || spec.resume.is_some()
                 {
                     put_str(out, &spec.session);
                     match spec.resume {

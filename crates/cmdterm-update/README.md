@@ -89,30 +89,72 @@ the new public key by hand.
 
 ### Releasing
 
-A `v<version>` tag runs `.github/workflows/ci.yml`. It builds and tests everything,
-signs the Linux manifest and creates the GitHub release as a draft with the AppImage. The
-Windows programs stay unsigned in the run's `windows-x86_64-unsigned` artifact. Then,
-on a Linux machine with the Certum certificate:
+A `v<version>` tag runs `.github/workflows/ci.yml`. It builds and tests everything and
+creates the GitHub release as an empty draft. The AppImage and the Windows programs stay
+unsigned in the run's `linux-x86_64-unsigned` and `windows-x86_64-unsigned` artifacts:
+the GPG key and the Certum certificate live on security keys, so CI never holds them.
+Then, on a Linux machine with both:
 
 ```sh
+packaging/linux/sign-release.sh v0.2.0
 packaging/windows/sign-release.sh v0.2.0
 ```
 
-The script downloads the unsigned programs, signs them, builds the installer from the
-signed programs with Inno Setup under Wine, signs the installer and uploads the three
-files to the draft. It then starts `.github/workflows/release-windows.yml`, which:
+The first script downloads the unsigned AppImage, signs it with GPG and uploads it to the
+draft. The second downloads the unsigned programs, signs them, builds the installer from
+the signed programs with Inno Setup under Wine, signs the installer and uploads the three
+files to the draft. It refuses to start while the draft has no AppImage. It then starts
+`.github/workflows/release.yml`, which:
 
-1. checks on Windows that each file has a valid Authenticode signature with a timestamp,
-   from a certificate listed in the `WINDOWS_SIGNING_THUMBPRINTS` repository variable,
-2. checks with `scriptschnell-term-release check-signed` that each signed program is the
-   program ci.yml built with only the signature added (the PE checksum, the certificate
-   table entry and the certificate table at the end are all signing changes),
-3. signs the Windows manifest over the signed programs and publishes the release.
+1. checks on Windows that each Windows file has a valid Authenticode signature with a
+   timestamp, from a certificate listed in the `WINDOWS_SIGNING_THUMBPRINTS` repository
+   variable,
+2. checks with `packaging/linux/verify-appimage.sh` that the AppImage's GPG signature
+   verifies against `packaging/linux/appimage-signing-key.asc` at the tag,
+3. checks with `scriptschnell-term-release check-signed` that each signed file is the one
+   ci.yml built with only the signature added (for a program the PE checksum, the
+   certificate table entry and the certificate table at the end; for the AppImage its
+   `.sha256_sig` and `.sig_key` sections),
+4. signs the Linux and Windows manifests over the signed files and publishes the release.
 
 Until then the release is a draft, which neither `releases/latest` nor the mirror sees,
 so Linux users get the release only together with Windows users. The uninstaller inside
 the installer stays unsigned: Inno Setup signs it only through a sign command it runs
 under Wine itself, and osslsigncode is a Linux program.
+
+### Signing the AppImage
+
+`packaging/linux/sign-appimage.sh <AppImage>` signs any AppImage in place, a local
+build from `scripts/build-appimage.sh` too. It does what `appimagetool --sign` does at
+build time: gpg signs the hex SHA-256 of the AppImage as a detached, armored text
+signature, and the script writes the signature into the runtime's `.sha256_sig`
+section and the public key into `.sig_key`. Both sections are zeros in an unsigned
+AppImage and are zeroed again for the digest, so no other byte changes and the
+signature stays valid. AppImageUpdate's `validate` and AppImageLauncher read it there.
+The updater does not: it trusts the signed manifest and its SHA3-256 hashes, which cover
+the signed AppImage.
+
+The key is `BC070532FE313455FAFDDFA4D826169BC45EC7A9`. gpg signs with its signing
+subkey and, with the key on a security key, asks for the PIN and a touch.
+`APPIMAGE_SIGNING_KEY` names another key, and `APPIMAGE_SIGNING_KEYFILE` the public key
+file the script checks the result against. The public key is
+`packaging/linux/appimage-signing-key.asc`; after extending the key's expiry or adding a
+subkey, export it again before the next release:
+
+```sh
+gpg --armor --export --export-options export-minimal BC070532FE313455FAFDDFA4D826169BC45EC7A9 \
+  >packaging/linux/appimage-signing-key.asc
+```
+
+To check a downloaded AppImage:
+
+```sh
+packaging/linux/verify-appimage.sh linux-x86_64-scriptschnell-term.AppImage
+```
+
+It verifies in a temporary keyring, so it neither reads nor changes `~/.gnupg`. Both
+scripts build `scriptschnell-term-release` with cargo unless
+`SCRIPTSCHNELL_RELEASE_TOOL` names it.
 
 ### Signing the Windows files
 

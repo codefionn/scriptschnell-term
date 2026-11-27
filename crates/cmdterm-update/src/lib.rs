@@ -21,6 +21,7 @@
 //! manifest only when its version is newer than its own, so an old signed
 //! manifest cannot roll it back.
 
+pub mod appimage;
 pub mod authenticode;
 pub mod keys;
 pub mod proxy;

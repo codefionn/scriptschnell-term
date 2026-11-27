@@ -826,7 +826,10 @@ mod tests {
             String::from_utf8_lossy(&output.stdout).into_owned()
         };
         let new = run("  --expand-environment=BOOL    Control expansion");
-        assert!(new.contains("\n--expand-environment=no\n--\nsh\n-c\nl=${l%%@@*}\n"), "{new}");
+        assert!(
+            new.contains("\n--expand-environment=no\n--\nsh\n-c\nl=${l%%@@*}\n"),
+            "{new}"
+        );
         let old = run("  --scope    Run as scope");
         assert!(!old.contains("--expand-environment"), "{old}");
         assert!(old.contains("\n--\nsh\n-c\nl=${l%%@@*}\n"), "{old}");

@@ -15,6 +15,13 @@ All notable changes to scriptschnell-term are in this file. The format is
 - `scriptschnell-term-release check-signed UNSIGNED SIGNED` checks that a Windows program
   signed outside the release workflow is the unsigned program with only an Authenticode
   signature added.
+- Release AppImages carry a GPG signature from the key
+  `BC070532FE313455FAFDDFA4D826169BC45EC7A9` in their `.sha256_sig` section, the way
+  `appimagetool --sign` embeds one, so AppImageUpdate's `validate` and AppImageLauncher
+  can check them. `packaging/linux/sign-appimage.sh` signs an AppImage with a local gpg
+  key, also one on a security key, and `packaging/linux/verify-appimage.sh` checks one
+  against `packaging/linux/appimage-signing-key.asc`. `check-signed` also accepts an
+  AppImage and its signed copy.
 - A Nix flake for Linux: `nix run` and `nix profile install` build the app with
   `scriptschnell-term-remote`, `scriptschnell-term-web` and
   `scriptschnell-term-proxy-bridge`, `overlays.default` adds `pkgs.scriptschnell-term`,

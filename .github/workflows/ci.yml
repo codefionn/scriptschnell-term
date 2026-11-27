@@ -1,10 +1,13 @@
 # Checks every push and pull request. A `v*` tag also builds the release:
-# the AppImage for Linux with its signed update manifest, and the Windows
-# programs, unsigned, as the `windows-x86_64-unsigned` artifact. It leaves the
-# GitHub release as a draft. packaging/windows/sign-release.sh signs the
-# Windows programs with Certum on a Linux machine, builds the installer from
-# them and starts release-windows.yml, which checks the signatures, signs the
-# Windows update manifest and publishes the release.
+# the AppImage for Linux as the `linux-x86_64-unsigned` artifact and the
+# Windows programs as the `windows-x86_64-unsigned` artifact, both unsigned,
+# and creates an empty draft GitHub release. The GPG key and the Certum
+# certificate live on security keys, so the files are signed on a local
+# machine: packaging/linux/sign-release.sh signs the AppImage with GPG and
+# uploads it, then packaging/windows/sign-release.sh signs the
+# Windows programs with Certum, builds the installer from them and starts
+# release.yml, which checks every signature, signs the update manifests and
+# publishes the release.
 #
 # --- Releases ---------------------------------------------------------------
 # https://github.com/<repo>/releases/latest/download/manifest-<platform>.json
@@ -19,10 +22,11 @@
 #   SCRIPTSCHNELL_RELEASE_KEY   public release key line, built into the app
 #                               (`scriptschnell-term-release keygen` prints it)
 #   WINDOWS_SIGNING_THUMBPRINTS SHA-1 thumbprints of the code signing
-#                               certificates release-windows.yml accepts
+#                               certificates release.yml accepts
 #
 # --- Secrets ----------------------------------------------------------------
-#   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file)
+#   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   secret release key (the keygen file),
+#                                       which release.yml signs manifests with
 
 name: ci
 
@@ -172,6 +176,8 @@ jobs:
 
       # The updater renames a downloaded AppImage over the running one, so its
       # name carries no version: it stays right after an update.
+      # packaging/linux/sign-release.sh signs it, and release.yml checks that
+      # the signed copy is this AppImage with only a signature added.
       - name: Pack the AppImage
         env:
           APPIMAGE_EXTRACT_AND_RUN: "1"
@@ -184,7 +190,7 @@ jobs:
 
       - uses: actions/upload-artifact@v7
         with:
-          name: linux-x86_64
+          name: linux-x86_64-unsigned
           path: dist/linux-x86_64
           if-no-files-found: error
 
@@ -260,59 +266,21 @@ jobs:
           path: dist/windows-x86_64
           if-no-files-found: error
 
+  # A draft: `releases/latest` and the mirror only see the release once
+  # release.yml added the signed files and their manifests and published it,
+  # so nobody gets a manifest without its files.
   draft:
     needs: [version, appimage, windows]
     runs-on: ubuntu-24.04
     environment: release
     permissions:
       contents: write
-    env:
-      VERSION: ${{ needs.version.outputs.version }}
     steps:
-      - uses: actions/checkout@v7
-        with:
-          persist-credentials: false
-
-      - name: Install toolchain from rust-toolchain.toml
-        run: rustup toolchain install
-
-      - uses: Swatinem/rust-cache@v2
-        with:
-          key: publish
-
-      - name: Build scriptschnell-term-release
-        run: cargo build --release --locked -p cmdterm-update --bin scriptschnell-term-release
-
-      - uses: actions/download-artifact@v8
-        with:
-          name: linux-x86_64
-          path: dist/linux-x86_64
-
-      # `sign` copies the files into dist/assets under their asset names.
-      # `verify` checks the signature with the key the builds carry, so a
-      # signing key that does not match it fails here, not on users' machines.
-      # release-windows.yml signs the Windows manifest.
-      - name: Sign the Linux update manifest
-        env:
-          SCRIPTSCHNELL_RELEASE_SIGNING_KEY: ${{ secrets.SCRIPTSCHNELL_RELEASE_SIGNING_KEY }}
-          RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
-        run: |
-          set -euo pipefail
-          assets="$GITHUB_WORKSPACE/dist/assets"
-          target/release/scriptschnell-term-release sign --version "$VERSION" --platform linux-x86_64 \
-            --out "$assets" "$GITHUB_WORKSPACE/dist/linux-x86_64"
-          target/release/scriptschnell-term-release verify \
-            --public-key "$RELEASE_KEY" --platform linux-x86_64 "$assets"
-
-      # A draft: `releases/latest` and the mirror only see the release once
-      # release-windows.yml added the Windows files and published it, so
-      # nobody gets a manifest without its files.
       - name: Create the draft release
         env:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ github.ref_name }}
-        working-directory: dist/assets
         run: |
           set -euo pipefail
           gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --title "$TAG" \
-            --generate-notes --draft ./*
+            --generate-notes --draft

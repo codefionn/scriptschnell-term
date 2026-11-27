@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Signs the Windows files of a draft release with a Certum code signing
-# certificate on Linux, then starts release-windows.yml, which checks them,
-# signs their update manifest and publishes the release.
+# certificate on Linux, then starts release.yml, which checks them and the
+# AppImage, signs the update manifests and publishes the release. Run
+# packaging/linux/sign-release.sh first: the AppImage must be on the draft.
 #
 #     packaging/windows/sign-release.sh v0.2.0
 #
@@ -59,6 +60,9 @@ repo="${SCRIPTSCHNELL_RELEASE_REPO:-$(gh repo view --json nameWithOwner --jq .na
 draft="$(gh release view "$tag" --repo "$repo" --json isDraft --jq .isDraft)" ||
   fail "$repo has no release $tag yet: wait for ci.yml"
 [ "$draft" = true ] || fail "$tag of $repo is published already"
+gh release view "$tag" --repo "$repo" --json assets --jq '.assets[].name' |
+  grep -qx linux-x86_64-scriptschnell-term.AppImage ||
+  fail "the draft has no signed AppImage: run packaging/linux/sign-release.sh $tag first"
 
 work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
@@ -110,6 +114,6 @@ done
 mv "$setup" "$work/upload/"
 gh release upload "$tag" --repo "$repo" --clobber "$work/upload"/*
 
-gh workflow run release-windows.yml --repo "$repo" --ref "$tag" -f tag="$tag"
-echo "release-windows.yml now checks and publishes $tag:"
-echo "  gh run list --repo $repo --workflow release-windows.yml --limit 1"
+gh workflow run release.yml --repo "$repo" --ref "$tag" -f tag="$tag"
+echo "release.yml now checks and publishes $tag:"
+echo "  gh run list --repo $repo --workflow release.yml --limit 1"

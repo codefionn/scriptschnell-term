@@ -46,10 +46,37 @@ enum Command {
         platform: String,
         assets_dir: PathBuf,
     },
-    /// Checks that SIGNED is UNSIGNED with an Authenticode signature added
-    /// and nothing else changed, so a program signed outside the release
-    /// workflow is the one the workflow built.
+    /// Checks that SIGNED is UNSIGNED with an Authenticode signature added,
+    /// or for an AppImage a GPG signature and key embedded, and nothing else
+    /// changed, so a file signed outside the release workflow is the one the
+    /// workflow built.
     CheckSigned { unsigned: PathBuf, signed: PathBuf },
+    /// Prints what the GPG signature of the AppImage FILE covers: the hex
+    /// SHA-256 of the file with its signature sections zeroed.
+    AppimageDigest {
+        /// Fails if FILE is signed already.
+        #[arg(long)]
+        unsigned: bool,
+        file: PathBuf,
+    },
+    /// Writes the armored detached SIGNATURE and public KEY into the
+    /// signature sections of the unsigned AppImage FILE.
+    AppimageEmbed {
+        #[arg(long)]
+        signature: PathBuf,
+        #[arg(long)]
+        key: PathBuf,
+        file: PathBuf,
+    },
+    /// Writes the armored signature and public key embedded in the signed
+    /// AppImage FILE to SIGNATURE and KEY.
+    AppimageSignature {
+        #[arg(long)]
+        signature: PathBuf,
+        #[arg(long)]
+        key: PathBuf,
+        file: PathBuf,
+    },
 }
 
 fn main() -> ExitCode {
@@ -67,6 +94,17 @@ fn main() -> ExitCode {
             assets_dir,
         } => verify(&public_key, &platform, &assets_dir),
         Command::CheckSigned { unsigned, signed } => check_signed(&unsigned, &signed),
+        Command::AppimageDigest { unsigned, file } => appimage_digest(&file, unsigned),
+        Command::AppimageEmbed {
+            signature,
+            key,
+            file,
+        } => appimage_embed(&file, &signature, &key),
+        Command::AppimageSignature {
+            signature,
+            key,
+            file,
+        } => appimage_signature(&file, &signature, &key),
     };
     match result {
         Ok(()) => ExitCode::SUCCESS,
@@ -175,14 +213,62 @@ fn verify(public_key: &str, platform: &str, assets_dir: &Path) -> Result<(), Str
     Ok(())
 }
 
+fn read(path: &Path) -> Result<Vec<u8>, String> {
+    std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))
+}
+
+fn write(path: &Path, data: &[u8]) -> Result<(), String> {
+    std::fs::write(path, data).map_err(|e| format!("{}: {e}", path.display()))
+}
+
 fn check_signed(unsigned: &Path, signed: &Path) -> Result<(), String> {
-    let read = |path: &Path| std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()));
-    cmdterm_update::authenticode::same_program(&read(unsigned)?, &read(signed)?)
-        .map_err(|e| format!("{}: {e}", signed.display()))?;
+    let (unsigned_file, signed_file) = (read(unsigned)?, read(signed)?);
+    if unsigned_file.starts_with(b"\x7fELF") {
+        cmdterm_update::appimage::same_appimage(&unsigned_file, &signed_file)
+    } else {
+        cmdterm_update::authenticode::same_program(&unsigned_file, &signed_file)
+    }
+    .map_err(|e| format!("{}: {e}", signed.display()))?;
     println!(
         "{} is {} with a signature added",
         signed.display(),
         unsigned.display()
     );
     Ok(())
+}
+
+fn appimage_digest(file: &Path, unsigned: bool) -> Result<(), String> {
+    let data = read(file)?;
+    let at = |e: String| format!("{}: {e}", file.display());
+    let sections = cmdterm_update::appimage::sections(&data).map_err(at)?;
+    if unsigned && cmdterm_update::appimage::is_signed(&data, &sections) {
+        return Err(at("it is signed already".to_owned()));
+    }
+    println!("{}", cmdterm_update::appimage::digest(&data).map_err(at)?);
+    Ok(())
+}
+
+fn appimage_embed(file: &Path, signature: &Path, key: &Path) -> Result<(), String> {
+    let mut data = read(file)?;
+    cmdterm_update::appimage::embed(&mut data, &read(signature)?, &read(key)?)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    // A new file renamed over the old one, so a crash leaves either.
+    let mut partial = file.as_os_str().to_owned();
+    partial.push(".signing");
+    let partial = PathBuf::from(partial);
+    write(&partial, &data)?;
+    let permissions = std::fs::metadata(file)
+        .map_err(|e| e.to_string())?
+        .permissions();
+    std::fs::set_permissions(&partial, permissions).map_err(|e| e.to_string())?;
+    std::fs::rename(&partial, file).map_err(|e| format!("{}: {e}", file.display()))?;
+    println!("embedded the signature in {}", file.display());
+    Ok(())
+}
+
+fn appimage_signature(file: &Path, signature: &Path, key: &Path) -> Result<(), String> {
+    let (armored, public) = cmdterm_update::appimage::signature(&read(file)?)
+        .map_err(|e| format!("{}: {e}", file.display()))?;
+    write(signature, &armored)?;
+    write(key, &public)
 }

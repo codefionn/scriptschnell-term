@@ -1,10 +1,13 @@
-# Finishes a release that ci.yml left as a draft. packaging/windows/sign-release.sh
-# starts it once it has uploaded the Windows programs and the installer, signed
-# with Certum. It checks every signature, its certificate and its timestamp,
-# checks that each signed program is the one ci.yml built with only a
-# signature added, signs the Windows update manifest and publishes the release.
+# Finishes a release that ci.yml left as a draft. packaging/linux/sign-release.sh
+# uploads the AppImage signed with GPG, then packaging/windows/sign-release.sh
+# uploads the Windows programs and the installer, signed with Certum, and
+# starts this workflow. It checks every Authenticode signature, its
+# certificate and its timestamp, checks the AppImage's GPG signature against
+# packaging/linux/appimage-signing-key.asc, checks that each signed file is
+# the one ci.yml built with only a signature added, signs the Linux and
+# Windows update manifests and publishes the release.
 #
-#     gh workflow run release-windows.yml --ref v0.2.0 -f tag=v0.2.0
+#     gh workflow run release.yml --ref v0.2.0 -f tag=v0.2.0
 #
 # --- Repository variables (Settings > Secrets and variables > Variables) ----
 #   WINDOWS_SIGNING_THUMBPRINTS SHA-1 thumbprints of the accepted code signing
@@ -16,7 +19,7 @@
 # --- Secrets ----------------------------------------------------------------
 #   SCRIPTSCHNELL_RELEASE_SIGNING_KEY   see ci.yml
 
-name: release-windows
+name: release
 
 on:
   workflow_dispatch:
@@ -27,7 +30,7 @@ on:
         type: string
 
 concurrency:
-  group: release-windows-${{ inputs.tag }}
+  group: release-${{ inputs.tag }}
   cancel-in-progress: false
 
 permissions:
@@ -117,6 +120,7 @@ jobs:
     environment: release
     permissions:
       contents: write
+      actions: read
     steps:
       - uses: actions/checkout@v7
         with:
@@ -137,6 +141,50 @@ jobs:
         with:
           name: windows-release
           path: release
+
+      - name: Download the signed and the unsigned AppImage
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="$(gh api "repos/$GITHUB_REPOSITORY/commits/$TAG" --jq .sha)"
+          run="$(gh run list --repo "$GITHUB_REPOSITORY" --workflow ci.yml --event push \
+            --branch "$TAG" --commit "$sha" --status success --limit 1 --json databaseId --jq '.[0].databaseId')"
+          if [ -z "$run" ]; then
+            echo "::error::no successful ci.yml run for $TAG"
+            exit 1
+          fi
+          gh run download "$run" --repo "$GITHUB_REPOSITORY" --name linux-x86_64-unsigned --dir appimage/unsigned
+          if ! gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir appimage/signed \
+            --pattern linux-x86_64-scriptschnell-term.AppImage; then
+            echo "::error::the draft has no signed AppImage: run packaging/linux/sign-release.sh $TAG"
+            exit 1
+          fi
+          ls -l appimage/unsigned appimage/signed
+
+      # The key file comes from the tag, like the workflow itself.
+      - name: Check the AppImage
+        env:
+          SCRIPTSCHNELL_RELEASE_TOOL: ${{ github.workspace }}/target/release/scriptschnell-term-release
+        run: |
+          set -euo pipefail
+          signed=appimage/signed/linux-x86_64-scriptschnell-term.AppImage
+          "$SCRIPTSCHNELL_RELEASE_TOOL" check-signed appimage/unsigned/scriptschnell-term.AppImage "$signed"
+          packaging/linux/verify-appimage.sh "$signed"
+          mkdir -p dist/linux-x86_64
+          cp "$signed" dist/linux-x86_64/scriptschnell-term.AppImage
+
+      - name: Sign the Linux update manifest
+        env:
+          SCRIPTSCHNELL_RELEASE_SIGNING_KEY: ${{ secrets.SCRIPTSCHNELL_RELEASE_SIGNING_KEY }}
+          RELEASE_KEY: ${{ vars.SCRIPTSCHNELL_RELEASE_KEY }}
+        run: |
+          set -euo pipefail
+          version="${TAG#v}"
+          target/release/scriptschnell-term-release sign --version "$version" --platform linux-x86_64 \
+            --out dist/assets dist/linux-x86_64
+          target/release/scriptschnell-term-release verify \
+            --public-key "$RELEASE_KEY" --platform linux-x86_64 dist/assets
 
       # The files the updater installs, under their installed names.
       - name: Check that the signed programs are the ones ci.yml built

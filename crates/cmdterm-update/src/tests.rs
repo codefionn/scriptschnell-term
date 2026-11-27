@@ -542,3 +542,83 @@ fn the_signed_file_must_be_signed_and_the_unsigned_one_not() {
     let error = authenticode::same_program(b"#!/bin/sh", &signed).unwrap_err();
     assert!(error.contains("not a Windows program"), "{error}");
 }
+
+/// A type 2 AppImage as far as `appimage` reads it: an ELF header, `body`,
+/// zeroed `.sha256_sig` and `.sig_key` sections of 64 and 128 bytes, and
+/// the section headers.
+fn appimage_file(body: &[u8]) -> Vec<u8> {
+    let mut file = vec![0u8; 64];
+    file[..4].copy_from_slice(b"\x7fELF");
+    file[4] = 2;
+    file[5] = 1;
+    file[8..11].copy_from_slice(b"AI\x02");
+    file.extend_from_slice(body);
+    let signature = file.len();
+    file.resize(signature + 64, 0);
+    let key = file.len();
+    file.resize(key + 128, 0);
+    let names = file.len();
+    file.extend_from_slice(b"\0.sha256_sig\0.sig_key\0.shstrtab\0");
+    let names_size = file.len() - names;
+    let table = file.len();
+    let mut header = |name: u32, offset: usize, size: usize| {
+        let mut entry = [0u8; 64];
+        entry[..4].copy_from_slice(&name.to_le_bytes());
+        entry[24..32].copy_from_slice(&(offset as u64).to_le_bytes());
+        entry[32..40].copy_from_slice(&(size as u64).to_le_bytes());
+        file.extend_from_slice(&entry);
+    };
+    header(0, 0, 0);
+    header(1, signature, 64);
+    header(13, key, 128);
+    header(22, names, names_size);
+    file[0x28..0x30].copy_from_slice(&(table as u64).to_le_bytes());
+    file[0x3a..0x3c].copy_from_slice(&64u16.to_le_bytes());
+    file[0x3c..0x3e].copy_from_slice(&4u16.to_le_bytes());
+    file[0x3e..0x40].copy_from_slice(&3u16.to_le_bytes());
+    file
+}
+
+#[test]
+fn an_embedded_appimage_signature_reads_back_and_keeps_the_digest() {
+    let unsigned = appimage_file(b"runtime and squashfs");
+    let digest = appimage::digest(&unsigned).unwrap();
+    assert_eq!(digest.len(), 64);
+    let mut signed = unsigned.clone();
+    appimage::embed(&mut signed, b"-----BEGIN PGP SIGNATURE-----", b"a key").unwrap();
+    assert_eq!(appimage::digest(&signed).unwrap(), digest);
+    let (signature, key) = appimage::signature(&signed).unwrap();
+    assert_eq!(signature, b"-----BEGIN PGP SIGNATURE-----");
+    assert_eq!(key, b"a key");
+    appimage::same_appimage(&unsigned, &signed).unwrap();
+
+    let error = appimage::embed(&mut signed, b"again", b"a key").unwrap_err();
+    assert!(error.contains("signed already"), "{error}");
+    let error = appimage::signature(&unsigned).unwrap_err();
+    assert!(error.contains("not signed"), "{error}");
+}
+
+#[test]
+fn an_appimage_signature_must_fit_its_section() {
+    let mut file = appimage_file(b"body");
+    let error = appimage::embed(&mut file, &[b'a'; 65], b"key").unwrap_err();
+    assert!(error.contains("only 64"), "{error}");
+    let error = appimage::embed(&mut file, b"sig", b"").unwrap_err();
+    assert!(error.contains("key is empty"), "{error}");
+}
+
+#[test]
+fn a_changed_appimage_is_not_the_same() {
+    let unsigned = appimage_file(b"body one");
+    let mut signed = appimage_file(b"body two");
+    appimage::embed(&mut signed, b"sig", b"key").unwrap();
+    let error = appimage::same_appimage(&unsigned, &signed).unwrap_err();
+    assert!(error.contains("different AppImage"), "{error}");
+
+    let error = appimage::same_appimage(&unsigned, &unsigned).unwrap_err();
+    assert!(error.contains("not signed"), "{error}");
+    let error = appimage::same_appimage(&signed, &signed).unwrap_err();
+    assert!(error.contains("signed already"), "{error}");
+    let error = appimage::sections(b"MZ not an elf").unwrap_err();
+    assert!(error.contains("not an ELF"), "{error}");
+}
