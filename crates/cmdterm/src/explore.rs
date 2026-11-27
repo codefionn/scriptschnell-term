@@ -2429,6 +2429,7 @@ mod tests {
             let status = std::process::Command::new("git")
                 .args(["-c", "user.name=t", "-c", "user.email=t@t"])
                 .args(["-c", "init.defaultBranch=main"])
+                .args(["-c", "commit.gpgSign=false"])
                 .args(args)
                 .current_dir(repo)
                 .status()

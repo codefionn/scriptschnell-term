@@ -28,6 +28,12 @@ fn git(dir: &Path, args: &[&str]) {
             "user.email=t@t",
             "-c",
             "init.defaultBranch=main",
+            // The user's own configuration may sign every commit, which
+            // asks for a PIN or a security key.
+            "-c",
+            "commit.gpgSign=false",
+            "-c",
+            "tag.gpgSign=false",
         ])
         .args(args)
         .current_dir(dir)

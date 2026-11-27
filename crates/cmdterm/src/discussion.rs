@@ -1346,6 +1346,8 @@ deleted file mode 100644
                 "user.email=t@t",
                 "-c",
                 "init.defaultBranch=main",
+                "-c",
+                "commit.gpgSign=false",
             ])
             .args(args)
             .current_dir(dir)
