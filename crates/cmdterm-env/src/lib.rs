@@ -73,9 +73,9 @@ pub use ports::{ListeningPort, PortHub};
 #[cfg(unix)]
 pub use proxy::proxy_bridge_main;
 pub use proxy::{
-    AGENT_SETTINGS_GUARD, Approval, Approvals, Blocking, Blocklist, GuardKind, GuardMode,
-    GuardRule, KEYRING_GUARD, LinkOpener, OPEN_HOST, OPEN_URL_GUARD, ProxyRules, SandboxProxy,
-    SecretRule, builtin_guards, fake_secret, host_allowed, named_fake_secret,
+    AGENT_SETTINGS_GUARD, Approval, Approvals, Blocking, Blocklist, GIT_SIGN_GUARD, GuardKind,
+    GuardMode, GuardRule, KEYRING_GUARD, LinkOpener, OPEN_HOST, OPEN_URL_GUARD, ProxyRules,
+    SandboxProxy, SecretRule, builtin_guards, fake_secret, host_allowed, named_fake_secret,
     set_built_in_proxy_bridge, set_proxy_bridge, valid_host_pattern, valid_request_pattern,
 };
 pub use proxy::{NetworkProxy, PROXY_USER, ProxyToken, Refusal, RefusalLog};

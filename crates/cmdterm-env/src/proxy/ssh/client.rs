@@ -126,7 +126,9 @@ fn finish(
 
 /// Where the sandbox reaches the proxy, from its proxy variables:
 /// host, port and the `Proxy-Authorization` value.
-fn proxy_from_env(get: impl Fn(&str) -> Option<String>) -> Option<(String, u16, Option<String>)> {
+pub(in crate::proxy) fn proxy_from_env(
+    get: impl Fn(&str) -> Option<String>,
+) -> Option<(String, u16, Option<String>)> {
     let keys = [
         "ALL_PROXY",
         "all_proxy",

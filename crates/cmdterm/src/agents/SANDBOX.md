@@ -91,7 +91,13 @@ It prints JSON:
   `GIT_SSH_COMMAND` and `GIT_SSH_VARIANT` as they are. `ssh` itself, SSH shells,
   `hg` over SSH, raw TCP and UDP fail. "Host key verification failed" means the host is
   not in the user's known hosts yet; ask the user to connect to it once outside the
-  sandbox. Terminals of one worktree reach each other's
+  sandbox. Commit and tag signing goes to the host the same way: `gpg.program` and
+  `gpg.ssh.program` (set through `GIT_CONFIG_COUNT`) run the bridge, which has the
+  user's `gpg` or `ssh-keygen` sign outside with their keys, agent or security key,
+  after the user allows it (guard `cmdterm.git-sign`). Leave those variables as they
+  are, and do not pass `--no-gpg-sign` or `-c commit.gpgsign=false` to get around a
+  refusal. A blocked signature means the user said no or did not answer within two
+  minutes; a PIN or touch prompt appears on the user's screen, not in your terminal. Terminals of one worktree reach each other's
   servers on `localhost` as usual. The host does not, until a port is exposed:
   `sh ~/.local/share/cmdterm/control ports` lists your listening ports,
   `control expose PORT [HOST_PORT]` opens one on the host's `127.0.0.1` and

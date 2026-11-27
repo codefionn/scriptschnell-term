@@ -174,6 +174,7 @@ impl Workspace {
             let host = if [
                 cmdterm_env::KEYRING_GUARD,
                 cmdterm_env::AGENT_SETTINGS_GUARD,
+                cmdterm_env::GIT_SIGN_GUARD,
             ]
             .contains(&guard.as_str())
             {
@@ -505,6 +506,7 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
     let id = question.id;
     let keyring = question.guard == cmdterm_env::KEYRING_GUARD;
     let agent_settings = question.guard == cmdterm_env::AGENT_SETTINGS_GUARD;
+    let signing = question.guard == cmdterm_env::GIT_SIGN_GUARD;
     let (request, note_text) = if agent_settings {
         let file = truncate(&question.host, LONG);
         (
@@ -516,6 +518,12 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
         (
             (tr.keyring_request)(&question.method, &label),
             tr.keyring_note,
+        )
+    } else if signing {
+        let key = truncate(&question.host, LONG);
+        (
+            (tr.git_sign_request)(&question.target, &key),
+            tr.git_sign_note,
         )
     } else if question.guard == cmdterm_env::OPEN_URL_GUARD {
         let link = truncate(&question.target, LONG);
@@ -555,6 +563,9 @@ pub fn approval(ws: &Workspace, viewport: Size) -> Box<dyn View> {
                 keys = keys.child(note(scheme, (tr.agent_settings_more)(more)));
             }
             body = body.child(keys);
+        }
+        Some(detail) if signing => {
+            body = body.child(line((tr.git_sign_about)(&truncate(detail, LONG))));
         }
         Some(detail) => body = body.child(line((tr.approval_sends)(&truncate(detail, LONG)))),
         None => {}

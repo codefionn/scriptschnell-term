@@ -31,6 +31,7 @@ use super::rules::ProxyRules;
 use super::{ProxyToken, SandboxProxy, host_allowed};
 
 mod http;
+mod sign;
 mod ssh;
 mod tls;
 
@@ -56,6 +57,9 @@ struct Shared {
     refused: RefusalLog,
     /// The `ssh` that git's SSH requests run (see `server/ssh.rs`).
     ssh: RwLock<OsString>,
+    /// The programs and files that signing uses (see `server/sign.rs`),
+    /// read from git's configuration for each request until set.
+    signers: RwLock<Option<sign::Signers>>,
     stop: AtomicBool,
 }
 
@@ -222,6 +226,7 @@ impl NetworkProxy {
             opener: RwLock::new(None),
             refused: RefusalLog::default(),
             ssh: RwLock::new("ssh".into()),
+            signers: RwLock::new(None),
             stop: AtomicBool::new(false),
         });
         let (port, token) = listen(&shared, socket, None)?;
@@ -328,6 +333,15 @@ impl NetworkProxy {
     pub fn set_ssh_program(&self, program: impl Into<OsString>) {
         if let Ok(mut current) = self.shared.ssh.write() {
             *current = program.into();
+        }
+    }
+
+    /// Sets the programs and files signing uses, in place of the ones
+    /// git's configuration names.
+    #[cfg(test)]
+    pub(crate) fn set_signers(&self, signers: sign::Signers) {
+        if let Ok(mut current) = self.shared.signers.write() {
+            *current = Some(signers);
         }
     }
 
@@ -713,6 +727,13 @@ fn serve<S: Duplex>(
         }
         return ssh::serve(shared, client, text, rest, scope);
     }
+    if method.eq_ignore_ascii_case(super::sign::METHOD) {
+        if plain {
+            let body = "cmdterm sandbox: signing goes through the sandbox's proxy only\n";
+            return respond(&mut client, "403 Forbidden", body);
+        }
+        return sign::serve(shared, client, text, rest, scope);
+    }
     let connect_method = method.eq_ignore_ascii_case("CONNECT");
     let authority = if connect_method {
         target
@@ -924,9 +945,17 @@ fn percent_decode(text: &str) -> String {
 /// exits with its status; with nothing to forward it becomes the program.
 ///
 /// With `--git-ssh` first it stands in for `ssh` instead, which git in a
-/// sandbox runs (see `proxy/ssh.rs`).
+/// sandbox runs (see `proxy/ssh.rs`). With git's arguments for `gpg` or
+/// `ssh-keygen` it signs or verifies through the proxy instead (see
+/// `proxy/sign.rs`).
 pub fn proxy_bridge_main(args: impl IntoIterator<Item = OsString>) -> i32 {
     let mut args = args.into_iter().peekable();
+    if args
+        .peek()
+        .is_some_and(|first| super::sign::client::is_git_signer(first))
+    {
+        return super::sign::client::git_sign_main(args);
+    }
     if args
         .next_if(|first| first == super::ssh::GIT_SSH_FLAG)
         .is_some()

@@ -521,6 +521,29 @@ every project, a project can choose for itself on its Project page (`runtime` in
   sandbox, and so do Windows sandboxes, sandboxes with `host_network` and sandboxes on
   other machines, which keep their own SSH. A repository's `core.sshCommand` gives way
   to `GIT_SSH_COMMAND`.
+  Commit and tag signing goes through the proxy too. Sandboxes with the proxy on Linux
+  and macOS, `host_network` ones included, get `gpg.program` and `gpg.ssh.program` set
+  to `scriptschnell-term-proxy-bridge` through `GIT_CONFIG_COUNT`. So `git commit -S`,
+  `git tag -s`, `commit.gpgSign` and `git log --show-signature` reach this machine's
+  `gpg` or `ssh-keygen`, with your keyring, your GPG and SSH agents and your security
+  key, and the keys stay out of the sandbox. The proxy runs the programs your global git
+  configuration names in `gpg.openpgp.program` (or `gpg.program`) and `gpg.ssh.program`,
+  else `gpg` and `ssh-keygen`, and builds their command lines itself. Signing asks under
+  `cmdterm.git-sign` (see below); verifying never asks. A PIN, a passphrase or a touch is
+  asked for on this machine, where there is no terminal: gpg-agent needs a graphical
+  pinentry (pinentry-gnome3, pinentry-qt or pinentry-mac, not pinentry-curses or
+  pinentry-tty), and `ssh-keygen` needs `SSH_ASKPASS` for a key's passphrase or a
+  security key's PIN. A touch needs nothing. For SSH signing, a `user.signingKey` path
+  is read on this machine, and a literal `key::` key goes along with the request, which
+  needs your SSH agent to hold it. Verifying SSH signatures reads
+  `gpg.ssh.allowedSignersFile` and `gpg.ssh.revocationFile`: a file the sandbox can
+  read goes along, and a hidden one, such as `~/.ssh/allowed_signers`, is read on this
+  machine only when your global git configuration names that file. `gpg --verify` runs
+  with `--no-auto-key-retrieve`, so a signature never makes it fetch keys. X.509
+  signing (`gpg.format=x509`), `gpg.ssh.defaultKeyCommand` and `gpg` or `ssh-keygen`
+  run by hand stay inside the sandbox, and so does signing in a command that sets its own
+  `GIT_CONFIG_COUNT`. Windows sandboxes and builds without a separate
+  `scriptschnell-term-proxy-bridge` program sign inside the sandbox.
 - `sandbox.intercept_tls`: the proxy also decrypts HTTPS, with a CA that sandboxes trust.
   On by default. Sandboxes trust the CA through `SSL_CERT_FILE`, `CURL_CA_BUNDLE`,
   `REQUESTS_CA_BUNDLE`, `NODE_EXTRA_CA_CERTS`, `GIT_SSL_CAINFO`, `CARGO_HTTP_CAINFO`,
@@ -644,6 +667,12 @@ every project, a project can choose for itself on its Project page (`runtime` in
   server on it for 10 minutes. So the browser's redirect back to a login's own server
   reaches it. Then `xdg-open` (`open` on macOS) opens the link. Programs that ignore
   `$BROWSER` and `xdg-open`, such as most on macOS, still print the link instead.
+  `cmdterm.git-sign` covers the commits, tags and signed pushes that git in a sandbox
+  signs with your GPG or SSH key through the proxy (see git over SSH above). `ask` shows
+  the key and the commit's subject or the tag's name. The answer holds for that key and
+  kind of object for one minute, so a rebase that signs many commits asks once, and
+  "Always allow in this project" holds for the key. A literal SSH key shows as its type,
+  the end of the key and its comment.
 
 - `sandbox.change_requests`: `{ "create": "ask", "comment": "ask", "merge": "ask" }`, the
   mode of every forge's guards on pull and merge requests: opening one, commenting on or

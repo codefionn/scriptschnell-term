@@ -89,6 +89,11 @@ cannot reach your local proxy and runs without network when restricted.
 - **Git over SSH**: local Linux and macOS sandboxes with the proxy can run `git fetch`,
   `git pull` and `git push` over SSH to allowed hosts via `GIT_SSH_COMMAND`, using your
   host SSH config and agent without exposing your SSH keys to the sandbox.
+- **Commit signing**: the same sandboxes, and Linux ones with `host_network`, sign
+  commits and tags with your GPG or SSH key, a security key included. git runs
+  `scriptschnell-term-proxy-bridge` as `gpg` and `ssh-keygen`, and the proxy runs your
+  own on the host after asking under the `cmdterm.git-sign` guard. PIN and touch prompts
+  show on the host, so gpg-agent needs a graphical pinentry.
 - **DNS blocklists**: the shipped `blocklist` extension blocks ad, tracker and malware
   hosts from HaGeZi's DNS blocklist in the sandbox proxy.
 

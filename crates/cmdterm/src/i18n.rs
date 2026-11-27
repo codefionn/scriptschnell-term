@@ -291,6 +291,14 @@ pub struct Strings {
     pub open_url_note: &'static str,
     /// Where the open-url guard applies, in its settings row.
     pub open_url_scope: &'static str,
+    /// What a sandbox wants to sign: the kind (`commit`, `tag`, `push` or
+    /// `data`) and the key.
+    pub git_sign_request: fn(&str, &str) -> String,
+    /// The commit's subject, the tag's name or the pushed repository.
+    pub git_sign_about: fn(&str) -> String,
+    pub git_sign_note: &'static str,
+    /// Where the signing guard applies, in its settings row.
+    pub git_sign_scope: &'static str,
     pub approval_allow: &'static str,
     pub approval_block: &'static str,
     pub control_dialog: &'static str,
@@ -1774,6 +1782,15 @@ pub static EN: Strings = Strings {
     open_url_request: |link| format!("Open {link}"),
     open_url_note: "The link opens in your browser on this machine, where you are logged in. Allow it when you started what opens it, such as a login. A port on localhost that the link names reaches the sandbox's server on that port for 10 minutes.",
     open_url_scope: "links programs in sandboxes open",
+    git_sign_request: |kind, key| match kind {
+        "commit" => format!("sign a commit with {key}"),
+        "tag" => format!("sign a tag with {key}"),
+        "push" => format!("sign a push with {key}"),
+        _ => format!("sign data with {key}"),
+    },
+    git_sign_about: |about| format!("\"{about}\""),
+    git_sign_note: "gpg or ssh-keygen signs on this machine, with your agent and keys. A security key may ask for its PIN or a touch. Your choice applies to this key for one minute.",
+    git_sign_scope: "commits and tags signed in sandboxes",
     approval_allow: "Allow",
     approval_block: "Block",
     control_dialog: "Extension change",
@@ -3082,6 +3099,15 @@ pub static DE: Strings = Strings {
     open_url_request: |link| format!("Öffnen: {link}"),
     open_url_note: "Der Link öffnet sich in deinem Browser auf diesem Rechner, wo du angemeldet bist. Erlaube ihn, wenn du selbst gestartet hast, was ihn öffnet, etwa eine Anmeldung. Ein Port auf localhost, den der Link nennt, erreicht 10 Minuten lang den Server der Sandbox auf diesem Port.",
     open_url_scope: "Links, die Programme in Sandboxes öffnen",
+    git_sign_request: |kind, key| match kind {
+        "commit" => format!("einen Commit mit {key} signieren"),
+        "tag" => format!("einen Tag mit {key} signieren"),
+        "push" => format!("einen Push mit {key} signieren"),
+        _ => format!("Daten mit {key} signieren"),
+    },
+    git_sign_about: |about| format!("\"{about}\""),
+    git_sign_note: "gpg oder ssh-keygen signiert auf diesem Rechner, mit deinem Agenten und deinen Schlüsseln. Ein Sicherheitsschlüssel fragt eventuell nach seiner PIN oder einer Berührung. Deine Wahl gilt eine Minute lang für diesen Schlüssel.",
+    git_sign_scope: "Commits und Tags, die in Sandboxes signiert werden",
     approval_allow: "Erlauben",
     approval_block: "Blockieren",
     control_dialog: "Erweiterung ändern",

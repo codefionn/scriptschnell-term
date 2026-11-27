@@ -612,6 +612,7 @@ mod tests {
             opener: RwLock::new(None),
             refused: crate::proxy::RefusalLog::default(),
             ssh: RwLock::new("ssh".into()),
+            signers: RwLock::new(None),
             stop: AtomicBool::new(false),
         })
     }

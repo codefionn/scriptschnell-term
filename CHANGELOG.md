@@ -39,6 +39,12 @@ All notable changes to scriptschnell-term are in this file. The format is
   with older entries in `scriptschnell-term.log.1` once the file passes 1 MiB. Panics,
   extension failures, failed VCS operations, failed agent updates and failed settings
   actions all land there. `--settings logs` opens the page for a screenshot.
+- git in local Linux and macOS sandboxes with the proxy signs commits, tags and pushes
+  with your GPG or SSH key, a security key included, and checks signatures. It runs
+  `scriptschnell-term-proxy-bridge` as `gpg` and `ssh-keygen`, and the proxy runs your
+  own `gpg` or `ssh-keygen` on this machine, so the keys and agents stay out of the
+  sandbox and PIN and touch prompts show on this machine. Signing asks under the new
+  `cmdterm.git-sign` guard, once per key within a minute; verifying never asks.
 
 ### Changed
 

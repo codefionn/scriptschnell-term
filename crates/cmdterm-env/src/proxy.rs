@@ -71,6 +71,7 @@ mod approval;
 mod blocklist;
 mod rules;
 mod server;
+mod sign;
 mod ssh;
 
 pub(crate) use ssh::GIT_SSH_FLAG;
@@ -87,6 +88,7 @@ pub(crate) use server::{
     Duplex, authorized, connect, read_head, respond, splice, split_authority, unauthorized,
 };
 pub use server::{LinkOpener, NetworkProxy, Refusal, RefusalLog};
+pub use sign::GIT_SIGN_GUARD;
 
 /// The host name programs in a sandbox ask the proxy to open a link at, as
 /// `GET http://open.scriptschnell-term.invalid/open?url=LINK` over plain

@@ -315,7 +315,7 @@ pub const OPEN_URL_GUARD: &str = "cmdterm.open-url";
 /// The guards the proxy always has, for the public registries and for
 /// pushes over HTTPS to any host: `git push`, `hg push`, npm, Cargo,
 /// NuGet, PyPI, RubyGems and container registries, the [`OPEN_URL_GUARD`],
-/// and on Linux the [`KEYRING_GUARD`] and the [`AGENT_SETTINGS_GUARD`].
+/// the [`GIT_SIGN_GUARD`](crate::GIT_SIGN_GUARD), and on Linux the [`KEYRING_GUARD`] and the [`AGENT_SETTINGS_GUARD`].
 /// Their ids start with `cmdterm.`, and their mode is
 /// [`GuardMode::Ask`] until the user picks another. Extensions add guards
 /// for other hosts, such as a company registry.
@@ -387,6 +387,7 @@ pub fn builtin_guards() -> Vec<GuardRule> {
             &["POST */v2/*/blobs/uploads*", "PUT */v2/*/manifests/*"],
         ),
         guard("open-url", "open a link in your browser", &[], &[]),
+        guard("git-sign", "sign a commit or tag with your key", &[], &[]),
         guard(
             "keyring",
             "use a secret from this machine's keyring",

@@ -189,6 +189,23 @@ impl Approvals {
         self.ask_within(guard, scope, host, method, target, detail, body, TIMEOUT)
     }
 
+    /// [`Self::ask`] with `detail` shown in the question but left out of
+    /// what an answer covers: within [`REMEMBER`] it covers requests with
+    /// other details too, such as the commits of a rebase that git signs
+    /// one by one, each with its own subject.
+    pub fn ask_noting(
+        &self,
+        guard: &GuardRule,
+        scope: Option<&str>,
+        host: &str,
+        method: &str,
+        target: &str,
+        detail: Option<String>,
+    ) -> bool {
+        let about = subject(target, None, None);
+        self.ask_subject(guard, scope, host, method, target, detail, about, TIMEOUT)
+    }
+
     #[allow(clippy::too_many_arguments)]
     fn ask_within(
         &self,
@@ -199,6 +216,23 @@ impl Approvals {
         target: &str,
         detail: Option<String>,
         body: Option<&[u8]>,
+        timeout: Duration,
+    ) -> bool {
+        let about = subject(target, detail.as_deref(), body);
+        self.ask_subject(guard, scope, host, method, target, detail, about, timeout)
+    }
+
+    /// Asks about `about`, the subject of the request (see [`subject`]).
+    #[allow(clippy::too_many_arguments)]
+    fn ask_subject(
+        &self,
+        guard: &GuardRule,
+        scope: Option<&str>,
+        host: &str,
+        method: &str,
+        target: &str,
+        detail: Option<String>,
+        about: String,
         timeout: Duration,
     ) -> bool {
         let mut state = self.lock();
@@ -221,7 +255,6 @@ impl Approvals {
         state
             .answers
             .retain(|a| now.duration_since(a.at) < REMEMBER);
-        let about = subject(target, detail.as_deref(), body);
         if let Some(answer) = (state.answers.iter()).find(|a| {
             a.reuse
                 && a.guard == guard.id

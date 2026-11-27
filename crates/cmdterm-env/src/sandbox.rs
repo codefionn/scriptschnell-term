@@ -654,6 +654,9 @@ impl SandboxPolicy {
             // `-G`, which the bridge does not take.
             vars.push(("GIT_SSH_VARIANT".into(), "ssh".into()));
         }
+        if let Some(bridge) = self.git_sign_bridge() {
+            vars.extend(git_sign_vars(bridge));
+        }
         if self.kind == SandboxKind::Windows && ca.is_some() {
             for (key, value) in [
                 ("GIT_CONFIG_COUNT", "1"),
@@ -681,6 +684,23 @@ impl SandboxPolicy {
             return None;
         }
         git_ssh_command(known_proxy_bridge()?)
+    }
+
+    /// The bridge that git runs as `gpg` and `ssh-keygen`, so commits and
+    /// tags are signed and checked through the proxy (see `proxy/sign.rs`).
+    /// git starts it without arguments of its own, so only a bridge that is
+    /// a program of its own does. Bubblewrap binds it at its own path, also
+    /// in sandboxes with the host's network (see
+    /// `SandboxTarget::lower_bwrap`), and Seatbelt reads it in place. The
+    /// Windows launcher has no bridge.
+    fn git_sign_bridge(&self) -> Option<&'static str> {
+        if self.kind == SandboxKind::Windows {
+            return None;
+        }
+        match known_proxy_bridge()? {
+            [program] => program.to_str(),
+            _ => None,
+        }
     }
 
     /// Stand-ins for the host's shell startup files that set proxy
@@ -1215,6 +1235,23 @@ fn git_ssh_command(bridge: &[OsString]) -> Option<String> {
     Some(shell_words::join(words))
 }
 
+/// The variables that make git run `bridge` as `gpg` and `ssh-keygen`.
+/// They take the place of a `GIT_CONFIG_COUNT` the sandbox inherits, and
+/// a command's own replaces them. git reads them after every configuration
+/// file, so they win over a repository's `gpg.program`.
+fn git_sign_vars(bridge: &str) -> Vec<(String, String)> {
+    [
+        ("GIT_CONFIG_COUNT", "2"),
+        ("GIT_CONFIG_KEY_0", "gpg.program"),
+        ("GIT_CONFIG_VALUE_0", bridge),
+        ("GIT_CONFIG_KEY_1", "gpg.ssh.program"),
+        ("GIT_CONFIG_VALUE_1", bridge),
+    ]
+    .into_iter()
+    .map(|(key, value)| (key.to_owned(), value.to_owned()))
+    .collect()
+}
+
 /// Another environment's commands, inside a sandbox.
 #[derive(Clone, Debug, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub struct SandboxTarget {
@@ -1299,6 +1336,17 @@ impl SandboxTarget {
             wrapper = scope;
         }
         bind_wrapper(&mut args, &wrapper);
+        // git runs the bridge as gpg and ssh-keygen, also where it starts
+        // no command.
+        if let Some(bridge) = self
+            .policy
+            .proxy
+            .as_ref()
+            .and(self.policy.git_sign_bridge())
+            && wrapper.first().is_none_or(|program| program != bridge)
+        {
+            bind_wrapper(&mut args, &[bridge.into()]);
+        }
         args.push("--".into());
         args.extend(wrapper);
         args.push(command.program.clone());
@@ -2405,6 +2453,25 @@ mod tests {
             git_ssh_command(&["/b/scriptschnell-term-proxy-bridge".into()]).as_deref(),
             Some("/b/scriptschnell-term-proxy-bridge --git-ssh")
         );
+    }
+
+    #[test]
+    fn git_signs_through_the_bridge() {
+        let vars = git_sign_vars("/b/scriptschnell-term-proxy-bridge");
+        let var = |key: &str| {
+            (vars.iter())
+                .find(|(k, _)| k == key)
+                .map(|(_, v)| v.as_str())
+        };
+        assert_eq!(var("GIT_CONFIG_COUNT"), Some("2"));
+        assert_eq!(var("GIT_CONFIG_KEY_0"), Some("gpg.program"));
+        assert_eq!(var("GIT_CONFIG_KEY_1"), Some("gpg.ssh.program"));
+        for value in ["GIT_CONFIG_VALUE_0", "GIT_CONFIG_VALUE_1"] {
+            assert_eq!(var(value), Some("/b/scriptschnell-term-proxy-bridge"));
+        }
+        let mut policy = SandboxPolicy::local(vec![], &[], true);
+        policy.kind = SandboxKind::Windows;
+        assert_eq!(policy.git_sign_bridge(), None);
     }
 
     #[test]
