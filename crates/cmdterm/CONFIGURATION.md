@@ -1102,19 +1102,21 @@ the app resumes that session: a shell gets the agent's resume command typed once
 reads commands, after a prompt it marks (OSC 133, as fish does) or once its output paused
 (`claude --resume ID`, `codex resume ID`, `copilot --resume ID`,
 `qwen --resume ID`, `gemini --resume ID`, `kimi --session ID`, `pi --session ID`,
-`cursor-agent --resume ID`), and a terminal that runs the agent itself, such as one an
-agent launched with a prompt, starts it with those arguments in place of the ones it
-first started with, so the prompt does not run again. Without an id the agent starts a new session.
+`cursor-agent --resume ID`, `vibe --resume ID`), and a terminal that runs the agent
+itself, such as one an agent launched with a prompt, starts it with those arguments in
+place of the ones it first started with, so the prompt does not run again. Without an id
+the agent starts a new session.
 Before it resumes, the app checks where the agent runs that the session still exists:
 Claude Code's in `$CLAUDE_CONFIG_DIR/projects` (default `~/.claude/projects`), Codex's in
 `$CODEX_HOME/sessions` (default `~/.codex/sessions`), Copilot's in
-`~/.copilot/session-state`, Gemini's in `~/.gemini/tmp` and Qwen Code's in `~/.qwen`.
+`~/.copilot/session-state`, Gemini's in `~/.gemini/tmp`, Qwen Code's in `~/.qwen` and
+Mistral Vibe's in `$VIBE_HOME/logs/session/unified` (default `~/.vibe/logs/session/unified`).
 When that directory exists but has no trace of the session, the agent starts a new
 session instead and gets no prompt to continue. Extension agents name their directory
 with `sessions` in `term.agent`. When the directory is missing, and for the other
 agents, the app resumes without checking. A terminal that
 attaches to a session on a remote machine or a local VM finds its agent still running
-and gets nothing typed. opencode, Mistral Vibe and Antigravity CLI report no session yet.
+and gets nothing typed. opencode and Antigravity CLI report no session yet.
 The entry also notes `"working": true` while the agent is in the middle of a turn: busy,
 or asking for a permission or an answer. When the app stopped then, the resumed agent
 gets a prompt telling it to continue, typed once its hooks report the resumed session

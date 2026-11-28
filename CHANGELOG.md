@@ -8,6 +8,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Added
 
+- Mistral Vibe sessions in a panel resume after the app restarts: the Vibe
+  integration now installs `session_start`/`session_end` hooks in
+  `~/.vibe/hooks.toml` that name the session in `cmdterm_session`, and a saved
+  panel starts `vibe --resume ID` again, after checking the session still exists
+  in `$VIBE_HOME/logs/session/unified` (default `~/.vibe/logs/session/unified`).
 - Reverse port exposure for Linux bubblewrap sandboxes: `control expose-host
   HOST_PORT [PORT]` (control socket `POST /v1/host-ports/PORT/expose`,
   `GET /v1/host-ports`, `POST /v1/host-ports/PORT/unexpose`) forwards one of the

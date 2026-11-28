@@ -1119,6 +1119,9 @@ enum Integration {
     /// `[[hooks]]` tables between [`HOOKS_BEGIN`] and [`HOOKS_END`] in a
     /// TOML file.
     TomlHooks(&'static [Hook]),
+    /// The same in Mistral Vibe's `hooks.toml`, where the event is the
+    /// `type` field and every table needs a `name`.
+    VibeHooks(&'static [Hook]),
     /// Nothing beyond the skills and the MCP server: the agent reports its
     /// state on its own.
     Native,
@@ -1262,7 +1265,10 @@ impl Agent {
             Agent::OpenCode => &[State, Prompt],
             Agent::Pi => &[State, Session, Resume, Prompt, Paste],
             Agent::Kimi => &[State, Session, Resume, Messages, Paste],
-            Agent::Vibe | Agent::Antigravity => &[Prompt],
+            // Vibe reports its state itself (OSC 7501); its session hooks
+            // name the session, so a saved one resumes after a restart.
+            Agent::Vibe => &[Session, Resume, Prompt],
+            Agent::Antigravity => &[Prompt],
             Agent::Custom(agent) => return agent.supports & capability.bit() != 0,
         };
         set.contains(&capability)
@@ -1776,7 +1782,8 @@ impl Agent {
             // Gemini CLI reads hook timeouts in milliseconds.
             Agent::Gemini => Integration::Hooks(GEMINI_HOOKS, 1000),
             Agent::Kimi => Integration::TomlHooks(KIMI_HOOKS),
-            Agent::Vibe | Agent::Antigravity => Integration::Native,
+            Agent::Vibe => Integration::VibeHooks(VIBE_HOOKS),
+            Agent::Antigravity => Integration::Native,
             Agent::Custom(agent) => match agent.integration {
                 CustomIntegration::Native => Integration::Native,
                 CustomIntegration::Hooks(hooks, unit) => Integration::Hooks(hooks, unit),
@@ -1810,6 +1817,45 @@ fn kimi_block(spec: &[Hook]) -> String {
         block.push_str(&format!("[[hooks]]\nevent = {}\n", json!(event)));
         if let Some(matcher) = matcher {
             block.push_str(&format!("matcher = {}\n", json!(matcher)));
+        }
+        block.push_str(&format!(
+            "command = {}\ntimeout = 5\n",
+            json!(hook_command(args))
+        ));
+    }
+    block.push_str(HOOKS_END);
+    block.push('\n');
+    block
+}
+
+/// Vibe's `hooks.toml`, relative to `$HOME`.
+const VIBE_HOOKS_FILE: &str = ".vibe/hooks.toml";
+
+/// Vibe's hook tables, between their marker lines. The session start names
+/// the session in `cmdterm_session`, from the `session_id` in the hook's
+/// payload on stdin; the end clears it again, so a panel the app restarts
+/// resumes the session the agent last ran.
+const VIBE_HOOKS: &[Hook] = &[
+    (
+        "session_start",
+        None,
+        r#"session vibe "$(sed -nE 's/.*"session_id" *: *"([^"]*)".*/\1/p' | head -n 1)""#,
+    ),
+    ("session_end", None, "end"),
+];
+
+/// Vibe's hook tables, between their marker lines: the event is the `type`
+/// field there and every table needs a `name`.
+fn vibe_block(spec: &[Hook]) -> String {
+    let mut block = format!("{HOOKS_BEGIN}\n");
+    for (event, matcher, args) in spec {
+        block.push_str(&format!(
+            "[[hooks]]\nname = {}\ntype = {}\n",
+            json!(format!("scriptschnell-term-{event}")),
+            json!(event)
+        ));
+        if let Some(matcher) = matcher {
+            block.push_str(&format!("match = {}\n", json!(matcher)));
         }
         block.push_str(&format!(
             "command = {}\ntimeout = 5\n",
@@ -2331,6 +2377,16 @@ fn check(home: &Home, agent: Agent) -> Result<Status, String> {
                 Status::Off
             }
         }
+        Integration::VibeHooks(spec) => {
+            let text = home.read(VIBE_HOOKS_FILE)?.unwrap_or_default();
+            if has_block(&text, &vibe_block(spec), HOOKS_END) {
+                Status::On
+            } else if text.lines().any(|line| line.trim_end() == HOOKS_BEGIN) {
+                Status::Outdated
+            } else {
+                Status::Off
+            }
+        }
         // An extension agent: its skills and its server, where it has them.
         Integration::Native if matches!(agent, Agent::Custom(_)) => {
             let mut found = 0;
@@ -2426,6 +2482,11 @@ fn install_with(home: &Home, agent: Agent, references: bool) -> Result<(), Strin
             let text = home.read(agent.target())?.unwrap_or_default();
             let text = put_block(&text, &kimi_block(spec), HOOKS_BEGIN, HOOKS_END);
             home.write(agent.target(), &text, false)
+        }
+        Integration::VibeHooks(spec) => {
+            let text = home.read(VIBE_HOOKS_FILE)?.unwrap_or_default();
+            let text = put_block(&text, &vibe_block(spec), HOOKS_BEGIN, HOOKS_END);
+            home.write(VIBE_HOOKS_FILE, &text, false)
         }
         Integration::Native => Ok(()),
     }
@@ -2542,6 +2603,15 @@ fn uninstall(home: &Home, agent: Agent) -> Result<(), String> {
             };
             match take_block(&text, &kimi_block(spec), HOOKS_BEGIN, HOOKS_END) {
                 Some(stripped) => home.write(agent.target(), &stripped, false),
+                None => Ok(()),
+            }
+        }
+        Integration::VibeHooks(spec) => {
+            let Some(text) = home.read(VIBE_HOOKS_FILE)? else {
+                return Ok(());
+            };
+            match take_block(&text, &vibe_block(spec), HOOKS_BEGIN, HOOKS_END) {
+                Some(stripped) => home.write(VIBE_HOOKS_FILE, &stripped, false),
                 None => Ok(()),
             }
         }
@@ -2664,6 +2734,7 @@ const RESUME: &[(&str, &[&str])] = &[
     ("gemini", &["gemini", "--resume"]),
     ("kimi", &["kimi", "--session"]),
     ("pi", &["pi", "--session"]),
+    ("vibe", &["vibe", "--resume"]),
     // A stand-in, so tests never start a real agent.
     #[cfg(test)]
     ("test-agent", &["cmdterm-test-agent", "--resume"]),
@@ -2755,6 +2826,12 @@ const SESSION_STORES: &[(&str, &str, bool)] = &[
     ("copilot", "$HOME/.copilot/session-state", true),
     ("gemini", "$HOME/.gemini/tmp", false),
     ("qwen", "$HOME/.qwen", false),
+    // Unified sessions sit in a directory named by the session id.
+    (
+        "vibe",
+        "${VIBE_HOME:-$HOME/.vibe}/logs/session/unified",
+        true,
+    ),
     #[cfg(test)]
     (
         "test-agent",
@@ -3712,6 +3789,31 @@ mod tests {
     }
 
     #[test]
+    fn vibe_hooks_sit_in_a_block_of_its_hooks_file() {
+        let (dir, home) = home();
+        let hooks = dir.path().join(VIBE_HOOKS_FILE);
+        std::fs::create_dir_all(hooks.parent().unwrap()).unwrap();
+        let original = "[[hooks]]\nname = \"mine\"\ntype = \"session_end\"\ncommand = \"true\"\n";
+        std::fs::write(&hooks, original).unwrap();
+        assert_eq!(check(&home, Agent::Vibe), Ok(Status::Off));
+        install(&home, Agent::Vibe).unwrap();
+        install(&home, Agent::Vibe).unwrap();
+        assert_eq!(check(&home, Agent::Vibe), Ok(Status::On));
+        let text = std::fs::read_to_string(&hooks).unwrap();
+        assert!(text.starts_with(original), "{text}");
+        assert_eq!(text.matches(HOOKS_BEGIN).count(), 1);
+        assert_eq!(text.matches("[[hooks]]").count(), VIBE_HOOKS.len() + 1);
+        assert!(text.contains("type = \"session_start\""));
+        assert!(text.contains("name = \"scriptschnell-term-session_start\""));
+        // An edited block is outdated.
+        std::fs::write(&hooks, text.replace("timeout = 5", "timeout = 9")).unwrap();
+        assert_eq!(check(&home, Agent::Vibe), Ok(Status::Outdated));
+        uninstall(&home, Agent::Vibe).unwrap();
+        assert_eq!(std::fs::read_to_string(&hooks).unwrap(), original);
+        assert_eq!(check(&home, Agent::Vibe), Ok(Status::Off));
+    }
+
+    #[test]
     fn antigravity_gets_the_skills_and_the_server_only() {
         let (dir, home) = home();
         assert_eq!(check(&home, Agent::Antigravity), Ok(Status::NotFound));
@@ -3802,7 +3904,7 @@ mod tests {
     }
 
     #[test]
-    fn vibe_gets_the_skills_and_the_server_only() {
+    fn vibe_gets_the_skills_the_server_and_the_session_hooks() {
         let (dir, home) = home();
         let config = dir.path().join(".vibe/config.toml");
         std::fs::create_dir_all(config.parent().unwrap()).unwrap();
@@ -3810,6 +3912,9 @@ mod tests {
         assert_eq!(check(&home, Agent::Vibe), Ok(Status::Off));
         install(&home, Agent::Vibe).unwrap();
         assert_eq!(check(&home, Agent::Vibe), Ok(Status::On));
+        let hooks = std::fs::read_to_string(dir.path().join(VIBE_HOOKS_FILE)).unwrap();
+        assert!(hooks.contains(HOOKS_BEGIN));
+        assert!(hooks.contains("type = \"session_start\""));
         let text = std::fs::read_to_string(&config).unwrap();
         assert!(
             text.starts_with("active_model = \"devstral\"\n\n"),
@@ -3827,6 +3932,12 @@ mod tests {
         assert_eq!(
             std::fs::read_to_string(&config).unwrap(),
             "active_model = \"devstral\"\n"
+        );
+        // The hooks block is gone; the file may stay, empty.
+        assert!(
+            std::fs::read_to_string(dir.path().join(VIBE_HOOKS_FILE))
+                .map(|text| text.is_empty())
+                .unwrap_or(true)
         );
     }
 
@@ -4614,6 +4725,11 @@ cat "$out/second" "$out/second.err"
         // Without an id the agent starts a new session.
         let kimi = parse_session("kimi").unwrap();
         assert_eq!(resume_command(&kimi).unwrap(), ["kimi"]);
+        let vibe = parse_session("vibe:5615f701-b3c2-9f9b-1bc7-ece5a439697f").unwrap();
+        assert_eq!(
+            resume_command(&vibe).unwrap(),
+            ["vibe", "--resume", "5615f701-b3c2-9f9b-1bc7-ece5a439697f"]
+        );
         // Nothing the app would type into a shell as more than an id.
         for value in [
             "",
