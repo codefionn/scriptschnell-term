@@ -227,6 +227,31 @@ impl crate::control::PortAccess for PortHubs {
         hub.unexpose(port);
         Ok(())
     }
+
+    fn host_ports(&self, project: u64, worktree: &Path) -> Option<Vec<(u16, u16)>> {
+        Some(self.get(project, worktree)?.reverse_ports())
+    }
+
+    fn expose_host(
+        &self,
+        project: u64,
+        worktree: &Path,
+        host_port: u16,
+        port: Option<u16>,
+    ) -> Result<u16, String> {
+        let hub = self
+            .get(project, worktree)
+            .ok_or("no port forwarding here")?;
+        hub.expose_host(host_port, port).map_err(|e| e.to_string())
+    }
+
+    fn unexpose_host(&self, project: u64, worktree: &Path, host_port: u16) -> Result<(), String> {
+        let hub = self
+            .get(project, worktree)
+            .ok_or("no port forwarding here")?;
+        hub.unexpose_host(host_port);
+        Ok(())
+    }
 }
 
 impl Runtimes {

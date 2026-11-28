@@ -419,7 +419,11 @@ every project, a project can choose for itself on its Project page (`runtime` in
   Other SSH, raw TCP and UDP do not get out. The app forwards a
   sandbox's listening ports to the other terminals of the same worktree, and to this
   machine when you expose one (palette entries "Expose port N" and "Stop exposing port
-  N", or `control expose`). Without `network`, the sandbox also has its own loopback and
+  N", or `control expose`). The other way round, `control expose-host HOST_PORT [PORT]`
+  forwards one of this machine's ports into the sandbox, so a process there reaches it
+  on the sandbox's own `localhost` (`control host-ports` lists them, `control
+  unexpose-host HOST_PORT` stops one). Without `network`, the sandbox also has its own
+  loopback and
   forwarding works. Sandboxes on another machine, Seatbelt on macOS and the Windows
   launcher ignore it and keep their network (see `windows_appcontainer` for Windows).
   Terminals already open keep the network they started with. With `host_network` the
@@ -1453,6 +1457,9 @@ $SCRIPTSCHNELL_TERM_TOKEN`. Paths under `/v1`:
 | `GET /ports` | The ports servers in this terminal's worktree listen on inside their sandboxes, as `{"ports": [{"port": 3000, "exposed_on": null}]}`. `exposed_on` is the host port, on 127.0.0.1, once exposed. 404 when the worktree's sandboxes share the host's network |
 | `POST /ports/PORT/expose` | Forward a host port on 127.0.0.1 to `PORT` while the server keeps running. Optional body `{"host_port": 8080}`; without it the same number, or a free one when that is taken. Returns `{"port": 3000, "exposed_on": 3000}`, 409 when nothing listens on `PORT` or the host port cannot be bound, 400 for a bad body |
 | `POST /ports/PORT/unexpose` | Stop exposing `PORT`. Open connections finish. Returns `{"port": 3000, "exposed_on": null}` |
+| `GET /host-ports` | The host ports forwarded into this terminal's worktree's sandboxes, as `{"host_ports": [{"host_port": 5432, "port": 5432}]}`, where `port` is the one inside the sandbox. 404 when the worktree's sandboxes share the host's network |
+| `POST /host-ports/PORT/expose` | Forward this machine's port `PORT` on 127.0.0.1 to the sandboxes, so a process in one reaches it on the sandbox's own `localhost`. Optional body `{"port": 80}` for a different port inside the sandbox; without it the same number. Returns `{"host_port": 5432, "port": 5432}`, 409 when either port is already taken, 400 for a bad body |
+| `POST /host-ports/PORT/unexpose` | Stop forwarding the host's `PORT` into the sandboxes. Open connections finish. Returns `{"host_port": 5432, "port": null}` |
 | `POST /settings` | Body `{"reason": "...", "set": {"sandbox.intercept_tls": true}, "add": {"sandbox.allowed_hosts": ["pypi.org"]}, "remove": {...}}`, keys as dotted paths into `settings.json`: ask the user and apply. Returns the changed keys' new values, 403 when denied, 400 for a locked key, a missing reason or a result that is no valid `settings.json` |
 | `GET /extensions` | Every extension with `loaded`, `turned_off`, `error`, `permissions`, `missing_permissions` and `shipped` |
 | `GET /extensions/NAME` | One extension: its status, files and what this terminal staged |

@@ -80,7 +80,10 @@ cannot reach your local proxy and runs without network when restricted.
 
 - **Exposing sandbox ports**: on Linux with an isolated loopback, listening ports are
   forwarded between terminals of the same worktree automatically. To reach a server from
-  your host browser, run **Expose port N** in the palette or `control expose N`.
+  your host browser, run **Expose port N** in the palette or `control expose N`. To reach
+  a server on the host's `127.0.0.1` from inside the sandbox, `control expose-host
+  HOST_PORT [PORT]` forwards it onto the sandbox's own `localhost` (`control host-ports`
+  lists the forwardings, `control unexpose-host HOST_PORT` stops one).
 - **HTTPS inspection** (`sandbox.intercept_tls`, on by default on Linux and macOS): the
   proxy decrypts HTTPS using two per-run in-memory CAs. Hosts with valid certificates get
   signed by the trusted CA (wired into `SSL_CERT_FILE`, curl, git, cargo, Python, Node

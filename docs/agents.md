@@ -79,6 +79,8 @@ The agent integrations install a helper CLI at `~/.local/share/cmdterm/control` 
   with one or more agents started in it (`control agents --worktree ...` launches into an
   existing worktree).
 - `control expose PORT`: exposes a port from a Linux sandbox to `127.0.0.1`.
+- `control expose-host HOST_PORT [PORT]`: the reverse, forwards a host port on
+  `127.0.0.1` into the Linux sandbox, reachable there on its own `localhost`.
 
 Every extension change, settings suggestion and worktree/agent launch pauses in an
 approval dialog showing the exact diff or command line before anything runs.

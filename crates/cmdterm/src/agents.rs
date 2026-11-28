@@ -300,6 +300,15 @@ Usage: control COMMAND [ARGS]
                         forward a host port (127.0.0.1) to PORT of this
                         worktree's sandbox
   unexpose PORT         stop that
+  host-ports            the host ports forwarded into this worktree's
+                        sandbox, with the port each is on inside it
+  expose-host HOST_PORT [PORT]
+                        forward the host's port (127.0.0.1) to PORT of
+                        this worktree's sandbox (HOST_PORT when PORT is
+                        not given), so a server there is reachable on the
+                        sandbox's own localhost
+  unexpose-host HOST_PORT
+                        stop that
   allow-host HOST REASON
                         suggest one more allowed host to the user
   suggest FILE          suggest a settings change: a JSON file with
@@ -466,6 +475,21 @@ case $command in
     need 1 $#
     case $1 in *[!0-9]*|'') echo "control: bad port $1" >&2; exit 2 ;; esac
     call POST /ports/"$1"/unexpose
+    ;;
+  host-ports) call GET /host-ports ;;
+  expose-host)
+    need 1 $#
+    case $1 in *[!0-9]*|'') echo "control: bad port $1" >&2; exit 2 ;; esac
+    case ${2:-} in
+      '') call POST /host-ports/"$1"/expose ;;
+      *[!0-9]*) echo "control: bad port $2" >&2; exit 2 ;;
+      *) post_json /host-ports/"$1"/expose "{\"port\": $2}" ;;
+    esac
+    ;;
+  unexpose-host)
+    need 1 $#
+    case $1 in *[!0-9]*|'') echo "control: bad port $1" >&2; exit 2 ;; esac
+    call POST /host-ports/"$1"/unexpose
     ;;
   allow-host)
     need 2 $#

@@ -102,7 +102,14 @@ It prints JSON:
   `sh ~/.local/share/cmdterm/control ports` lists your listening ports,
   `control expose PORT [HOST_PORT]` opens one on the host's `127.0.0.1` and
   `control unexpose PORT` closes it. The user can do the same from the command palette.
-  With `host_network` (which needs `restrict_network` off), none of this applies.
+  The other way round, a service on the host's `localhost` can be brought into the
+  sandbox: `control expose-host HOST_PORT [PORT]` forwards the host's `127.0.0.1`
+  port to `PORT` on the sandbox's own `localhost` (`HOST_PORT` when PORT is not
+  given), `control host-ports` lists them and `control unexpose-host HOST_PORT`
+  stops one. Use it when a tool in the sandbox needs a host service, such as a
+  database or an OAuth callback listener, on `localhost`. With `host_network`
+  (which needs `restrict_network` off), none of this applies, and neither does it
+  on macOS, Windows or a remote machine, where `localhost` is the host's already.
 - With `intercept_tls`, the proxy decrypts HTTPS with its own CA, which the sandbox
   trusts through `SSL_CERT_FILE`, `CURL_CA_BUNDLE`, `REQUESTS_CA_BUNDLE`,
   `NODE_EXTRA_CA_CERTS`, `PIP_CERT` and the other CA variables. On Linux the system's
@@ -225,7 +232,9 @@ a restricted network only pages on the allowed hosts. Your sessions reach your o
 sandbox, though. Open `http://localhost:PORT` to see a server you started inside it. The
 browser sends `localhost`, `127.0.0.1` and `[::1]` into your sandbox and other hosts
 through the sandbox's proxy, so its allowed hosts and blocklists apply. Exposing a port
-(`control expose PORT`) is only needed to open it from the user's own browser. When a tool refuses a page, say so instead of working around it.
+(`control expose PORT`) is only needed to open it from the user's own browser, and a
+host service it needs (`control expose-host HOST_PORT`) reaches the sandbox on its own
+`localhost`. When a tool refuses a page, say so instead of working around it.
 
 ## Other help
 

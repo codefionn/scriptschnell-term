@@ -19,16 +19,23 @@
 //!   sandbox that owns the port, so the sandboxes of a scope see each
 //!   other's servers as if they shared a loopback. A failed bind is ignored
 //!   and tried again on the next `MIRROR`.
+//! - hub to bridge: `MIRROR-HOST <port> <host-port>` and `UNMIRROR-HOST
+//!   <port>`. The bridge listens on 127.0.0.1:`port` inside its sandbox and
+//!   sends each connection to the host's 127.0.0.1:`host-port`, so a
+//!   sandboxed process reaches a service on the host's loopback as if it
+//!   ran there ([`PortHub::expose_host`]).
 //! - hub to bridge: `OPEN <conn-id> <port>`. The bridge opens a new
 //!   connection to the hub, sends `DATA <conn-id>`, dials the port inside
 //!   (127.0.0.1, then ::1) and splices. It closes the connection if the dial
 //!   fails.
 //!
 //! A connection that a mirror accepted becomes a new hub connection that
-//! starts with `DIAL <port>`. The hub picks the owner, sends it `OPEN` and
-//! splices the two data connections. After their first line, data
-//! connections carry raw bytes. When the control connection closes, the hub
-//! forgets the ports of the sandbox and unmirrors them elsewhere.
+//! starts with `DIAL <port>`, or with `HOSTDIAL <port>` for a `MIRROR-HOST`,
+//! which the hub connects to the host's port instead of a sandbox's. The hub
+//! picks the owner, sends it `OPEN` and splices the two data connections.
+//! After their first line, data connections carry raw bytes. When the
+//! control connection closes, the hub forgets the ports of the sandbox and
+//! unmirrors them elsewhere.
 //!
 //! A hub listens on a loopback TCP port only after [`PortHub::start_tcp`]
 //! and then speaks the same protocol there. Every TCP connection must start
@@ -210,6 +217,8 @@ struct Sandbox {
     ports: BTreeSet<u16>,
     /// Ports the hub told the bridge to mirror.
     mirrored: BTreeSet<u16>,
+    /// Ports the hub told the bridge to mirror to host ports.
+    host_mirrored: BTreeSet<u16>,
 }
 
 struct Exposure {
@@ -221,6 +230,9 @@ struct Exposure {
 struct State {
     sandboxes: Vec<Sandbox>,
     exposed: BTreeMap<u16, Exposure>,
+    /// Host ports exposed into the sandboxes, by the port inside them:
+    /// sandbox port to host port.
+    reverse: BTreeMap<u16, u16>,
     pending: HashMap<u64, Sender<Stream>>,
     next: u64,
     proxy: Option<(u16, ProxyToken)>,
@@ -268,6 +280,27 @@ impl Inner {
                 }
             }
             sandbox.mirrored = wanted;
+        }
+    }
+
+    /// Tells every bridge which host ports to mirror into its sandbox.
+    fn sync_reverse(state: &mut State) {
+        for sandbox in &mut state.sandboxes {
+            let wanted: BTreeSet<u16> = state.reverse.keys().copied().collect();
+            let add: Vec<u16> = wanted.difference(&sandbox.host_mirrored).copied().collect();
+            let remove: Vec<u16> = sandbox.host_mirrored.difference(&wanted).copied().collect();
+            for port in add {
+                let host = state.reverse[&port];
+                if !tell(&sandbox.control, &format!("MIRROR-HOST {port} {host}")) {
+                    break;
+                }
+            }
+            for port in remove {
+                if !tell(&sandbox.control, &format!("UNMIRROR-HOST {port}")) {
+                    break;
+                }
+            }
+            sandbox.host_mirrored = wanted;
         }
     }
 
@@ -488,6 +521,63 @@ impl PortHub {
         self.inner.bump();
     }
 
+    /// The host ports exposed into the sandboxes, as `(host_port, port)`
+    /// pairs sorted by host port, where `port` is the one inside them.
+    pub fn reverse_ports(&self) -> Vec<(u16, u16)> {
+        let state = self.inner.lock();
+        let mut pairs: Vec<(u16, u16)> = state
+            .reverse
+            .iter()
+            .map(|(&port, &host_port)| (host_port, port))
+            .collect();
+        pairs.sort_unstable();
+        pairs
+    }
+
+    /// Forwards the host's 127.0.0.1:`host_port` to `port` inside the
+    /// sandboxes, so a sandboxed process reaches it on its own loopback, and
+    /// returns `port`. It is `host_port` when `port` is `None`. The exposure
+    /// lasts until [`Self::unexpose_host`], also while nothing listens on
+    /// the host port.
+    pub fn expose_host(&self, host_port: u16, port: Option<u16>) -> io::Result<u16> {
+        let port = port.unwrap_or(host_port);
+        let mut state = self.inner.lock();
+        if let Some(&existing) = state.reverse.get(&port) {
+            if existing == host_port {
+                return Ok(port);
+            }
+            return Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                format!("port {port} is already exposed to host port {existing}"),
+            ));
+        }
+        if state.reverse.values().any(|&host| host == host_port) {
+            return Err(io::Error::new(
+                io::ErrorKind::AddrInUse,
+                format!("host port {host_port} is already exposed"),
+            ));
+        }
+        state.reverse.insert(port, host_port);
+        Inner::sync_reverse(&mut state);
+        drop(state);
+        self.inner.bump();
+        Ok(port)
+    }
+
+    /// Stops forwarding the host port of [`Self::expose_host`]. Open
+    /// connections finish.
+    pub fn unexpose_host(&self, host_port: u16) {
+        let mut state = self.inner.lock();
+        let before = state.reverse.len();
+        state.reverse.retain(|_, &mut host| host != host_port);
+        if state.reverse.len() == before {
+            return;
+        }
+        Inner::sync_reverse(&mut state);
+        drop(state);
+        self.inner.bump();
+    }
+
     /// A new stream to `port` inside a sandbox.
     pub fn connect(&self, port: u16) -> io::Result<Stream> {
         self.inner.open(port)
@@ -608,6 +698,17 @@ fn serve(inner: &Arc<Inner>, mut client: Stream) {
                 splice(client, owner, &[]);
             }
         }
+        (Some("HOSTDIAL"), Some(port)) => {
+            let target = port
+                .parse::<u16>()
+                .ok()
+                .and_then(|port| inner.lock().reverse.get(&port).copied());
+            if let Some(host_port) = target
+                && let Ok(host) = TcpStream::connect(("127.0.0.1", host_port))
+            {
+                splice(client, host, &[]);
+            }
+        }
         _ => {}
     }
 }
@@ -629,8 +730,10 @@ fn control(inner: &Arc<Inner>, client: Stream) {
             control: writer,
             ports: BTreeSet::new(),
             mirrored: BTreeSet::new(),
+            host_mirrored: BTreeSet::new(),
         });
         Inner::sync_mirrors(&mut state);
+        Inner::sync_reverse(&mut state);
         id
     };
     for line in BufReader::new(client).lines() {
@@ -923,10 +1026,20 @@ pub(crate) fn join(hub: Hub, own: Vec<u16>, listeners: Listeners, mirror: bool) 
                 match (words.next(), words.next(), words.next()) {
                     (Some("MIRROR"), Some(port), None) if reader.mirror => {
                         if let Ok(port) = port.parse() {
-                            reader.mirror(port);
+                            reader.mirror(port, false);
                         }
                     }
                     (Some("UNMIRROR"), Some(port), None) if reader.mirror => {
+                        if let Ok(port) = port.parse() {
+                            reader.unmirror(port);
+                        }
+                    }
+                    (Some("MIRROR-HOST"), Some(port), Some(_)) if reader.mirror => {
+                        if let Ok(port) = port.parse() {
+                            reader.mirror(port, true);
+                        }
+                    }
+                    (Some("UNMIRROR-HOST"), Some(port), None) if reader.mirror => {
                         if let Ok(port) = port.parse() {
                             reader.unmirror(port);
                         }
@@ -963,13 +1076,24 @@ const REBIND_TRIES: u32 = 40;
 const REBIND_WAIT: Duration = Duration::from_millis(25);
 
 /// The flags of one mirror listener. Both change under the `mirrors` lock.
-#[derive(Default)]
 struct Mirror {
     /// Set by `UNMIRROR`: the listener stops at its next wake.
     stop: AtomicBool,
     /// Set by a `MIRROR` that came while the listener was stopping: it binds
     /// again once the old listener is gone.
     again: AtomicBool,
+    /// A `MIRROR-HOST`: connections go to the host's port, not a sandbox's.
+    host: bool,
+}
+
+impl Mirror {
+    fn new(host: bool) -> Self {
+        Self {
+            stop: AtomicBool::new(false),
+            again: AtomicBool::new(false),
+            host,
+        }
+    }
 }
 
 impl Bridge {
@@ -1004,7 +1128,7 @@ impl Bridge {
         }
     }
 
-    fn mirror(self: &Arc<Self>, port: u16) {
+    fn mirror(self: &Arc<Self>, port: u16, host: bool) {
         let mut mirrors = self.mirrors.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(old) = mirrors.get(&port) {
             // A stopping listener still holds the port, so bind once it
@@ -1017,7 +1141,7 @@ impl Bridge {
         let Ok(listener) = TcpListener::bind(("127.0.0.1", port)) else {
             return;
         };
-        let mirror = Arc::new(Mirror::default());
+        let mirror = Arc::new(Mirror::new(host));
         mirrors.insert(port, Arc::clone(&mirror));
         let hub = self.hub.clone();
         let bridge = Arc::clone(self);
@@ -1030,9 +1154,10 @@ impl Bridge {
                     }
                     let Ok(client) = client else { continue };
                     let hub = hub.clone();
+                    let verb = if mirror.host { "HOSTDIAL" } else { "DIAL" };
                     thread::spawn(move || {
                         if let Ok(mut owner) = hub.connect()
-                            && writeln!(owner, "DIAL {port}").is_ok()
+                            && writeln!(owner, "{verb} {port}").is_ok()
                         {
                             splice(client, owner, &[]);
                         }
@@ -1410,6 +1535,70 @@ mod tests {
     }
 
     #[test]
+    fn a_host_port_is_reachable_on_the_sandboxes_loopback() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("hub.sock");
+        let hub = PortHub::start(&socket).unwrap();
+        let server = echo_server();
+        let bridge = FakeBridge::join(&socket);
+
+        // The host port goes to the same number inside the sandbox.
+        let port = hub.expose_host(server, None).unwrap();
+        assert_eq!(port, server);
+        assert_eq!(bridge.heard(), format!("MIRROR-HOST {server} {server}"));
+        assert_eq!(hub.reverse_ports(), [(server, server)]);
+        // Idempotent, and both ports taken fails.
+        assert_eq!(hub.expose_host(server, None).unwrap(), server);
+        let other = echo_server();
+        assert!(hub.expose_host(other, Some(server)).is_err());
+        assert!(hub.expose_host(server, Some(other)).is_err());
+
+        // A connection the bridge's host mirror accepted becomes HOSTDIAL,
+        // which the hub splices to the host's port.
+        let mut dial = UnixStream::connect(&socket).unwrap();
+        writeln!(dial, "HOSTDIAL {server}").unwrap();
+        assert_eq!(echo_through(dial), "ping");
+
+        hub.unexpose_host(server);
+        assert_eq!(bridge.heard(), format!("UNMIRROR-HOST {server}"));
+        assert!(hub.reverse_ports().is_empty());
+        let mut dial = UnixStream::connect(&socket).unwrap();
+        writeln!(dial, "HOSTDIAL {server}").unwrap();
+        let mut reply = [0u8; 4];
+        assert!(dial.read_exact(&mut reply).is_err());
+    }
+
+    #[test]
+    fn a_host_mirror_sends_hostdial_to_the_hub() {
+        let dir = tempfile::tempdir().unwrap();
+        let socket = dir.path().join("hub.sock");
+        let hub = PortHub::start(&socket).unwrap();
+        let host = echo_server();
+        let port = unshared_port();
+        hub.expose_host(host, Some(port)).unwrap();
+        let (control, _peer) = UnixStream::pair().unwrap();
+        let bridge = Arc::new(Bridge {
+            hub: Hub::Unix(socket),
+            control: Mutex::new(Stream::Unix(control)),
+            mirrors: Mutex::new(HashMap::new()),
+            own: vec![],
+            listeners: Box::new(BTreeSet::new),
+            mirror: true,
+            stop: AtomicBool::new(false),
+        });
+        bridge.mirror(port, true);
+        // The mirror binds the port inside the sandbox and forwards to the
+        // host's service.
+        until(|| TcpStream::connect(("127.0.0.1", port)).is_ok());
+        assert_eq!(
+            echo_through(TcpStream::connect(("127.0.0.1", port)).unwrap()),
+            "ping"
+        );
+        bridge.unmirror(port);
+        until(|| bridge.mirrors.lock().unwrap().is_empty());
+    }
+
+    #[test]
     fn the_http_proxy_sends_localhost_into_the_sandbox() {
         let dir = tempfile::tempdir().unwrap();
         let socket = dir.path().join("hub.sock");
@@ -1677,22 +1866,22 @@ mod tests {
             // the hub sends it; other tests' children can hold the port
             // for a moment after the last listener closed.
             until(|| {
-                bridge.mirror(port);
+                bridge.mirror(port, false);
                 mirrored()
             });
             // UNMIRROR and MIRROR back to back: the second must not be lost
             // while the first listener is still letting go of the port.
             bridge.unmirror(port);
-            bridge.mirror(port);
+            bridge.mirror(port, false);
             until(&mirrored);
             assert!(TcpListener::bind(("127.0.0.1", port)).is_err());
             bridge.unmirror(port);
             until(|| bridge.mirrors.lock().unwrap().is_empty());
         }
         // UNMIRROR, MIRROR, UNMIRROR ends unmirrored.
-        bridge.mirror(port);
+        bridge.mirror(port, false);
         bridge.unmirror(port);
-        bridge.mirror(port);
+        bridge.mirror(port, false);
         bridge.unmirror(port);
         until(|| bridge.mirrors.lock().unwrap().is_empty());
         thread::sleep(Duration::from_millis(50));

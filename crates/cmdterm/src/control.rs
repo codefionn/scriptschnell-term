@@ -39,6 +39,13 @@
 //! a host port to one, and `POST /v1/ports/<port>/unexpose` stops that. Both
 //! answer with the port's state as JSON.
 //!
+//! The other way round, `GET /v1/host-ports` lists the host ports forwarded
+//! into the terminal's worktree's sandboxes, as `{"host_ports": [{"host_port":
+//! 5432, "port": 5432}]}`. `POST /v1/host-ports/<host_port>/expose` (optional
+//! body `{"port": N}`) makes the sandboxes reach the host's 127.0.0.1 port on
+//! their own loopback, and `POST /v1/host-ports/<host_port>/unexpose` stops
+//! that. Both answer with the pair as JSON.
+//!
 //! `/v1/agents`, `/v1/messages` and `/v1/locks` let the agents of all
 //! terminals find each other, see whether each works, message one another
 //! and queue for locks before heavy jobs ([`bus`]). None of those asks the
@@ -268,6 +275,21 @@ pub trait PortAccess: Send + Sync {
     ) -> Result<u16, String>;
     /// Stops exposing `port`.
     fn unexpose(&self, project: u64, worktree: &Path, port: u16) -> Result<(), String>;
+    /// The host ports exposed into a worktree's sandboxes, as
+    /// `(host_port, port)` pairs, or `None` when its sandboxes have no port
+    /// hub.
+    fn host_ports(&self, project: u64, worktree: &Path) -> Option<Vec<(u16, u16)>>;
+    /// Forwards `host_port` of the host to `port` inside the worktree's
+    /// sandboxes (`host_port` when `port` is `None`) and returns `port`.
+    fn expose_host(
+        &self,
+        project: u64,
+        worktree: &Path,
+        host_port: u16,
+        port: Option<u16>,
+    ) -> Result<u16, String>;
+    /// Stops forwarding `host_port` into the sandboxes.
+    fn unexpose_host(&self, project: u64, worktree: &Path, host_port: u16) -> Result<(), String>;
     /// The URL of the worktree's loopback HTTP proxy for the debug browser,
     /// which sends `localhost` into its sandbox, with the password it takes
     /// (`http://cmdterm:PASSWORD@127.0.0.1:PORT`). `None` without a hub.
@@ -1036,6 +1058,15 @@ impl Control {
                     _ => Response::error(400, "the port must be a number from 1 to 65535"),
                 }
             }
+            ("GET", ["v1", "host-ports"]) => self.host_ports(&terminal, None, &[]),
+            ("POST", ["v1", "host-ports", port, action @ ("expose" | "unexpose")]) => {
+                match port.parse::<u16>() {
+                    Ok(port) if port > 0 => {
+                        self.host_ports(&terminal, Some((port, *action == "expose")), &request.body)
+                    }
+                    _ => Response::error(400, "the port must be a number from 1 to 65535"),
+                }
+            }
             ("POST", ["v1", "settings"]) => self.suggest(terminal, &request.body),
             ("POST", ["v1", "worktrees"]) => self.launch(terminal, &request.body, true),
             ("POST", ["v1", "agents"]) => self.launch(terminal, &request.body, false),
@@ -1159,6 +1190,54 @@ impl Control {
             }
             Some((port, false)) => match ports.unexpose(project, worktree, port) {
                 Ok(()) => Response::json(200, &json!({ "port": port, "exposed_on": null })),
+                Err(error) => Response::error(409, &error),
+            },
+        }
+    }
+
+    /// `GET /v1/host-ports` (`act` is `None`) and the reverse expose
+    /// (`Some((host_port, true))`) and unexpose endpoints for `terminal`'s
+    /// worktree.
+    fn host_ports(&self, terminal: &Terminal, act: Option<(u16, bool)>, body: &[u8]) -> Response {
+        let (Some(project), Some(ports)) = (terminal.project_id, self.lock().ports.clone()) else {
+            return Response::error(404, "this terminal's worktree has no port forwarding");
+        };
+        let worktree = terminal.worktree.as_path();
+        match act {
+            None => match ports.host_ports(project, worktree) {
+                Some(list) => Response::json(
+                    200,
+                    &json!({ "host_ports": list.into_iter().map(|(host, port)| json!({ "host_port": host, "port": port })).collect::<Vec<_>>() }),
+                ),
+                None => Response::error(
+                    404,
+                    "this worktree's sandbox has no port forwarding; it shares the host's network",
+                ),
+            },
+            Some((host_port, true)) => {
+                let port = if body.iter().all(u8::is_ascii_whitespace) {
+                    None
+                } else {
+                    match serde_json::from_slice::<Value>(body) {
+                        Ok(value) => match value.get("port") {
+                            None | Some(Value::Null) => None,
+                            Some(n) => match n.as_u64().and_then(|n| u16::try_from(n).ok()) {
+                                Some(n) if n > 0 => Some(n),
+                                _ => return Response::error(400, "port must be 1 to 65535"),
+                            },
+                        },
+                        Err(error) => return Response::error(400, &format!("not JSON: {error}")),
+                    }
+                };
+                match ports.expose_host(project, worktree, host_port, port) {
+                    Ok(port) => {
+                        Response::json(200, &json!({ "host_port": host_port, "port": port }))
+                    }
+                    Err(error) => Response::error(409, &error),
+                }
+            }
+            Some((host_port, false)) => match ports.unexpose_host(project, worktree, host_port) {
+                Ok(()) => Response::json(200, &json!({ "host_port": host_port, "port": null })),
                 Err(error) => Response::error(409, &error),
             },
         }
@@ -2431,6 +2510,7 @@ mod tests {
     #[derive(Default)]
     struct FakePorts {
         exposed: Mutex<std::collections::BTreeMap<u16, u16>>,
+        reverse: Mutex<std::collections::BTreeMap<u16, u16>>,
     }
 
     impl PortAccess for FakePorts {
@@ -2453,6 +2533,50 @@ mod tests {
         }
         fn unexpose(&self, _: u64, _: &Path, port: u16) -> Result<(), String> {
             self.exposed.lock().unwrap().remove(&port);
+            Ok(())
+        }
+        fn host_ports(&self, project: u64, worktree: &Path) -> Option<Vec<(u16, u16)>> {
+            (project == 1 && worktree == Path::new("/src/app")).then(|| {
+                let mut pairs: Vec<(u16, u16)> = self
+                    .reverse
+                    .lock()
+                    .unwrap()
+                    .clone()
+                    .into_iter()
+                    .map(|(port, host)| (host, port))
+                    .collect();
+                pairs.sort_unstable();
+                pairs
+            })
+        }
+        fn expose_host(
+            &self,
+            _: u64,
+            _: &Path,
+            host_port: u16,
+            port: Option<u16>,
+        ) -> Result<u16, String> {
+            let port = port.unwrap_or(host_port);
+            let mut reverse = self.reverse.lock().unwrap();
+            if let Some(&existing) = reverse.get(&port) {
+                if existing == host_port {
+                    return Ok(port);
+                }
+                return Err(format!(
+                    "port {port} is already exposed to host port {existing}"
+                ));
+            }
+            if reverse.values().any(|&host| host == host_port) {
+                return Err(format!("host port {host_port} is already exposed"));
+            }
+            reverse.insert(port, host_port);
+            Ok(port)
+        }
+        fn unexpose_host(&self, _: u64, _: &Path, host_port: u16) -> Result<(), String> {
+            self.reverse
+                .lock()
+                .unwrap()
+                .retain(|_, &mut host| host != host_port);
             Ok(())
         }
         fn http_proxy(&self, project: u64, worktree: &Path) -> Option<String> {
@@ -2560,6 +2684,78 @@ mod tests {
         );
         assert_eq!(bad.0, 400);
         assert_eq!(call(&socket, "GET", "/v1/ports", "nope", b"").0, 401);
+    }
+
+    #[test]
+    fn host_ports_are_listed_reverse_exposed_and_unexposed() {
+        let dir = tempfile::tempdir().unwrap();
+        let server = start(&dir.path().join("extensions"), dir.path(), || {}).unwrap();
+        let socket = server.control.socket().to_path_buf();
+        let token = server.control.register(terminal());
+        assert_eq!(call(&socket, "GET", "/v1/host-ports", &token, b"").0, 404);
+        server
+            .control
+            .publish_ports(Some(std::sync::Arc::new(FakePorts::default())));
+        let get = || {
+            let (status, body) = call(&socket, "GET", "/v1/host-ports", &token, b"");
+            assert_eq!(status, 200, "{body}");
+            serde_json::from_str::<Value>(&body).unwrap()
+        };
+        assert_eq!(get()["host_ports"].as_array().unwrap().len(), 0);
+
+        // The host port lands on the same number inside the sandbox.
+        let (status, body) = call(&socket, "POST", "/v1/host-ports/5432/expose", &token, b"");
+        assert_eq!(status, 200, "{body}");
+        let body: Value = serde_json::from_str(&body).unwrap();
+        assert_eq!(body["host_port"], 5432);
+        assert_eq!(body["port"], 5432);
+        // A different port inside the sandbox.
+        let (_, body) = call(
+            &socket,
+            "POST",
+            "/v1/host-ports/8080/expose",
+            &token,
+            br#"{"port": 80}"#,
+        );
+        assert_eq!(serde_json::from_str::<Value>(&body).unwrap()["port"], 80);
+        let listed = get();
+        assert_eq!(listed["host_ports"][0]["host_port"], 5432);
+        assert_eq!(listed["host_ports"][0]["port"], 5432);
+        assert_eq!(listed["host_ports"][1]["host_port"], 8080);
+        assert_eq!(listed["host_ports"][1]["port"], 80);
+
+        // The same pair again is fine, a conflicting one is not.
+        assert_eq!(
+            call(&socket, "POST", "/v1/host-ports/5432/expose", &token, b"").0,
+            200
+        );
+        assert_eq!(
+            call(
+                &socket,
+                "POST",
+                "/v1/host-ports/5432/expose",
+                &token,
+                br#"{"port": 80}"#,
+            )
+            .0,
+            409
+        );
+        assert_eq!(
+            call(&socket, "POST", "/v1/host-ports/x/expose", &token, b"").0,
+            400
+        );
+        let bad = call(
+            &socket,
+            "POST",
+            "/v1/host-ports/5432/expose",
+            &token,
+            br#"{"port": 0}"#,
+        );
+        assert_eq!(bad.0, 400);
+
+        let (status, body) = call(&socket, "POST", "/v1/host-ports/5432/unexpose", &token, b"");
+        assert_eq!(status, 200, "{body}");
+        assert_eq!(get()["host_ports"].as_array().unwrap().len(), 1);
     }
 
     #[test]

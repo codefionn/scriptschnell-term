@@ -8,6 +8,11 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Added
 
+- Reverse port exposure for Linux bubblewrap sandboxes: `control expose-host
+  HOST_PORT [PORT]` (control socket `POST /v1/host-ports/PORT/expose`,
+  `GET /v1/host-ports`, `POST /v1/host-ports/PORT/unexpose`) forwards one of the
+  host's `127.0.0.1` ports onto the sandbox's own `localhost`, so a process in the
+  sandbox reaches a host service as if it ran there.
 - The `third-party-extensions` Cargo feature of `cmdterm`, on by default. A build
   without it (`--no-default-features`) loads only the shipped extensions, as shipped:
   it skips your own `extensions/`, including changed copies of shipped extensions, and
