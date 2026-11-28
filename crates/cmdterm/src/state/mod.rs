@@ -1293,6 +1293,8 @@ pub const HOST_GROUPS: &[HostGroup] = &[
             "cloudcode-pa.googleapis.com",
             // Antigravity CLI.
             "businessaicode.googleapis.com",
+            // Antigravity CLI's eligibility check (loadCodeAssist).
+            "daily-cloudcode-pa.googleapis.com",
             // Qwen Code.
             "dashscope.aliyuncs.com",
             "coding.dashscope.aliyuncs.com",
