@@ -1288,8 +1288,10 @@ pub const HOST_GROUPS: &[HostGroup] = &[
             // GitHub Copilot CLI.
             "*.githubcopilot.com",
             // Gemini CLI and Antigravity CLI with a Google login: the OAuth
-            // token exchange and refresh, and the Cloud Code API.
+            // token exchange and refresh, the userinfo lookup and the Cloud
+            // Code API.
             "oauth2.googleapis.com",
+            "www.googleapis.com",
             "cloudcode-pa.googleapis.com",
             // Antigravity CLI.
             "businessaicode.googleapis.com",

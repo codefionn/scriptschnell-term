@@ -88,6 +88,10 @@ All notable changes to scriptschnell-term are in this file. The format is
   hosts now include `daily-cloudcode-pa.googleapis.com`, where the CLI calls
   `loadCodeAssist`, so it no longer fails with "Eligibility check failed" and a 403
   from the sandbox's proxy.
+- Google logins in sandboxes can read the account again: the default allowed hosts
+  now include `www.googleapis.com`, where agents call `oauth2/v2/userinfo` to resolve
+  the logged-in user, so that call no longer fails with a 403 from the sandbox's
+  proxy.
 - Claude Code in bubblewrap sandboxes no longer starts with its classic renderer and the
   notice that its fullscreen renderer "didn't finish starting last time", which happened
   when two Claude Code sessions started close together, such as the agents the app
