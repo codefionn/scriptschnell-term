@@ -71,6 +71,9 @@ All notable changes to scriptschnell-term are in this file. The format is
 
 ### Fixed
 
+- Antigravity CLI's Google login works in sandboxes again: the default allowed hosts
+  now include `oauth2.googleapis.com`, where the CLI exchanges and refreshes its OAuth
+  token, so the login no longer fails with a 403 from the sandbox's proxy.
 - Claude Code in bubblewrap sandboxes no longer starts with its classic renderer and the
   notice that its fullscreen renderer "didn't finish starting last time", which happened
   when two Claude Code sessions started close together, such as the agents the app
